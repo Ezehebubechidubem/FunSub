@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Profile</title>
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial, Helvetica, sans-serif;
+    }
+
+    :root{
+      --gold:#d4a017;
+      --gold-dark:#b8860b;
+      --white:#ffffff;
+      --bg:#f7f7f7;
+      --text:#111111;
+      --card:#ffffff;
+      --line:#ececec;
+      --shadow:0 10px 25px rgba(0,0,0,0.08);
+    }
+
+    body.dark{
+      --white:#111111;
+      --bg:#0f1115;
+      --text:#ffffff;
+      --card:#1a1d24;
+      --line:#2b2f38;
+      --shadow:0 10px 25px rgba(0,0,0,0.3);
+    }
+
+    body{
+      background:var(--bg);
+      color:var(--text);
+      transition:0.3s;
+    }
+
+    .container{
+      max-width:430px;
+      margin:auto;
+      padding:20px 15px 100px;
+    }
+
+    /* PROFILE TOP */
+    .topbar{
+      background:var(--card);
+      border-radius:25px;
+      padding:18px;
+      display:flex;
+      gap:15px;
+      align-items:center;
+      box-shadow:var(--shadow);
+      cursor:pointer;
+      transition:0.3s;
+    }
+
+    .topbar:hover{
+      border:2px solid var(--gold);
+    }
+
+    .avatar{
+      width:85px;
+      height:85px;
+      border-radius:20px;
+      background:var(--gold);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      font-size:30px;
+      font-weight:bold;
+    }
+
+    .profile-info h2{
+      font-size:20px;
+      margin-bottom:6px;
+      color:var(--text);
+    }
+
+    .profile-info p{
+      font-size:13px;
+      color:gray;
+      margin-bottom:10px;
+    }
+
+    .badges{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .badge{
+      padding:7px 14px;
+      border-radius:30px;
+      font-size:12px;
+      font-weight:bold;
+      background:#f3f3f3;
+      color:var(--text);
+    }
+
+    body.dark .badge{
+      background:#2a2d35;
+    }
+
+    .verified{
+      background:#e7f8ee;
+      color:#1ca55c;
+    }
+
+    /* SECTION */
+    .section-title{
+      margin:28px 5px 12px;
+      font-size:18px;
+      font-weight:bold;
+      color:#666;
+    }
+
+    .card{
+      background:var(--card);
+      border-radius:25px;
+      overflow:hidden;
+      box-shadow:var(--shadow);
+    }
+
+    .item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:20px;
+      cursor:pointer;
+      transition:0.3s;
+    }
+
+    .item:hover{
+      background:rgba(212,160,23,0.12);
+    }
+
+    .item:not(:last-child){
+      border-bottom:1px solid var(--line);
+    }
+
+    .left{
+      display:flex;
+      align-items:center;
+      gap:15px;
+    }
+
+    .icon{
+      width:45px;
+      height:45px;
+      border-radius:14px;
+      background:rgba(212,160,23,0.15);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      color:var(--gold-dark);
+    }
+
+    .text{
+      font-size:17px;
+      font-weight:500;
+      color:var(--text);
+    }
+
+    .arrow{
+      font-size:24px;
+      color:#999;
+    }
+
+    /* TOGGLE */
+    .toggle{
+      width:60px;
+      height:32px;
+      background:#ddd;
+      border-radius:50px;
+      position:relative;
+      transition:0.3s;
+    }
+
+    .toggle.active{
+      background:var(--gold);
+    }
+
+    .toggle::before{
+      content:"";
+      width:24px;
+      height:24px;
+      border-radius:50%;
+      background:white;
+      position:absolute;
+      top:4px;
+      left:4px;
+      transition:0.3s;
+    }
+
+    .toggle.active::before{
+      left:32px;
+    }
+
+    /* LOGOUT */
+    .logout{
+      margin-top:20px;
+      background:#ffe9e9;
+      color:#d93025;
+      height:60px;
+      border-radius:20px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:20px;
+      font-weight:bold;
+      cursor:pointer;
+      transition:0.3s;
+      box-shadow:var(--shadow);
+    }
+
+    .logout:hover{
+      background:#ffd4d4;
+    }
+
+    .version{
+      text-align:center;
+      margin-top:20px;
+      color:#888;
+    }
+
+    /* BOTTOM NAV */
+    .bottom-nav{
+      position:fixed;
+      bottom:0;
+      left:50%;
+      transform:translateX(-50%);
+      width:min(430px,100%);
+      background:var(--card);
+      border-top:1px solid var(--line);
+      display:flex;
+      justify-content:space-around;
+      padding:12px 0;
+      box-shadow:0 -4px 15px rgba(0,0,0,0.05);
+    }
+
+    .nav-item{
+      text-align:center;
+      font-size:13px;
+      color:#888;
+      cursor:pointer;
+      transition:0.3s;
+    }
+
+    .nav-item.active{
+      color:var(--gold-dark);
+      font-weight:bold;
+    }
+
+    .nav-icon{
+      font-size:22px;
+      margin-bottom:5px;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="avatar">EC</div>
+
+    <div class="profile-info">
+      <h2>Ebube Chidubem Ezeh</h2>
+      <p>ezehebubechidubem2829@gmail.com</p>
+
+      <div class="badges">
+        <div class="badge">Subscriber Account</div>
+        <div class="badge verified">✔ Verified</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT -->
+  <div class="section-title">ACCOUNT</div>
+
+  <div class="card">
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">👤</div>
+        <div class="text">Personal Information</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">💳</div>
+        <div class="text">Fund Wallet</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+  </div>
+
+  <!-- SECURITY -->
+  <div class="section-title">SECURITY</div>
+
+  <div class="card">
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🔑</div>
+        <div class="text">Reset PIN</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🔒</div>
+        <div class="text">Change Password</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🔢</div>
+        <div class="text">Transaction PIN</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+  </div>
+
+  <!-- PREFERENCES -->
+  <div class="section-title">PREFERENCES</div>
+
+  <div class="card">
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🌙</div>
+        <div class="text">Dark Mode</div>
+      </div>
+
+      <div class="toggle" id="darkToggle"></div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🔔</div>
+        <div class="text">Push Notifications</div>
+      </div>
+
+      <div class="toggle active"></div>
+    </div>
+
+  </div>
+
+  <!-- MORE -->
+  <div class="section-title">MORE</div>
+
+  <div class="card">
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">👥</div>
+        <div class="text">Become an Agent</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">🎁</div>
+        <div class="text">Referrals</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">📤</div>
+        <div class="text">Share App</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">📄</div>
+        <div class="text">Privacy Policy</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+    <div class="item">
+      <div class="left">
+        <div class="icon">💬</div>
+        <div class="text">Contact Support</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+
+  </div>
+
+  <!-- LOGOUT -->
+  <div class="logout">
+    ↩ Log Out
+  </div>
+
+  <div class="version">
+    Version 3.9.3
+  </div>
+
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+
+  <div class="nav-item">
+    <div class="nav-icon">🏠</div>
+    Home
+  </div>
+
+  <div class="nav-item">
+    <div class="nav-icon">💰</div>
+    Pricing
+  </div>
+
+  <div class="nav-item">
+    <div class="nav-icon">📄</div>
+    History
+  </div>
+
+  <div class="nav-item active">
+    <div class="nav-icon">👤</div>
+    Profile
+  </div>
+
+</div>
+
+<script>
+
+  // DARK MODE
+
+  const darkToggle = document.getElementById("darkToggle");
+
+  darkToggle.addEventListener("click", function(){
+
+    darkToggle.classList.toggle("active");
+
+    document.body.classList.toggle("dark");
+
+  });
+
+</script>
+
+</body>
+</html>
