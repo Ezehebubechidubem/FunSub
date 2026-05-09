@@ -6,18 +6,16 @@
   <title>Wallet App UI</title>
   <style>
     :root{
-      --bg:#0a0d16;
-      --card:#1c2333;
-      --card-2:#111626;
-      --text:#f5f7ff;
-      --muted:#b8bfd4;
-      --blue:#123db7;
-      --blue-2:#1847d6;
-      --line:#2a3144;
-      --icon-bg:#0e1230;
-      --accent:#4b7bff;
-      --success:#20c997;
-      --shadow:0 18px 40px rgba(0,0,0,.35);
+      --bg:#f7f7f7;
+      --card:#ffffff;
+      --card-2:#fafafa;
+      --text:#111111;
+      --muted:#5f5f5f;
+      --gold:#c8a24a;
+      --gold-dark:#a9822e;
+      --gold-soft:#f4e4b7;
+      --line:#e9e9e9;
+      --shadow:0 14px 30px rgba(0,0,0,.08);
       --radius:22px;
     }
 
@@ -35,7 +33,7 @@
       max-width:430px;
       min-height:100vh;
       margin:0 auto;
-      padding:18px 16px 90px;
+      padding:18px 16px 96px;
       position:relative;
       overflow-x:hidden;
     }
@@ -58,11 +56,11 @@
       width:52px;
       height:52px;
       border-radius:50%;
-      background:#12172a;
+      background:#ffffff;
       display:grid;
       place-items:center;
-      border:1px solid rgba(255,255,255,.08);
-      box-shadow:inset 0 0 0 1px rgba(74,122,255,.08);
+      border:1px solid var(--line);
+      box-shadow:var(--shadow);
     }
 
     .avatar svg,
@@ -70,7 +68,7 @@
       width:24px;
       height:24px;
       fill:none;
-      stroke:#fff;
+      stroke:#111;
       stroke-width:2;
       stroke-linecap:round;
       stroke-linejoin:round;
@@ -82,14 +80,15 @@
 
     .greeting .small{
       font-size:13px;
-      color:#d8def0;
+      color:#111;
       margin-bottom:3px;
-      opacity:.9;
+      opacity:.85;
     }
 
     .greeting .big{
       font-size:20px;
       font-weight:700;
+      color:#111;
     }
 
     .bell{
@@ -98,21 +97,22 @@
       border-radius:50%;
       display:grid;
       place-items:center;
-      background:transparent;
-      border:1px solid rgba(255,255,255,.08);
-      color:#fff;
+      background:#fff;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow);
+      color:#111;
     }
 
     .bell svg{
       width:22px;
       height:22px;
-      stroke:#fff;
+      stroke:#111;
     }
 
     .balance-card{
       background:
-        radial-gradient(circle at 50% 50%, rgba(255,255,255,.05) 0 26%, transparent 27% 100%),
-        linear-gradient(135deg, #1034a0 0%, #143abb 45%, #0d2a83 100%);
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.22) 0 26%, transparent 27% 100%),
+        linear-gradient(135deg, #d6b15a 0%, #c8a24a 45%, #a9822e 100%);
       border-radius:24px;
       padding:22px 20px;
       box-shadow:var(--shadow);
@@ -123,6 +123,7 @@
       overflow:hidden;
       min-height:138px;
       margin-bottom:18px;
+      color:#111;
     }
 
     .balance-card::before{
@@ -131,7 +132,7 @@
       width:260px;
       height:260px;
       border-radius:50%;
-      background:rgba(255,255,255,.08);
+      background:rgba(255,255,255,.15);
       right:-100px;
       top:-80px;
       pointer-events:none;
@@ -143,7 +144,7 @@
       width:180px;
       height:180px;
       border-radius:50%;
-      background:rgba(255,255,255,.04);
+      background:rgba(255,255,255,.08);
       right:20px;
       top:18px;
       pointer-events:none;
@@ -160,27 +161,35 @@
       gap:8px;
       font-size:18px;
       margin-bottom:18px;
-      color:#eaf0ff;
+      color:#111;
+      font-weight:600;
     }
 
     .balance-value{
       font-size:34px;
       font-weight:800;
       letter-spacing:.2px;
+      color:#111;
     }
 
     .fund-btn{
       position:relative;
       z-index:1;
       border:none;
-      color:#fff;
-      background:#222737;
+      color:#111;
+      background:#fff;
       padding:16px 18px;
       min-width:116px;
       border-radius:20px;
       font-size:16px;
       font-weight:700;
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
+      transition:all .2s ease;
+    }
+
+    .fund-btn:hover{
+      background:var(--gold-soft);
+      box-shadow:0 10px 20px rgba(200,162,74,.22);
     }
 
     .section{
@@ -189,14 +198,20 @@
       padding:18px;
       margin-top:14px;
       box-shadow:var(--shadow);
-      border:1px solid rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      transition:all .2s ease;
+    }
+
+    .section:hover{
+      border-color:rgba(200,162,74,.55);
+      box-shadow:0 16px 32px rgba(200,162,74,.12);
     }
 
     .section-title{
       font-size:20px;
       font-weight:800;
       margin-bottom:16px;
-      color:#f4f7ff;
+      color:#111;
     }
 
     .quick-actions{
@@ -211,6 +226,14 @@
 
     .action-item{
       text-align:center;
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, opacity .15s ease;
+    }
+
+    .action-item:active{
+      transform:scale(.97);
+      opacity:.92;
     }
 
     .action-icon{
@@ -218,17 +241,24 @@
       height:62px;
       margin:0 auto 10px;
       border-radius:50%;
-      background:var(--icon-bg);
+      background:#fff;
       display:grid;
       place-items:center;
-      border:1px solid rgba(255,255,255,.06);
-      box-shadow:inset 0 0 0 1px rgba(70,105,255,.07);
+      border:1px solid var(--line);
+      box-shadow:0 6px 16px rgba(0,0,0,.05);
+      transition:all .2s ease;
+    }
+
+    .action-item:hover .action-icon{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+      box-shadow:0 10px 20px rgba(200,162,74,.18);
     }
 
     .action-icon svg{
       width:25px;
       height:25px;
-      stroke:#fff;
+      stroke:#111;
       fill:none;
       stroke-width:2;
       stroke-linecap:round;
@@ -237,12 +267,13 @@
 
     .action-label{
       font-size:13px;
-      color:#edf1ff;
+      color:#111;
       line-height:1.2;
       min-height:32px;
       display:flex;
       align-items:flex-start;
       justify-content:center;
+      font-weight:600;
     }
 
     .services-grid{
@@ -253,6 +284,14 @@
 
     .service-item{
       text-align:center;
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, opacity .15s ease;
+    }
+
+    .service-item:active{
+      transform:scale(.97);
+      opacity:.92;
     }
 
     .service-icon{
@@ -260,16 +299,24 @@
       height:62px;
       margin:0 auto 10px;
       border-radius:50%;
-      background:var(--icon-bg);
+      background:#fff;
       display:grid;
       place-items:center;
-      border:1px solid rgba(255,255,255,.06);
+      border:1px solid var(--line);
+      box-shadow:0 6px 16px rgba(0,0,0,.05);
+      transition:all .2s ease;
+    }
+
+    .service-item:hover .service-icon{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+      box-shadow:0 10px 20px rgba(200,162,74,.18);
     }
 
     .service-icon svg{
       width:24px;
       height:24px;
-      stroke:#fff;
+      stroke:#111;
       fill:none;
       stroke-width:2;
       stroke-linecap:round;
@@ -278,25 +325,27 @@
 
     .service-label{
       font-size:13px;
-      color:#edf1ff;
+      color:#111;
       line-height:1.2;
       min-height:32px;
       display:flex;
       align-items:flex-start;
       justify-content:center;
+      font-weight:600;
     }
 
     .promo{
       margin-top:18px;
       border-radius:18px;
       overflow:hidden;
-      background:linear-gradient(90deg, #ffffff 0%, #f5f9ff 100%);
-      color:#18224b;
+      background:#fff;
+      color:#111;
       display:flex;
       align-items:center;
       min-height:126px;
       position:relative;
       box-shadow:var(--shadow);
+      border:1px solid var(--line);
     }
 
     .promo-left{
@@ -305,25 +354,26 @@
       display:grid;
       place-items:center;
       flex:0 0 108px;
-      background:linear-gradient(135deg, #2f7aff 0%, #0d4ed6 100%);
+      background:linear-gradient(135deg, #fff5d6 0%, #f2d48a 100%);
       position:relative;
+      border-right:1px solid var(--line);
     }
 
     .badge{
       width:72px;
       height:72px;
-      background:#5ca0ff;
+      background:linear-gradient(135deg, #d6b15a 0%, #c8a24a 100%);
       border-radius:23px;
       transform:rotate(45deg);
       display:grid;
       place-items:center;
-      box-shadow:0 12px 24px rgba(26,82,190,.25);
+      box-shadow:0 12px 24px rgba(200,162,74,.22);
     }
 
     .badge span{
       transform:rotate(-45deg);
       font-size:34px;
-      color:white;
+      color:#111;
       font-weight:800;
     }
 
@@ -337,13 +387,13 @@
       font-weight:900;
       letter-spacing:.4px;
       margin-bottom:8px;
-      color:#1b2d67;
+      color:#111;
     }
 
     .promo-text{
       font-size:13px;
       line-height:1.4;
-      color:#3b4870;
+      color:#333;
       max-width:220px;
     }
 
@@ -358,11 +408,11 @@
       width:8px;
       height:8px;
       border-radius:50%;
-      background:#33405f;
+      background:#d0d0d0;
     }
 
     .dot.active{
-      background:#1f5bff;
+      background:var(--gold);
       width:20px;
       border-radius:999px;
     }
@@ -374,6 +424,7 @@
       min-height:160px;
       padding:18px;
       box-shadow:var(--shadow);
+      border:1px solid var(--line);
     }
 
     .recent-head{
@@ -387,12 +438,14 @@
       margin:0;
       font-size:20px;
       font-weight:800;
+      color:#111;
     }
 
     .see-all{
-      color:#355cff;
+      color:var(--gold-dark);
       font-weight:700;
       font-size:14px;
+      cursor:pointer;
     }
 
     .txn{
@@ -401,8 +454,8 @@
       justify-content:space-between;
       align-items:center;
       padding:14px 0;
-      border-top:1px solid rgba(255,255,255,.05);
-      color:#eef3ff;
+      border-top:1px solid var(--line);
+      color:#111;
     }
 
     .txn:first-of-type{
@@ -419,16 +472,16 @@
       width:44px;
       height:44px;
       border-radius:14px;
-      background:#10172b;
+      background:#fff;
       display:grid;
       place-items:center;
-      border:1px solid rgba(255,255,255,.05);
+      border:1px solid var(--line);
     }
 
     .txn-icon svg{
       width:20px;
       height:20px;
-      stroke:#fff;
+      stroke:#111;
       fill:none;
       stroke-width:2;
     }
@@ -437,6 +490,7 @@
       font-size:14px;
       font-weight:700;
       margin-bottom:4px;
+      color:#111;
     }
 
     .txn-sub{
@@ -447,6 +501,7 @@
     .txn-amount{
       font-size:14px;
       font-weight:800;
+      color:#111;
     }
 
     .bottom-nav{
@@ -455,8 +510,8 @@
       transform:translateX(-50%);
       bottom:0;
       width:min(430px, 100%);
-      background:#0f1422;
-      border-top:1px solid rgba(255,255,255,.06);
+      background:#fff;
+      border-top:1px solid var(--line);
       display:flex;
       justify-content:space-around;
       padding:10px 10px 14px;
@@ -466,13 +521,15 @@
 
     .nav-item{
       text-align:center;
-      color:#8d96af;
+      color:#6a6a6a;
       font-size:12px;
       min-width:64px;
+      cursor:pointer;
     }
 
     .nav-item.active{
-      color:#2d63ff;
+      color:var(--gold-dark);
+      font-weight:700;
     }
 
     .nav-icon{
@@ -494,7 +551,7 @@
     .clickable{
       cursor:pointer;
       user-select:none;
-      transition:transform .15s ease, opacity .15s ease, background .15s ease;
+      transition:transform .15s ease, opacity .15s ease;
     }
 
     .clickable:active{
@@ -593,16 +650,106 @@
           </div>
           <div class="action-label">Cable TV</div>
         </div>
-      <div class="service-item clickable" data-service="Refer a friend">
-          <div class="service-icon">
+
+        <div class="action-item clickable" data-action="Betting">
+          <div class="action-icon">
             <svg viewBox="0 0 24 24">
-              <path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-              <path d="M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
-              <path d="M20 8v6"></path>
-              <path d="M17 11h6"></path>
+              <path d="M12 2v20"></path>
+              <path d="M17 6c0-2.2-2.2-4-5-4S7 3.8 7 6s2.2 4 5 4 5 1.8 5 4-2.2 4-5 4-5-1.8-5-4"></path>
             </svg>
           </div>
-          <div class="service-label">Refer a friend</div>
+          <div class="action-label">Betting</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Services below quick actions -->
+    <div class="section">
+      <div class="section-title">Services</div>
+      <div class="services-grid">
+        <div class="service-item clickable" data-service="Recharge Pin">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+              <path d="M8 8h8"></path>
+              <path d="M8 12h8"></path>
+              <path d="M8 16h4"></path>
+            </svg>
+          </div>
+          <div class="service-label">Recharge Pin</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Data Pin">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+              <path d="M8 8h8"></path>
+              <path d="M8 12h8"></path>
+              <path d="M8 16h4"></path>
+            </svg>
+          </div>
+          <div class="service-label">Data Pin</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Exam PIN">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 10l8-6 8 6-8 6-8-6Z"></path>
+              <path d="M12 16v6"></path>
+            </svg>
+          </div>
+          <div class="service-label">Exam PIN</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Electricity">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M13 2 4 14h6l-1 8 11-14h-6l1-6Z"></path>
+            </svg>
+          </div>
+          <div class="service-label">Electricity</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Cable TV">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <rect x="4" y="6" width="16" height="10" rx="2"></rect>
+              <path d="M9 20h6"></path>
+              <path d="M12 16v4"></path>
+            </svg>
+          </div>
+          <div class="service-label">Cable TV</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Airtime">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M10 14a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-6 6Z"></path>
+              <path d="M8 16 4 20"></path>
+            </svg>
+          </div>
+          <div class="service-label">Airtime</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Data">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 3c4.4 0 8 1.8 8 4s-3.6 4-8 4-8-1.8-8-4 3.6-4 8-4Z"></path>
+              <path d="M4 7v5c0 2.2 3.6 4 8 4s8-1.8 8-4V7"></path>
+              <path d="M4 12v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5"></path>
+            </svg>
+          </div>
+          <div class="service-label">Data</div>
+        </div>
+
+        <div class="service-item clickable" data-service="Betting">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2v20"></path>
+              <path d="M17 6c0-2.2-2.2-4-5-4S7 3.8 7 6s2.2 4 5 4 5 1.8 5 4-2.2 4-5 4-5-1.8-5-4"></path>
+            </svg>
+          </div>
+          <div class="service-label">Betting</div>
         </div>
       </div>
     </div>
@@ -629,7 +776,8 @@
       <div class="dot"></div>
       <div class="dot"></div>
     </div>
-        <div class="recent">
+
+    <div class="recent">
       <div class="recent-head">
         <h3>Recent Transactions</h3>
         <div class="see-all">See All &gt;</div>
@@ -663,7 +811,7 @@
             <div class="txn-title">Airtime Purchase</div>
             <div class="txn-sub">Today · 10:05 AM</div>
           </div>
-                </div>
+        </div>
         <div class="txn-amount">-₦500</div>
       </div>
     </div>
@@ -691,6 +839,19 @@
       Pricing
     </div>
 
+
+    <div class="nav-item">
+      <div class="nav-icon">
+           <svg viewBox="0 0 24 24">
+          <path d="M6 3h12v18H6z"></path>
+          <path d="M9 7h6"></path>
+          <path d="M9 11h6"></path>
+        </svg>
+      </div>
+      Pricing
+    </div>
+
+
     <div class="nav-item">
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
@@ -706,7 +867,7 @@
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
           <path d="M20 21a8 8 0 1 0-16 0"></path>
-             <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
         </svg>
       </div>
       Profile
@@ -723,16 +884,17 @@
         t.style.left = "50%";
         t.style.bottom = "88px";
         t.style.transform = "translateX(-50%)";
-        t.style.background = "rgba(17,22,38,.96)";
+        t.style.background = "rgba(17,17,17,.96)";
         t.style.color = "#fff";
         t.style.padding = "12px 16px";
-        t.style.border = "1px solid rgba(255,255,255,.08)";
+        t.style.border = "1px solid rgba(200,162,74,.35)";
         t.style.borderRadius = "14px";
-        t.style.boxShadow = "0 16px 30px rgba(0,0,0,.35)";
+        t.style.boxShadow = "0 16px 30px rgba(0,0,0,.20)";
         t.style.zIndex = "999";
         t.style.fontSize = "14px";
         t.style.maxWidth = "90vw";
         t.style.textAlign = "center";
+        t.style.transition = "opacity .2s ease";
         document.body.appendChild(t);
       }
       t.textContent = text;
@@ -743,7 +905,7 @@
       }, 1800);
     };
 
-document.getElementById("fundBtn").addEventListener("click", () => {
+    document.getElementById("fundBtn").addEventListener("click", () => {
       toast("Fund Wallet tapped");
     });
 
@@ -766,4 +928,4 @@ document.getElementById("fundBtn").addEventListener("click", () => {
     });
   </script>
 </body>
-  </html>
+</html>
