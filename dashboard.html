@@ -1,1 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wallet App UI</title>
+  <style>
+    :root{
+      --bg:#0a0d16;
+      --card:#1c2333;
+      --card-2:#111626;
+      --text:#f5f7ff;
+      --muted:#b8bfd4;
+      --blue:#123db7;
+      --blue-2:#1847d6;
+      --line:#2a3144;
+      --icon-bg:#0e1230;
+      --accent:#4b7bff;
+      --success:#20c997;
+      --shadow:0 18px 40px rgba(0,0,0,.35);
+      --radius:22px;
+    }
 
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Arial, Helvetica, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+
+    .app{
+      max-width:430px;
+      min-height:100vh;
+      margin:0 auto;
+      padding:18px 16px 90px;
+      position:relative;
+      overflow-x:hidden;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:16px;
+      padding-top:4px;
+    }
+
+    .user-wrap{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .avatar{
+      width:52px;
+      height:52px;
+      border-radius:50%;
+      background:#12172a;
+      display:grid;
+      place-items:center;
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:inset 0 0 0 1px rgba(74,122,255,.08);
+    }
+
+    .avatar svg,
+    .icon svg{
+      width:24px;
+      height:24px;
+      fill:none;
+      stroke:#fff;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .greeting{
+      line-height:1.25;
+    }
+
+    .greeting .small{
+      font-size:13px;
+      color:#d8def0;
+      margin-bottom:3px;
+      opacity:.9;
+    }
+
+    .greeting .big{
+      font-size:20px;
+      font-weight:700;
+    }
+
+    .bell{
+      width:46px;
+      height:46px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      background:transparent;
+      border:1px solid rgba(255,255,255,.08);
+      color:#fff;
+    }
+
+    .bell svg{
+      width:22px;
+      height:22px;
+      stroke:#fff;
+    }
+
+    .balance-card{
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.05) 0 26%, transparent 27% 100%),
+        linear-gradient(135deg, #1034a0 0%, #143abb 45%, #0d2a83 100%);
+      border-radius:24px;
+      padding:22px 20px;
+      box-shadow:var(--shadow);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      position:relative;
+      overflow:hidden;
+      min-height:138px;
+      margin-bottom:18px;
+    }
+
+    .balance-card::before{
+      content:"";
+      position:absolute;
+      width:260px;
+      height:260px;
+      border-radius:50%;
+      background:rgba(255,255,255,.08);
+      right:-100px;
+      top:-80px;
+      pointer-events:none;
+    }
+
+    .balance-card::after{
+      content:"";
+      position:absolute;
+      width:180px;
+      height:180px;
+      border-radius:50%;
+      background:rgba(255,255,255,.04);
+      right:20px;
+      top:18px;
+      pointer-events:none;
+    }
+
+    .balance-text{
+      position:relative;
+      z-index:1;
+    }
+
+    .balance-label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:18px;
+      margin-bottom:18px;
+      color:#eaf0ff;
+    }
+
+    .balance-value{
+      font-size:34px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+
+    .fund-btn{
+      position:relative;
+      z-index:1;
+      border:none;
+      color:#fff;
+      background:#222737;
+      padding:16px 18px;
+      min-width:116px;
+      border-radius:20px;
+      font-size:16px;
+      font-weight:700;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+
+    .section{
+      background:var(--card);
+      border-radius:22px;
+      padding:18px;
+      margin-top:14px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(255,255,255,.03);
+    }
+
+    .section-title{
+      font-size:20px;
+      font-weight:800;
+      margin-bottom:16px;
+      color:#f4f7ff;
+    }
+
+    .quick-actions{
+      margin-top:2px;
+    }
+
+    .action-grid{
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:14px 10px;
+    }
+
+    .action-item{
+      text-align:center;
+    }
+
+    .action-icon{
+      width:62px;
+      height:62px;
+      margin:0 auto 10px;
+      border-radius:50%;
+      background:var(--icon-bg);
+      display:grid;
+      place-items:center;
+      border:1px solid rgba(255,255,255,.06);
+      box-shadow:inset 0 0 0 1px rgba(70,105,255,.07);
+    }
+
+    .action-icon svg{
+      width:25px;
+      height:25px;
+      stroke:#fff;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .action-label{
+      font-size:13px;
+      color:#edf1ff;
+      line-height:1.2;
+      min-height:32px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+    }
+
+    .services-grid{
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:16px 8px;
+    }
+
+    .service-item{
+      text-align:center;
+    }
+
+    .service-icon{
+      width:62px;
+      height:62px;
+      margin:0 auto 10px;
+      border-radius:50%;
+      background:var(--icon-bg);
+      display:grid;
+      place-items:center;
+      border:1px solid rgba(255,255,255,.06);
+    }
+
+    .service-icon svg{
+      width:24px;
+      height:24px;
+      stroke:#fff;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .service-label{
+      font-size:13px;
+      color:#edf1ff;
+      line-height:1.2;
+      min-height:32px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+    }
+
+    .promo{
+      margin-top:18px;
+      border-radius:18px;
+      overflow:hidden;
+      background:linear-gradient(90deg, #ffffff 0%, #f5f9ff 100%);
+      color:#18224b;
+      display:flex;
+      align-items:center;
+      min-height:126px;
+      position:relative;
+      box-shadow:var(--shadow);
+    }
+
+    .promo-left{
+      width:108px;
+      height:126px;
+      display:grid;
+      place-items:center;
+      flex:0 0 108px;
+      background:linear-gradient(135deg, #2f7aff 0%, #0d4ed6 100%);
+      position:relative;
+    }
+
+    .badge{
+      width:72px;
+      height:72px;
+      background:#5ca0ff;
+      border-radius:23px;
+      transform:rotate(45deg);
+      display:grid;
+      place-items:center;
+      box-shadow:0 12px 24px rgba(26,82,190,.25);
+    }
+
+    .badge span{
+      transform:rotate(-45deg);
+      font-size:34px;
+      color:white;
+      font-weight:800;
+    }
+
+    .promo-content{
+      padding:18px 16px;
+      flex:1;
+    }
+
+    .promo-title{
+      font-size:20px;
+      font-weight:900;
+      letter-spacing:.4px;
+      margin-bottom:8px;
+      color:#1b2d67;
+    }
+
+    .promo-text{
+      font-size:13px;
+      line-height:1.4;
+      color:#3b4870;
+      max-width:220px;
+    }
+
+    .dots{
+      display:flex;
+      justify-content:center;
+      gap:7px;
+      margin:12px 0 2px;
+    }
+
+    .dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:#33405f;
+    }
+
+    .dot.active{
+      background:#1f5bff;
+      width:20px;
+      border-radius:999px;
+    }
+
+    .recent{
+      margin-top:18px;
+      background:var(--card);
+      border-radius:22px;
+      min-height:160px;
+      padding:18px;
+      box-shadow:var(--shadow);
+    }
+
+    .recent-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:8px;
+    }
+
+    .recent-head h3{
+      margin:0;
+      font-size:20px;
+      font-weight:800;
+    }
+
+    .see-all{
+      color:#355cff;
+      font-weight:700;
+      font-size:14px;
+    }
+
+    .txn{
+      margin-top:14px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:14px 0;
+      border-top:1px solid rgba(255,255,255,.05);
+      color:#eef3ff;
+    }
+
+    .txn:first-of-type{
+      border-top:none;
+    }
+
+    .txn-left{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+
+    .txn-icon{
+      width:44px;
+      height:44px;
+      border-radius:14px;
+      background:#10172b;
+      display:grid;
+      place-items:center;
+      border:1px solid rgba(255,255,255,.05);
+    }
+
+    .txn-icon svg{
+      width:20px;
+      height:20px;
+      stroke:#fff;
+      fill:none;
+      stroke-width:2;
+    }
+
+    .txn-title{
+      font-size:14px;
+      font-weight:700;
+      margin-bottom:4px;
+    }
+
+    .txn-sub{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .txn-amount{
+      font-size:14px;
+      font-weight:800;
+    }
+
+    .bottom-nav{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      width:min(430px, 100%);
+      background:#0f1422;
+      border-top:1px solid rgba(255,255,255,.06);
+      display:flex;
+      justify-content:space-around;
+      padding:10px 10px 14px;
+      z-index:50;
+      backdrop-filter:blur(10px);
+    }
+
+    .nav-item{
+      text-align:center;
+      color:#8d96af;
+      font-size:12px;
+      min-width:64px;
+    }
+
+    .nav-item.active{
+      color:#2d63ff;
+    }
+
+    .nav-icon{
+      width:24px;
+      height:24px;
+      margin:0 auto 5px;
+    }
+
+    .nav-icon svg{
+      width:24px;
+      height:24px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .clickable{
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, opacity .15s ease, background .15s ease;
+    }
+
+    .clickable:active{
+      transform:scale(.97);
+      opacity:.92;
+    }
+
+    @media (max-width:380px){
+      .action-grid, .services-grid{
+        gap:12px 6px;
+      }
+      .action-icon, .service-icon{
+        width:56px;
+        height:56px;
+      }
+      .action-label, .service-label{
+        font-size:12px;
+      }
+      .balance-value{
+        font-size:30px;
+      }
+      .fund-btn{
+        min-width:102px;
+        padding:14px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="user-wrap">
+        <div class="avatar">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5Z"></path>
+            <path d="M4 22c1.6-4 5-6 8-6s6.4 2 8 6"></path>
+          </svg>
+        </div>
+        <div class="greeting">
+          <div class="small">Hi chidubem!</div>
+          <div class="big">What would you like to do?</div>
+        </div>
+      </div>
+
+      <div class="bell clickable" id="bellBtn" title="Notifications">
+        <svg viewBox="0 0 24 24">
+          <path d="M15 17H5c1.1-1.2 2-2.6 2-5V9a5 5 0 0 1 10 0v3c0 2.4.9 3.8 2 5h-4"></path>
+          <path d="M10 17a2 2 0 0 0 4 0"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div class="balance-card">
+      <div class="balance-text">
+        <div class="balance-label">
+          <span>Available Balance</span>
+          <span style="font-size:18px;">👁️</span>
+        </div>
+        <div class="balance-value">₦27.57</div>
+      </div>
+      <button class="fund-btn clickable" id="fundBtn">Fund Wallet</button>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="section quick-actions">
+      <div class="section-title">Quick Actions</div>
+      <div class="action-grid">
+        <div class="action-item clickable" data-action="Airtime">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M10 14a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-6 6Z"></path>
+              <path d="M8 16 4 20"></path>
+            </svg>
+          </div>
+          <div class="action-label">Airtime</div>
+        </div>
+
+        <div class="action-item clickable" data-action="Data">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 3c4.4 0 8 1.8 8 4s-3.6 4-8 4-8-1.8-8-4 3.6-4 8-4Z"></path>
+              <path d="M4 7v5c0 2.2 3.6 4 8 4s8-1.8 8-4V7"></path>
+              <path d="M4 12v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5"></path>
+            </svg>
+          </div>
+          <div class="action-label">Data</div>
+        </div>
+
+        <div class="action-item clickable" data-action="Cable TV">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24">
+              <rect x="4" y="6" width="16" height="10" rx="2"></rect>
+              <path d="M9 20h6"></path>
+              <path d="M12 16v4"></path>
+            </svg>
+          </div>
+          <div class="action-label">Cable TV</div>
+        </div>
+      <div class="service-item clickable" data-service="Refer a friend">
+          <div class="service-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <path d="M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+              <path d="M20 8v6"></path>
+              <path d="M17 11h6"></path>
+            </svg>
+          </div>
+          <div class="service-label">Refer a friend</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="promo">
+      <div class="promo-left">
+        <div class="badge"><span>✓</span></div>
+      </div>
+      <div class="promo-content">
+        <div class="promo-title">VERIFY YOUR DETAILS</div>
+        <div class="promo-text">
+          Verify your details to get permanent account for your wallet funding
+        </div>
+      </div>
+    </div>
+
+    <div class="dots" aria-hidden="true">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+        <div class="recent">
+      <div class="recent-head">
+        <h3>Recent Transactions</h3>
+        <div class="see-all">See All &gt;</div>
+      </div>
+
+      <div class="txn">
+        <div class="txn-left">
+          <div class="txn-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 12h16"></path>
+              <path d="M10 6l-6 6 6 6"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="txn-title">Wallet Funding</div>
+            <div class="txn-sub">Today · 12:46 PM</div>
+          </div>
+        </div>
+        <div class="txn-amount">₦2,000</div>
+      </div>
+
+      <div class="txn">
+        <div class="txn-left">
+          <div class="txn-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M5 12h14"></path>
+              <path d="M14 6l6 6-6 6"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="txn-title">Airtime Purchase</div>
+            <div class="txn-sub">Today · 10:05 AM</div>
+          </div>
+                </div>
+        <div class="txn-amount">-₦500</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 11l9-8 9 8"></path>
+          <path d="M5 10v10h14V10"></path>
+        </svg>
+      </div>
+      Home
+    </div>
+
+    <div class="nav-item">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 3h12v18H6z"></path>
+          <path d="M9 7h6"></path>
+          <path d="M9 11h6"></path>
+        </svg>
+      </div>
+      Pricing
+    </div>
+
+    <div class="nav-item">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 5h16v14H4z"></path>
+          <path d="M8 9h8"></path>
+          <path d="M8 13h8"></path>
+        </svg>
+      </div>
+      History
+    </div>
+
+    <div class="nav-item">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 21a8 8 0 1 0-16 0"></path>
+             <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+        </svg>
+      </div>
+      Profile
+    </div>
+  </nav>
+
+  <script>
+    const toast = (text) => {
+      let t = document.getElementById("toast");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "toast";
+        t.style.position = "fixed";
+        t.style.left = "50%";
+        t.style.bottom = "88px";
+        t.style.transform = "translateX(-50%)";
+        t.style.background = "rgba(17,22,38,.96)";
+        t.style.color = "#fff";
+        t.style.padding = "12px 16px";
+        t.style.border = "1px solid rgba(255,255,255,.08)";
+        t.style.borderRadius = "14px";
+        t.style.boxShadow = "0 16px 30px rgba(0,0,0,.35)";
+        t.style.zIndex = "999";
+        t.style.fontSize = "14px";
+        t.style.maxWidth = "90vw";
+        t.style.textAlign = "center";
+        document.body.appendChild(t);
+      }
+      t.textContent = text;
+      t.style.opacity = "1";
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        t.style.opacity = "0";
+      }, 1800);
+    };
+
+document.getElementById("fundBtn").addEventListener("click", () => {
+      toast("Fund Wallet tapped");
+    });
+
+    document.getElementById("bellBtn").addEventListener("click", () => {
+      toast("Notifications");
+    });
+
+    document.querySelectorAll("[data-action], [data-service]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const label = el.getAttribute("data-action") || el.getAttribute("data-service");
+        toast(label + " tapped");
+      });
+    });
+
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
+        item.classList.add("active");
+      });
+    });
+  </script>
+</body>
+  </html>
