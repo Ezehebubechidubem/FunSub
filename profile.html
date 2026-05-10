@@ -15,7 +15,7 @@
 
     :root{
       --gold:#d4a017;
-      --gold-dark:#b8860b;
+      --gold-dark:#6a6a6a;
       --white:#ffffff;
       --bg:#f7f7f7;
       --text:#111111;
@@ -23,7 +23,78 @@
       --line:#ececec;
       --shadow:0 10px 25px rgba(0,0,0,0.08);
     }
+    .nav-item{
+      text-align:center;
+      color:#6a6a6a;
+      font-size:12px;
+      min-width:64px;
+      cursor:pointer;
+    }
 
+    .nav-item.active{
+      color:var#6a6a6a;
+      font-weight:700;
+    }
+
+    .nav-icon{
+      width:24px;
+      height:24px;
+      margin:0 auto 5px;
+    }
+
+    .nav-icon svg{
+      width:24px;
+      height:24px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+    .clickable{
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, opacity .15s ease;
+    }
+
+    .clickable:active{
+      transform:scale(.97);
+      opacity:.92;
+    }
+        .bottom-nav{
+      position:fixed;
+      left:50%;
+      transform:translateX(-50%);
+      bottom:0;
+      width:min(430px, 100%);
+      background:#fff;
+      border-top:1px solid var(--line);
+      display:flex;
+      justify-content:space-around;
+      padding:10px 10px 14px;
+      z-index:50;
+      backdrop-filter:blur(10px);
+    }
+
+    @media (max-width:380px){
+      .action-grid, .services-grid{
+        gap:12px 6px;
+      }
+      .action-icon, .service-icon{
+        width:56px;
+        height:56px;
+      }
+      .action-label, .service-label{
+        font-size:12px;
+      }
+      .balance-value{
+        font-size:30px;
+      }
+      .fund-btn{
+        min-width:102px;
+        padding:14px 14px;
+      }
+    }
     body.dark{
       --white:#111111;
       --bg:#0f1115;
@@ -261,7 +332,60 @@
       font-size:22px;
       margin-bottom:5px;
     }
+        .action-item{
+      text-align:center;
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, opacity .15s ease;
+    }
 
+    .action-item:active{
+      transform:scale(.97);
+      opacity:.92;
+    }
+
+    .action-icon{
+      width:62px;
+      height:62px;
+      margin:0 auto 10px;
+      border-radius:50%;
+      background:#fff;
+      display:grid;
+      place-items:center;
+      border:1px solid var(--line);
+      box-shadow:0 6px 16px rgba(0,0,0,.05);
+      transition:all .2s ease;
+    }
+
+    .action-item:hover .action-icon{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+      box-shadow:0 10px 20px rgba(200,162,74,.18);
+    }
+
+    .action-icon svg{
+      width:25px;
+      height:25px;
+      stroke:#111;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .action-label{
+      font-size:13px;
+      color:#111;
+      line-height:1.2;
+      min-height:32px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      font-weight:600;
+    }
+.nav-icon:hover{
+  color: goldenrod;
+}
   </style>
 </head>
 
@@ -422,29 +546,53 @@
 </div>
 
 <!-- BOTTOM NAV -->
-<div class="bottom-nav">
+  <nav class="bottom-nav">
+    <div class="nav-item active">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 11l9-8 9 8"></path>
+          <path d="M5 10v10h14V10"></path>
+        </svg>
+      </div>
+      Home
+    </div>
 
-  <div class="nav-item">
-    <div class="nav-icon">🏠</div>
-    Home
-  </div>
 
-  <div class="nav-item">
-    <div class="nav-icon">💰</div>
-    Pricing
-  </div>
 
-  <div class="nav-item">
-    <div class="nav-icon">📄</div>
-    History
-  </div>
 
-  <div class="nav-item active">
-    <div class="nav-icon">👤</div>
-    Profile
-  </div>
+    <div class="nav-item">
+      <div class="nav-icon">
+           <svg viewBox="0 0 24 24">
+          <path d="M6 3h12v18H6z"></path>
+          <path d="M9 7h6"></path>
+          <path d="M9 11h6"></path>
+        </svg>
+      </div>
+      Pricing
+    </div>
 
-</div>
+
+    <div class="nav-item">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 5h16v14H4z"></path>
+          <path d="M8 9h8"></path>
+          <path d="M8 13h8"></path>
+        </svg>
+      </div>
+      History
+    </div>
+
+    <div class="nav-item">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 21a8 8 0 1 0-16 0"></path>
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+        </svg>
+      </div>
+      Profile
+    </div>
+  </nav>
 
 <script>
 
