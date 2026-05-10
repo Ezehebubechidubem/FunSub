@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FunSub</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --text:#111111;
+      --muted:#6b7280;
+      --gold:#d4a017;
+      --gold-dark:#b8860b;
+      --gold-soft:#fff6dd;
+      --card:#ffffff;
+      --line:#ece7d8;
+      --shadow:0 18px 40px rgba(0,0,0,.08);
+      --shadow-soft:0 10px 22px rgba(212,160,23,.16);
+      --navy:#102a78;
+      --brown:#7a4a21;
+      --brown-dark:#5f3818;
+      --service:#1f1f1f;
+      --service-text:#ffffff;
+      --radius:24px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      padding:0;
+      background:
+        radial-gradient(circle at top, rgba(212,160,23,.10) 0, transparent 28%),
+        linear-gradient(180deg, #ffffff 0%, #fffdf8 100%);
+      color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      min-height:100%;
+    }
+
+    a{
+      text-decoration:none;
+      color:inherit;
+    }
+
+    .screen{
+      width:min(430px, 100%);
+      margin:0 auto;
+      min-height:100vh;
+      padding:18px 18px 28px;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .top-status{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      font-size:15px;
+      color:#1b1b1b;
+      margin-bottom:28px;
+      user-select:none;
+    }
+
+    .status-right{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      opacity:.95;
+      font-weight:600;
+    }
+
+    .status-icon{
+      width:16px;
+      height:16px;
+      border:2px solid #1b1b1b;
+      border-radius:50%;
+      position:relative;
+      display:inline-block;
+    }
+
+    .status-icon::after{
+      content:"";
+      position:absolute;
+      width:4px;
+      height:4px;
+      border-radius:50%;
+      background:#1b1b1b;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+    }
+
+    .brand{
+      text-align:center;
+      font-size:28px;
+      font-weight:800;
+      letter-spacing:.2px;
+      margin:18px 0 34px;
+      color:var(--text);
+    }
+
+    .hero{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:16px;
+      margin-top:12px;
+    }
+
+    .mockup-wrap{
+      width:100%;
+      display:flex;
+      justify-content:center;
+      position:relative;
+      margin-top:8px;
+      pointer-events:none;
+      user-select:none;
+    }
+
+    .ribbon{
+      position:absolute;
+      top:18px;
+      padding:12px 22px;
+      color:#fff;
+      font-weight:700;
+      font-size:18px;
+      border-radius:4px;
+      box-shadow:var(--shadow);
+      z-index:4;
+      transform:rotate(8deg);
+    }
+
+    .ribbon.reliable{
+      left:0;
+      background:#111111;
+      transform:rotate(-8deg);
+    }
+
+    .ribbon.fast{
+      right:0;
+      background:#18a64f;
+      transform:rotate(8deg);
+    }
+
+    .ribbon::after{
+      content:"";
+      position:absolute;
+      width:0;
+      height:0;
+      border-style:solid;
+      bottom:-18px;
+      left:20px;
+    }
+
+    .ribbon.reliable::after{
+      border-width:18px 22px 0 0;
+      border-color:#111111 transparent transparent transparent;
+      left:18px;
+    }
+
+    .ribbon.fast::after{
+      border-width:18px 0 0 22px;
+      border-color:#18a64f transparent transparent transparent;
+      left:auto;
+      right:18px;
+    }
+
+    .phone{
+      width:min(330px, 92%);
+      background:#f7f7f7;
+      border:1px solid #eaeaea;
+      border-radius:34px;
+      box-shadow:0 24px 60px rgba(0,0,0,.10);
+      overflow:hidden;
+      position:relative;
+      z-index:2;
+    }
+
+    .phone::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius:34px;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.65);
+      pointer-events:none;
+    }
+
+    .phone-top{
+      padding:14px 16px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      color:#1e1e1e;
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .phone-icons{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      opacity:.85;
+    }
+
+    .signal{
+      display:flex;
+      align-items:flex-end;
+      gap:2px;
+      height:12px;
+    }
+
+    .signal span{
+      width:2px;
+      background:#1e1e1e;
+      border-radius:1px;
+      display:block;
+    }
+
+    .signal span:nth-child(1){height:4px}
+    .signal span:nth-child(2){height:7px}
+    .signal span:nth-child(3){height:10px}
+    .signal span:nth-child(4){height:12px}
+
+    .battery{
+      width:18px;
+      height:10px;
+      border:1.6px solid #1e1e1e;
+      border-radius:3px;
+      position:relative;
+    }
+
+    .battery::after{
+      content:"";
+      position:absolute;
+      right:-3px;
+      top:2px;
+      width:2px;
+      height:5px;
+      background:#1e1e1e;
+      border-radius:1px;
+    }
+
+    .battery-fill{
+      position:absolute;
+      inset:1px 3px 1px 1px;
+      width:72%;
+      background:#1e1e1e;
+      border-radius:2px;
+    }
+
+    .phone-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      padding:0 16px 14px;
+      gap:10px;
+    }
+
+    .greet{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+
+    .avatar{
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      background:linear-gradient(135deg, #fff, #e7e7e7);
+      border:2px solid #d9d9d9;
+      display:grid;
+      place-items:center;
+      color:#1a1a1a;
+      font-weight:800;
+      font-size:15px;
+      flex:0 0 38px;
+    }
+
+    .hello{
+      min-width:0;
+    }
+
+    .hello .small{
+      font-size:14px;
+      color:#303030;
+      margin-bottom:2px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .hello .big{
+      font-size:16px;
+      font-weight:800;
+      color:#111;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .bell{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      color:#111;
+      flex:0 0 auto;
+    }
+
+    .bell svg{
+      width:22px;
+      height:22px;
+      stroke:#111;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .balance-card{
+      margin:0 16px 14px;
+      background:linear-gradient(135deg, var(--navy) 0%, #173fb6 100%);
+      border-radius:18px;
+      color:#fff;
+      padding:18px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .balance-card::before{
+      content:"";
+      position:absolute;
+      right:-28px;
+      top:-26px;
+      width:140px;
+      height:140px;
+      border-radius:50%;
+      background:rgba(255,255,255,.08);
+    }
+
+    .balance-card::after{
+      content:"";
+      position:absolute;
+      right:18px;
+      top:14px;
+      width:62px;
+      height:62px;
+      border-radius:50%;
+      background:rgba(255,255,255,.05);
+    }
+
+    .balance-text{
+      position:relative;
+      z-index:1;
+    }
+
+    .balance-text .label{
+      font-size:14px;
+      opacity:.9;
+      margin-bottom:10px;
+    }
+
+    .balance-text .value{
+      font-size:26px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+
+    .add-money{
+      position:relative;
+      z-index:1;
+      background:#fff;
+      color:#111;
+      border:none;
+      border-radius:999px;
+      padding:12px 18px;
+      font-weight:700;
+      font-size:14px;
+      box-shadow:0 8px 18px rgba(0,0,0,.08);
+      cursor:default;
+    }
+
+    .services-card{
+      margin:0 16px;
+      background:var(--card);
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      border:1px solid var(--line);
+      padding:14px 12px 16px;
+    }
+
+    .services-title{
+      font-size:17px;
+      font-weight:800;
+      margin:0 0 10px 2px;
+      color:#111;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:14px 8px;
+    }
+
+    .service{
+      text-align:center;
+      cursor:default;
+      user-select:none;
+    }
+
+    .icon-circle{
+      width:60px;
+      height:60px;
+      margin:0 auto 8px;
+      border-radius:50%;
+      background:var(--service);
+      display:grid;
+      place-items:center;
+      color:var(--service-text);
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);
+    }
+
+    .icon-circle svg{
+      width:22px;
+      height:22px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .service-label{
+      font-size:12.5px;
+      color:#222;
+      line-height:1.2;
+      min-height:30px;
+    }
+
+    .content{
+      padding:18px 20px 0;
+      text-align:center;
+    }
+
+    .headline{
+      font-size:24px;
+      font-weight:800;
+      color:#111;
+      margin:24px 0 12px;
+    }
+
+    .subhead{
+      font-size:17px;
+      line-height:1.55;
+      color:#2a2a2a;
+      max-width:330px;
+      margin:0 auto 24px;
+    }
+
+    .cta-wrap{
+      margin-top:96px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:0 4px;
+    }
+
+    .cta-btn{
+      width:100%;
+      height:58px;
+      border-radius:14px;
+      border:1px solid var(--brown);
+      background:var(--brown);
+      color:#fff;
+      font-size:18px;
+      font-weight:800;
+      cursor:pointer;
+      box-shadow:0 14px 26px rgba(122,74,33,.18);
+      transition:transform .15s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .cta-btn:hover{
+      background:var(--gold);
+      border-color:var(--gold);
+      box-shadow:var(--shadow-soft);
+      color:#111;
+    }
+
+    .cta-btn:active{
+      transform:scale(.99);
+    }
+
+    .footer-space{
+      height:10px;
+    }
+
+    @media (max-width:380px){
+      .brand{font-size:26px}
+      .phone{width:100%}
+      .headline{font-size:22px}
+      .subhead{font-size:16px}
+      .cta-btn{height:55px}
+      .ribbon{font-size:16px;padding:10px 18px}
+      .balance-text .value{font-size:24px}
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <div class="top-status">
+      <div>15:17</div>
+      <div class="status-right">
+        <span style="font-size:17px;">◎</span>
+        <span>4G</span>
+        <div class="status-icon" aria-hidden="true"></div>
+        <div class="battery" aria-hidden="true">
+          <div class="battery-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="brand">FunSub</div>
+
+    <section class="hero" aria-label="App preview and actions">
+      <div class="mockup-wrap">
+        <div class="ribbon reliable">Reliable</div>
+        <div class="ribbon fast">Fast</div>
+
+        <div class="phone" role="img" aria-label="App preview">
+          <div class="phone-top">
+            <div>9:41</div>
+            <div class="phone-icons">
+              <div class="signal" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <span style="font-size:13px;">◔</span>
+              <div class="battery" style="transform:scale(.85);" aria-hidden="true">
+                <div class="battery-fill" style="width:88%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="phone-header">
+            <div class="greet">
+              <div class="avatar">J</div>
+              <div class="hello">
+                <div class="small">Hi John</div>
+                <div class="big">What do you want to do?</div>
+              </div>
+            </div>
+
+            <div class="bell" title="Notifications">
+              <svg viewBox="0 0 24 24">
+                <path d="M15 17H5c1.1-1.2 2-2.6 2-5V9a5 5 0 0 1 10 0v3c0 2.4.9 3.8 2 5h-4"></path>
+                <path d="M10 17a2 2 0 0 0 4 0"></path>
+              </svg>
+            </div>
+          </div>
+
+          <div class="balance-card">
+            <div class="balance-text">
+              <div class="label">Available Balance</div>
+              <div class="value">₦10,000</div>
+            </div>
+            <div class="add-money">Add Money</div>
+          </div>
+
+          <div class="services-card">
+            <div class="services-title">Services</div>
+            <div class="grid">
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M10 14a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-6 6Z"></path>
+                    <path d="M8 16 4 20"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Airtime</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 3c4.4 0 8 1.8 8 4s-3.6 4-8 4-8-1.8-8-4 3.6-4 8-4Z"></path>
+                    <path d="M4 7v5c0 2.2 3.6 4 8 4s8-1.8 8-4V7"></path>
+                    <path d="M4 12v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Data</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="4" y="6" width="16" height="10" rx="2"></rect>
+                    <path d="M9 20h6"></path>
+                    <path d="M12 16v4"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Cable TV</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M13 2 4 14h6l-1 8 11-14h-6l1-6Z"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Electricity</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 10l8-6 8 6-8 6-8-6Z"></path>
+                    <path d="M12 16v6"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Exam Pin</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+                    <path d="M8 8h8"></path>
+                    <path d="M8 12h8"></path>
+                    <path d="M8 16h4"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Data Pin</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M6 7h12"></path>
+                    <path d="M6 17h12"></path>
+                    <path d="M9 4l-3 3 3 3"></path>
+                    <path d="M15 14l3 3-3 3"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Airtime Setup</div>
+              </div>
+
+              <div class="service">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3 2-5a4 4 0 0 1-1-2.7V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z"></path>
+                  </svg>
+                </div>
+                <div class="service-label">Bulk SMS</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="headline">Pay Bills and Buy Data</div>
+        <div class="subhead">
+          One simple app for fast, secure and reliable bills payments and everyday convenience.
+        </div>
+
+        <div class="cta-wrap">
+          <a class="cta-btn" href="register.html">Register</a>
+          <a class="cta-btn" href="login.html">Login</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-space"></div>
+  </main>
+</body>
+                  </html>
