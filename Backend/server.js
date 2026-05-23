@@ -23,6 +23,11 @@ const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || '';
 const FLW_BASE_URL = process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
+// Added for Render: fail fast if DATABASE_URL is missing
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is missing on Render');
+}
+
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
 const KYC_DIR = path.join(UPLOAD_ROOT, 'kyc');
@@ -46,9 +51,10 @@ app.use(
   })
 );
 
+// Changed for Render: always use SSL for Postgres
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: { rejectUnauthorized: false }
 });
 
 const uid = (prefix = '') => `${prefix}${crypto.randomUUID().replace(/-/g, '')}`;
@@ -872,6 +878,7 @@ app.post(
     }
   }
 );
+
 app.get('/api/kyc/status', requireAuth, async (req, res) => {
   try {
     const result = await query(
@@ -1105,6 +1112,20 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 300`
+    );
+    return respondOk(res, { users: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
 
 app.get('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
@@ -1262,6 +1283,8 @@ app.use((err, req, res, next) => {
 
 (async () => {
   try {
+    // Added for Render: confirm DB connectivity before initialization
+    await query('SELECT 1');
     await initDb();
 
     if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
