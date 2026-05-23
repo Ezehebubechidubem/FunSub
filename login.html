@@ -386,10 +386,16 @@
     const toastMessage = document.getElementById('toastMessage');
     const password = document.getElementById('password');
     const togglePwd = document.getElementById('togglePwd');
+    const loginIdInput = document.getElementById('loginId');
 
     const storageKey = 'sub2me_user';
     const loggedKey = 'sub2me_logged_in';
     const rememberKey = 'sub2me_remembered';
+    const tokenKey = 'sub2me_token';
+    const walletKey = 'sub2me_wallet';
+
+    // Set this if your frontend is on a different domain.
+    const API_BASE_URL = localStorage.getItem('apiBaseUrl') || '';
 
     function showLoader() {
       loader.classList.add('show');
@@ -428,7 +434,7 @@
     function prefillRememberedValue() {
       const remembered = localStorage.getItem(rememberKey);
       if (remembered) {
-        document.getElementById('loginId').value = remembered;
+        loginIdInput.value = remembered;
       }
     }
 
@@ -442,55 +448,67 @@
       togglePwd.querySelector('.eye-hidden').style.display = isHidden ? 'block' : 'none';
     });
 
-    loginForm.addEventListener('submit', function (e) {
+    loginForm.addEventListener('submit', async function (e) {
       e.preventDefault();
 
-      const loginId = document.getElementById('loginId').value.trim();
+      const loginId = loginIdInput.value.trim();
       const enteredPassword = password.value.trim();
-      const user = getSavedUser();
 
       if (!loginId || !enteredPassword) {
-        return;
-      }
-
-      if (!user) {
-        showToast('Error', 'No registered user found');
+        showToast('Error', 'Email/phone and password are required');
         setTimeout(hideToast, 2200);
         return;
-      }
-
-      const loginEmail = normalizeEmail(loginId);
-      const loginPhone = normalizePhone(loginId);
-
-      const matchesEmail = loginEmail === user.email;
-      const matchesPhone = loginPhone && loginPhone === user.phoneDigits;
-
-      if (!matchesEmail && !matchesPhone) {
-        showToast('Error', 'User not found');
-        setTimeout(hideToast, 2200);
-        return;
-      }
-
-      localStorage.setItem(loggedKey, 'true');
-
-      const rememberMe = document.querySelector('.remember input').checked;
-      if (rememberMe) {
-        localStorage.setItem(rememberKey, loginId);
-      } else {
-        localStorage.removeItem(rememberKey);
       }
 
       showLoader();
 
-      setTimeout(() => {
-        hideLoader();
-        showToast('Success', 'Login successful');
-      }, 1000);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            identifier: loginId,
+            password: enteredPassword
+          })
+        });
 
-      setTimeout(() => {
-        hideToast();
-        window.location.href = 'dashboard.html';
-      }, 3000);
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = data?.message || 'Login failed';
+          hideLoader();
+          showToast('Error', message);
+          setTimeout(hideToast, 2500);
+          return;
+        }
+
+        const rememberMe = document.querySelector('.remember input').checked;
+
+        localStorage.setItem(loggedKey, 'true');
+        localStorage.setItem(tokenKey, data.token || '');
+        localStorage.setItem(storageKey, JSON.stringify(data.user || {}));
+        localStorage.setItem(walletKey, JSON.stringify(data.wallet || {}));
+
+        if (rememberMe) {
+          localStorage.setItem(rememberKey, loginId);
+        } else {
+          localStorage.removeItem(rememberKey);
+        }
+
+        hideLoader();
+        showToast('Success', data.message || 'Login successful');
+
+        setTimeout(() => {
+          hideToast();
+          window.location.href = 'dashboard.html';
+        }, 1600);
+      } catch (err) {
+        hideLoader();
+        showToast('Error', 'Unable to reach the server');
+        setTimeout(hideToast, 2500);
+      }
     });
   </script>
 </body>
