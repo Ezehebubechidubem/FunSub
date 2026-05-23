@@ -1090,3 +1090,211 @@ app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 300`
+    );
+    return respondOk(res, { users: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at, last_login_at
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [req.params.id]
+    );
+
+    if (!result.rows[0]) return respondError(res, 404, 'User not found');
+
+    const wallet = await ensureWallet(req.params.id);
+    const txns = await query(
+      `SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
+      [req.params.id]
+    );
+    const kyc = await query(
+      `SELECT * FROM kyc_requests WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+      [req.params.id]
+    );
+
+    return respondOk(res, {
+      user: result.rows[0],
+      wallet: { balance: Number(wallet.balance).toFixed(2), currency: wallet.currency },
+      transactions: txns.rows,
+      kyc: kyc.rows[0] || null
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/admin/transactions', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM transactions ORDER BY created_at DESC LIMIT 500`
+    );
+    return respondOk(res, { transactions: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/admin/kyc', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM kyc_requests ORDER BY submitted_at DESC LIMIT 300`
+    );
+    return respondOk(res, { kycRequests: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.patch('/api/admin/users/:id/kyc', requireAdmin, async (req, res) => {
+  try {
+    const { status, note } = req.body || {};
+    if (!['verified', 'rejected', 'pending'].includes(String(status))) {
+      return respondError(res, 400, 'Invalid KYC status');
+    }
+
+    const kyc = await query(
+      `SELECT * FROM kyc_requests WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+      [req.params.id]
+    );
+
+    if (!kyc.rows[0]) return respondError(res, 404, 'KYC record not found');
+
+    const updated = await query(
+      `UPDATE kyc_requests
+       SET status = $2, admin_note = $3, reviewed_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [kyc.rows[0].id, status, note || null]
+    );
+
+    await query(
+      `UPDATE users
+       SET kyc_status = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [req.params.id, status]
+    );
+
+    await addNotification(
+      req.params.id,
+      'KYC updated',
+      `Your KYC status was updated to ${status}`,
+      { status, note: note || null },
+      true
+    );
+
+    await query(
+      `INSERT INTO admin_logs (id, admin_id, action, meta, created_at)
+       VALUES ($1,$2,$3,$4,NOW())`,
+      [uid('log_'), req.user.id, 'update_kyc', JSON.stringify({ user_id: req.params.id, status, note: note || null })]
+    );
+
+    return respondOk(res, { kyc: updated.rows[0] }, 'KYC updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/admin/notifications', requireAdmin, async (req, res) => {
+  try {
+    const { userId, title, message, meta = {} } = req.body || {};
+    if (!userId || !title || !message) return respondError(res, 400, 'userId, title and message are required');
+
+    await addNotification(userId, title, message, meta, true);
+
+    await query(
+      `INSERT INTO admin_logs (id, admin_id, action, meta, created_at)
+       VALUES ($1,$2,$3,$4,NOW())`,
+      [uid('log_'), req.user.id, 'create_notification', JSON.stringify({ userId, title, message })]
+    );
+
+    return respondOk(res, {}, 'Notification sent');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* LOGOUT */
+
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
+  try {
+    await query(
+      `UPDATE users
+       SET online = false, updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id]
+    );
+    return respondOk(res, {}, 'Logged out');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* ERRORS */
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  return respondError(res, 500, 'Internal server error');
+});
+
+/* START */
+
+(async () => {
+  try {
+    await initDb();
+
+    if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+      const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+      const existing = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [adminEmail]);
+
+      if (!existing.rows[0]) {
+        const password_hash = await bcrypt.hash(String(process.env.ADMIN_PASSWORD), 10);
+        const adminId = uid('usr_');
+
+        await query(
+          `INSERT INTO users
+           (id, role, full_name, email, phone, password_hash, state, kyc_status, profile_complete, online, created_at, updated_at)
+           VALUES ($1, 'admin', $2, $3, $4, $5, $6, 'verified', true, false, NOW(), NOW())`,
+          [
+            adminId,
+            process.env.ADMIN_NAME || 'Super Admin',
+            adminEmail,
+            process.env.ADMIN_PHONE || '0000000000',
+            password_hash,
+            process.env.ADMIN_STATE || 'Admin'
+          ]
+        );
+
+        await ensureWallet(adminId);
+      }
+    }
+
+    app.listen(PORT, () => {
+      console.log(`PhoneStop backend running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Startup error:', err);
+    process.exit(1);
+  }
+})();
