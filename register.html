@@ -505,6 +505,11 @@
 
     const storageKey = 'sub2me_user';
     const loggedKey = 'sub2me_logged_in';
+    const tokenKey = 'sub2me_token';
+    const walletKey = 'sub2me_wallet';
+
+    // Set this if your frontend is on a different domain.
+    const API_BASE_URL = localStorage.getItem('apiBaseUrl') || '';
 
     function showLoader() {
       loader.classList.add('show');
@@ -564,7 +569,7 @@
       });
     });
 
-    registerForm.addEventListener('submit', function (e) {
+    registerForm.addEventListener('submit', async function (e) {
       e.preventDefault();
 
       const fullName = document.getElementById('fullName').value.trim();
@@ -586,30 +591,50 @@
         return;
       }
 
-      const newUser = {
-        fullName,
-        phone,
-        phoneDigits: normalizePhone(phone),
-        email: normalizeEmail(email),
-        password,
-        state,
-        createdAt: new Date().toISOString()
-      };
-
-      localStorage.setItem(storageKey, JSON.stringify(newUser));
-      localStorage.removeItem(loggedKey);
-
       showLoader();
 
-      setTimeout(() => {
-        hideLoader();
-        showToast('Success', 'Registration successful');
-      }, 1000);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fullName,
+            phone,
+            email,
+            password,
+            confirmPassword,
+            state
+          })
+        });
 
-      setTimeout(() => {
-        hideToast();
-        window.location.href = 'login.html';
-      }, 3000);
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          hideLoader();
+          showToast('Error', data?.message || 'Registration failed', 'error');
+          setTimeout(hideToast, 2500);
+          return;
+        }
+
+        localStorage.setItem(loggedKey, 'false');
+        localStorage.setItem(tokenKey, data.token || '');
+        localStorage.setItem(storageKey, JSON.stringify(data.user || {}));
+        localStorage.setItem(walletKey, JSON.stringify(data.wallet || {}));
+
+        hideLoader();
+        showToast('Success', data.message || 'Registration successful');
+
+        setTimeout(() => {
+          hideToast();
+          window.location.href = 'login.html';
+        }, 1800);
+      } catch (err) {
+        hideLoader();
+        showToast('Error', 'Unable to reach the server', 'error');
+        setTimeout(hideToast, 2500);
+      }
     });
   </script>
 </body>
