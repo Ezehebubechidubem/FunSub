@@ -625,50 +625,62 @@ function resolveVtpassVariationCode(serviceType, { selectedPlan, planId, planNam
 }
 
 async function callProvider(serviceType, action, payload = {}, params = {}) {
-  const config = getProviderConfig(serviceType);
+  const normalizedServiceType = normalizeServiceType(serviceType);
 
   if (!VTPASS_BASE_URL) {
     throw new Error('VTPASS_BASE_URL is missing');
   }
 
-  const endpointPath =
-    action === 'plans'
-      ? config.plansPath
-      : action === 'buy'
-        ? config.buyPath
-        : '';
+  let url = '';
 
-  if (!endpointPath) {
-    throw new Error(`Missing ${action} path for ${config.serviceType}`);
+  // =========================
+  // LOAD PLANS / VARIATIONS
+  // =========================
+  if (action === 'plans') {
+    const serviceID = params.serviceID;
+
+    if (!serviceID) {
+      throw new Error(`Missing serviceID for ${normalizedServiceType}`);
+    }
+
+    url = `${VTPASS_BASE_URL}${VTPASS_VARIATIONS_PATH}?serviceID=${encodeURIComponent(serviceID)}`;
+
+    const response = await axios.get(url, {
+      headers: providerHeaders(),
+      auth: {
+        username: VTPASS_USERNAME,
+        password: VTPASS_PASSWORD
+      },
+      timeout: PROVIDER_TIMEOUT_MS
+    });
+
+    return response.data;
   }
 
-  const url = `${VTPASS_BASE_URL}${endpointPath}`;
+  // =========================
+  // BUY SERVICES
+  // =========================
+  if (action === 'buy') {
+    url = `${VTPASS_BASE_URL}${VTPASS_PAY_PATH}`;
 
-  const options = {
-    method: action === 'plans' ? 'GET' : 'POST',
-    url,
-    headers: providerHeaders(),
-    timeout: PROVIDER_TIMEOUT_MS
-  };
+    const response = await axios.post(
+      url,
+      compactObject(payload),
+      {
+        headers: providerHeaders(),
+        auth: {
+          username: VTPASS_USERNAME,
+          password: VTPASS_PASSWORD
+        },
+        timeout: PROVIDER_TIMEOUT_MS
+      }
+    );
 
-  if (options.method === 'GET') {
-    const serviceID = resolveVtpassServiceId(serviceType, { ...params, ...payload });
-    options.params = compactObject({
-      ...params,
-      serviceID,
-      ...providerAuthPayload()
-    });
-  } else {
-    options.data = compactObject({
-      ...payload,
-      ...providerAuthPayload()
-    });
+    return response.data;
   }
 
-  const response = await axios.request(options);
-  return response.data;
+  throw new Error(`Unsupported provider action: ${action}`);
 }
-
 function providerRequestLooksSuccessful(data) {
   if (!data) return false;
   if (data.success === true) return true;
