@@ -16,22 +16,38 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const envNumber = (value, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || '';
-const FLW_BASE_URL = process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3';
+const FLW_BASE_URL = process.env.FLW_BASE_URL || '';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
-const DEFAULT_MARKUP_PERCENT = Number.isFinite(Number(process.env.DEFAULT_MARKUP_PERCENT))
-  ? Number(process.env.DEFAULT_MARKUP_PERCENT)
-  : 2;
+
+const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 2);
+const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
+
+const SERVICE_MARKUP_DEFAULTS = {
+  airtime: envNumber(process.env.AIRTIME_MARKUP_PERCENT, 2),
+  data: envNumber(process.env.DATA_MARKUP_PERCENT, 3),
+  cable_tv: envNumber(process.env.CABLE_TV_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
+  electricity: envNumber(process.env.ELECTRICITY_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
+  betting: envNumber(process.env.BETTING_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
+  recharge_pin: envNumber(process.env.RECHARGE_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
+  data_pin: envNumber(process.env.DATA_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
+  exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
+};
 
 const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/, '');
 const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
-const VTPASS_USERNAME = process.env.VTPASS_USERNAME || '';
-const VTPASS_PASSWORD = process.env.VTPASS_PASSWORD || '';
-const PROVIDER_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 30000);
+const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
+const VTPASS_SECRET_KEY = process.env.VTPASS_SECRET_KEY || '';
+const PROVIDER_TIMEOUT_MS = envNumber(process.env.PROVIDER_TIMEOUT_MS, 30000);
 
 const PROVIDER_ENDPOINTS = {
   airtime: {
@@ -90,7 +106,7 @@ app.use('/uploads', express.static(UPLOAD_ROOT));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: Number(process.env.RATE_LIMIT_MAX || 300),
+    max: envNumber(process.env.RATE_LIMIT_MAX, 300),
     standardHeaders: true,
     legacyHeaders: false
   })
@@ -131,6 +147,25 @@ function respondError(res, status, message) {
 
 async function query(text, params = []) {
   return pool.query(text, params);
+}
+
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
+}
+
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
+
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
 }
 
 async function ensureWallet(userId) {
@@ -361,6 +396,9 @@ async function flutterwaveInitialize({ amount, user, description = 'Wallet fundi
   if (!FLW_SECRET_KEY) {
     throw new Error('Flutterwave secret key not set');
   }
+  if (!FLW_BASE_URL) {
+    throw new Error('FLW_BASE_URL is missing');
+  }
 
   const tx_ref = flutterwaveTxRef();
 
@@ -400,6 +438,9 @@ async function flutterwaveVerify(transactionId) {
   if (!FLW_SECRET_KEY) {
     throw new Error('Flutterwave secret key not set');
   }
+  if (!FLW_BASE_URL) {
+    throw new Error('FLW_BASE_URL is missing');
+  }
 
   const response = await axios.get(`${FLW_BASE_URL}/transactions/${transactionId}/verify`, {
     headers: flutterwaveHeaders(),
@@ -410,9 +451,11 @@ async function flutterwaveVerify(transactionId) {
 }
 
 async function ensurePricingRule(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+
   const found = await query(
     `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
-    [serviceType]
+    [normalized]
   );
 
   if (found.rows[0]) return found.rows[0];
@@ -421,7 +464,7 @@ async function ensurePricingRule(serviceType) {
     `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
      VALUES ($1, $2, $3, true, NOW(), NOW())
      RETURNING *`,
-    [uid('prc_'), serviceType, DEFAULT_MARKUP_PERCENT]
+    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
   );
 
   return created.rows[0];
@@ -429,7 +472,7 @@ async function ensurePricingRule(serviceType) {
 
 async function getMarkupPercent(serviceType) {
   const rule = await ensurePricingRule(serviceType);
-  return Number(rule.markup_percent ?? DEFAULT_MARKUP_PERCENT);
+  return Number(rule.markup_percent ?? getDefaultMarkupPercent(serviceType));
 }
 
 async function applyMarkup(serviceType, baseAmount) {
@@ -452,20 +495,15 @@ function providerHeaders() {
     'Content-Type': 'application/json'
   };
 
-  if (VTPASS_API_KEY) {
-    headers.Authorization = `Bearer ${VTPASS_API_KEY}`;
-    headers['x-api-key'] = VTPASS_API_KEY;
-  }
+  if (VTPASS_API_KEY) headers['api-key'] = VTPASS_API_KEY;
+  if (VTPASS_SECRET_KEY) headers['secret-key'] = VTPASS_SECRET_KEY;
+  if (VTPASS_PUBLIC_KEY) headers['public-key'] = VTPASS_PUBLIC_KEY;
 
   return headers;
 }
 
 function providerAuthPayload() {
-  return {
-    api_key: VTPASS_API_KEY || undefined,
-    username: VTPASS_USERNAME || undefined,
-    password: VTPASS_PASSWORD || undefined
-  };
+  return {};
 }
 
 function normalizeServiceType(v) {
@@ -512,22 +550,78 @@ function compactObject(obj) {
 function extractArrayFromProviderResponse(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.data?.content)) return data.data.content;
+  if (Array.isArray(data?.content)) return data.content;
   if (Array.isArray(data?.plans)) return data.plans;
   if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.response)) return data.response;
+  if (Array.isArray(data?.variations)) return data.variations;
+  if (Array.isArray(data?.data?.variations)) return data.data.variations;
   return [];
 }
 
 function normalizeProviderPlan(plan) {
-  const rawPrice = plan.price ?? plan.amount ?? plan.cost ?? plan.value ?? 0;
+  const rawPrice = plan.variation_amount ?? plan.price ?? plan.amount ?? plan.cost ?? plan.value ?? 0;
 
   return {
-    id: plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
-    name: plan.name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
+    id: plan.variation_code || plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
+    name: plan.name || plan.variation_name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
     rawPrice: Number(rawPrice),
     meta: plan
   };
+}
+
+function resolveVtpassServiceId(serviceType, source = {}) {
+  const explicit = source.serviceID || source.serviceId || source.service_id;
+  if (explicit) return String(explicit).trim();
+
+  const network = String(source.network || '').trim().toLowerCase();
+
+  const envMap = {
+    airtime: process.env.VTPASS_AIRTIME_SERVICE_ID || '',
+    data: process.env.VTPASS_DATA_SERVICE_ID || '',
+    cable_tv: process.env.VTPASS_CABLE_SERVICE_ID || '',
+    electricity: process.env.VTPASS_ELECTRICITY_SERVICE_ID || '',
+    betting: process.env.VTPASS_BETTING_SERVICE_ID || '',
+    recharge_pin: process.env.VTPASS_RECHARGE_PIN_SERVICE_ID || '',
+    data_pin: process.env.VTPASS_DATA_PIN_SERVICE_ID || '',
+    exam_pin: process.env.VTPASS_EXAM_PIN_SERVICE_ID || ''
+  };
+
+  if (envMap[serviceType]) return envMap[serviceType];
+
+  switch (serviceType) {
+    case 'airtime':
+      return network || '';
+    case 'data':
+      return network ? `${network}-data` : '';
+    case 'cable_tv':
+      return network || '';
+    case 'electricity':
+      return network || '';
+    case 'betting':
+      return network || '';
+    case 'recharge_pin':
+      return network || '';
+    case 'data_pin':
+      return network || '';
+    case 'exam_pin':
+      return network || '';
+    default:
+      return network || serviceType;
+  }
+}
+
+function resolveVtpassVariationCode(serviceType, { selectedPlan, planId, planName, extra = {} } = {}) {
+  return (
+    extra.variation_code ||
+    extra.variationCode ||
+    selectedPlan?.id ||
+    planId ||
+    planName ||
+    ''
+  );
 }
 
 async function callProvider(serviceType, action, payload = {}, params = {}) {
@@ -558,8 +652,10 @@ async function callProvider(serviceType, action, payload = {}, params = {}) {
   };
 
   if (options.method === 'GET') {
+    const serviceID = resolveVtpassServiceId(serviceType, { ...params, ...payload });
     options.params = compactObject({
       ...params,
+      serviceID,
       ...providerAuthPayload()
     });
   } else {
@@ -577,14 +673,32 @@ function providerRequestLooksSuccessful(data) {
   if (!data) return false;
   if (data.success === true) return true;
 
-  const status = String(data.status || data.code || data.responseCode || '').toLowerCase();
-  if (status === 'successful' || status === 'success' || status === 'ok' || status === '00') return true;
+  const nestedStatus = String(
+    data?.content?.transactions?.status ||
+      data?.content?.status ||
+      data?.data?.transactions?.status ||
+      ''
+  ).toLowerCase();
+
+  if (['delivered', 'successful', 'success', 'ok', 'completed'].includes(nestedStatus)) return true;
+
+  const code = String(data.code || data.response_code || data.responseCode || '').trim().toLowerCase();
+  if (code === '000' || code === '00' || code === '0') return true;
+
+  const status = String(data.status || data.response_status || data.responseStatus || '').toLowerCase();
+  if (status === 'successful' || status === 'success' || status === 'ok' || status === 'delivered') return true;
+
+  const desc = String(data.response_description || data.description || data.message || '').toLowerCase();
+  if (desc.includes('success')) return true;
 
   return false;
 }
 
 async function fetchProviderPlans(serviceType, params = {}) {
-  const response = await callProvider(serviceType, 'plans', {}, params);
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const serviceID = resolveVtpassServiceId(normalizedServiceType, params);
+
+  const response = await callProvider(normalizedServiceType, 'plans', {}, { ...params, serviceID });
   return extractArrayFromProviderResponse(response);
 }
 
@@ -601,20 +715,91 @@ function buildProviderPayload({
   selectedPlan,
   extra = {}
 }) {
-  return compactObject({
-    serviceType,
-    amount,
-    finalAmount: amount,
-    phone,
-    meterNumber,
-    smartCardNumber,
-    accountNumber,
-    planId: planId || selectedPlan?.id,
-    planName: planName || selectedPlan?.name,
-    plan: selectedPlan?.meta || undefined,
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const serviceID = resolveVtpassServiceId(normalizedServiceType, {
     network,
     ...extra
   });
+
+  const request_id = extra.request_id || uid('vt_');
+  const variation_code = resolveVtpassVariationCode(normalizedServiceType, {
+    selectedPlan,
+    planId,
+    planName,
+    extra
+  });
+
+  const payload = {
+    request_id,
+    serviceID
+  };
+
+  if (normalizedServiceType === 'airtime') {
+    payload.amount = amount;
+    payload.phone = phone;
+  } else if (normalizedServiceType === 'data') {
+    payload.variation_code = variation_code;
+    payload.billersCode = phone || accountNumber || meterNumber || smartCardNumber || '';
+    payload.phone = phone || accountNumber || meterNumber || smartCardNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else if (normalizedServiceType === 'cable_tv') {
+    payload.variation_code = variation_code;
+    payload.billersCode = smartCardNumber || accountNumber || meterNumber || phone || '';
+    payload.phone = phone || smartCardNumber || accountNumber || meterNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else if (normalizedServiceType === 'electricity') {
+    payload.variation_code = variation_code;
+    payload.billersCode = meterNumber || accountNumber || phone || '';
+    payload.phone = phone || meterNumber || accountNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else {
+    if (variation_code) payload.variation_code = variation_code;
+    if (phone) payload.phone = phone;
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+    if (meterNumber) payload.billersCode = meterNumber;
+    if (smartCardNumber) payload.smartcard_number = smartCardNumber;
+    if (accountNumber) payload.account_number = accountNumber;
+  }
+
+  return compactObject({
+    ...payload,
+    ...extra
+  });
+}
+
+async function requeryVtpassTransaction(requestId) {
+  if (!VTPASS_BASE_URL) {
+    throw new Error('VTPASS_BASE_URL is missing');
+  }
+
+  const requeryPath = process.env.VTPASS_REQUERY_PATH || '';
+  if (!requeryPath) {
+    throw new Error('VTPASS_REQUERY_PATH is missing');
+  }
+
+  const response = await axios.post(
+    `${VTPASS_BASE_URL}${requeryPath}`,
+    { request_id: requestId },
+    {
+      headers: providerHeaders(),
+      timeout: PROVIDER_TIMEOUT_MS
+    }
+  );
+
+  return response.data;
+}
+
+async function applyWalletCreditWithFee(userId, grossAmount) {
+  const fee = applyWalletFundingFee(grossAmount);
+
+  await query(
+    `UPDATE wallets
+     SET balance = balance + $2, updated_at = NOW()
+     WHERE user_id = $1`,
+    [userId, Number(fee.netAmount).toFixed(2)]
+  );
+
+  return fee;
 }
 
 const SERVICE_CATALOG = [
@@ -697,7 +882,6 @@ app.post('/api/auth/register', async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { identifier, email, phone, password } = req.body || {};
@@ -857,7 +1041,6 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 /* WALLET */
 
 app.get('/api/wallet/balance', requireAuth, async (req, res) => {
@@ -955,11 +1138,13 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
       return respondOk(res, { alreadyProcessed: true }, 'Payment already processed');
     }
 
+    const fee = applyWalletFundingFee(amount);
+
     await query(
       `UPDATE wallets
        SET balance = balance + $2, updated_at = NOW()
        WHERE user_id = $1`,
-      [req.user.id, Number(amount).toFixed(2)]
+      [req.user.id, Number(fee.netAmount).toFixed(2)]
     );
 
     await query(
@@ -973,18 +1158,25 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
       userId: req.user.id,
       type: 'funding',
       category: 'wallet',
-      amount: Number(amount).toFixed(2),
+      amount: Number(fee.netAmount).toFixed(2),
       status: 'success',
       reference: txRef,
       description: 'Wallet funded successfully',
-      meta: { transaction_id: transactionId, provider: 'flutterwave' }
+      meta: {
+        transaction_id: transactionId,
+        provider: 'flutterwave',
+        grossAmount: fee.grossAmount,
+        feePercent: fee.feePercent,
+        feeAmount: fee.feeAmount,
+        creditedAmount: fee.netAmount
+      }
     });
 
     await addNotification(
       req.user.id,
       'Wallet funded',
-      `₦${Number(amount).toFixed(2)} has been added to your wallet`,
-      { tx_id: tx.id, txRef },
+      `₦${Number(fee.netAmount).toFixed(2)} has been added to your wallet`,
+      { tx_id: tx.id, txRef, fee },
       true
     );
 
@@ -994,7 +1186,8 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
       wallet: {
         balance: Number(wallet.balance).toFixed(2),
         currency: wallet.currency
-      }
+      },
+      fee
     }, 'Wallet funded successfully');
   } catch (err) {
     console.error(err.response?.data || err.message || err);
@@ -1076,7 +1269,6 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-/*
 /* KYC */
 
 app.post(
@@ -1171,11 +1363,26 @@ app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
       provider: SERVICE_PROVIDER,
       baseUrlSet: Boolean(VTPASS_BASE_URL),
       hasApiKey: Boolean(VTPASS_API_KEY),
+      hasPublicKey: Boolean(VTPASS_PUBLIC_KEY),
+      hasSecretKey: Boolean(VTPASS_SECRET_KEY),
       services: PROVIDER_ENDPOINTS
     }, 'Provider config loaded');
   } catch (err) {
     console.error(err);
     return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.body || {};
+    if (!requestId) return respondError(res, 400, 'requestId is required');
+
+    const result = await requeryVtpassTransaction(requestId);
+    return respondOk(res, { result }, 'Transaction status loaded');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to query transaction status');
   }
 });
 
@@ -1211,9 +1418,17 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
+    if (serviceType === 'airtime' && !getProviderConfig(serviceType).plansPath) {
+      return respondOk(res, {
+        serviceType,
+        plans: []
+      }, 'Airtime does not require plans');
+    }
+
     const providerPlans = await fetchProviderPlans(serviceType, {
       network: req.query.network || undefined,
-      provider: req.query.provider || undefined
+      provider: req.query.provider || undefined,
+      serviceID: req.query.serviceID || req.query.serviceId || undefined
     });
 
     const normalized = extractArrayFromProviderResponse(providerPlans).map(normalizeProviderPlan);
@@ -1253,7 +1468,9 @@ async function processServicePayment(req, res, serviceType, category) {
       planId,
       planName,
       provider = SERVICE_PROVIDER,
-      network
+      network,
+      serviceID,
+      serviceId
     } = req.body || {};
 
     const wallet = await ensureWallet(req.user.id);
@@ -1264,7 +1481,8 @@ async function processServicePayment(req, res, serviceType, category) {
     if (planId || planName) {
       const plans = await fetchProviderPlans(normalizedServiceType, {
         network: network || undefined,
-        provider: provider || undefined
+        provider: provider || undefined,
+        serviceID: serviceID || serviceId || undefined
       });
 
       const normalizedPlans = extractArrayFromProviderResponse(plans).map(normalizeProviderPlan);
@@ -1318,6 +1536,7 @@ async function processServicePayment(req, res, serviceType, category) {
           network,
           selectedPlan,
           extra: {
+            serviceID: serviceID || serviceId,
             finalAmount: pricing.finalPrice,
             pricing
           }
@@ -1327,6 +1546,9 @@ async function processServicePayment(req, res, serviceType, category) {
         providerResponse = response;
 
         providerReference =
+          response?.requestId ||
+          response?.request_id ||
+          response?.content?.requestId ||
           response?.reference ||
           response?.data?.reference ||
           response?.transactionId ||
@@ -1334,7 +1556,7 @@ async function processServicePayment(req, res, serviceType, category) {
           providerReference;
 
         if (!providerRequestLooksSuccessful(response)) {
-          throw new Error(response?.message || response?.error || 'Provider purchase failed');
+          throw new Error(response?.message || response?.error || response?.response_description || 'Provider purchase failed');
         }
       } else if (process.env.BILLS_PROVIDER_URL) {
         const response = await axios.post(
@@ -1369,7 +1591,7 @@ async function processServicePayment(req, res, serviceType, category) {
          WHERE user_id = $1`,
         [req.user.id, Number(amt).toFixed(2)]
       );
-      return respondError(res, 500, err.response?.data?.message || err.message || 'Bill payment failed');
+      return respondError(res, 500, err.response?.data?.message || err.message || err?.response_description || 'Bill payment failed');
     }
 
     const tx = await addTransaction({
@@ -1445,11 +1667,13 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
         );
 
         if (intent.rows[0] && intent.rows[0].status !== 'successful') {
+          const fee = applyWalletFundingFee(amount);
+
           await query(
             `UPDATE wallets
              SET balance = balance + $2, updated_at = NOW()
              WHERE user_id = $1`,
-            [userMetaId, Number(amount).toFixed(2)]
+            [userMetaId, Number(fee.netAmount).toFixed(2)]
           );
 
           await query(
@@ -1463,18 +1687,25 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
             userId: userMetaId,
             type: 'funding',
             category: 'wallet',
-            amount: Number(amount).toFixed(2),
+            amount: Number(fee.netAmount).toFixed(2),
             status: 'success',
             reference: txRef,
             description: 'Wallet funded successfully',
-            meta: { transaction_id: txId, provider: 'flutterwave' }
+            meta: {
+              transaction_id: txId,
+              provider: 'flutterwave',
+              grossAmount: fee.grossAmount,
+              feePercent: fee.feePercent,
+              feeAmount: fee.feeAmount,
+              creditedAmount: fee.netAmount
+            }
           });
 
           await addNotification(
             userMetaId,
             'Wallet funded',
-            `₦${Number(amount).toFixed(2)} has been added to your wallet`,
-            { txRef, transaction_id: txId },
+            `₦${Number(fee.netAmount).toFixed(2)} has been added to your wallet`,
+            { txRef, transaction_id: txId, fee },
             true
           );
         }
@@ -1487,7 +1718,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     return respondError(res, 500, 'Webhook error');
   }
 });
-
 /* ADMIN */
 
 app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
