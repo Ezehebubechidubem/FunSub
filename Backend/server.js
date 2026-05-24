@@ -1,4 +1,3 @@
-// server.js - PhoneStop backend
 require('dotenv').config();
 
 const express = require('express');
@@ -22,6 +21,17 @@ const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || '';
 const FLW_BASE_URL = process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
+
+const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'clubkonnect').toLowerCase();
+const DEFAULT_MARKUP_PERCENT = Number.isFinite(Number(process.env.DEFAULT_MARKUP_PERCENT))
+  ? Number(process.env.DEFAULT_MARKUP_PERCENT)
+  : 2;
+
+const CLUBKONNECT_BASE_URL = String(process.env.CLUBKONNECT_BASE_URL || '').replace(/\/$/, '');
+const CLUBKONNECT_API_KEY = process.env.CLUBKONNECT_API_KEY || '';
+const CLUBKONNECT_USERNAME = process.env.CLUBKONNECT_USERNAME || '';
+const CLUBKONNECT_PASSWORD = process.env.CLUBKONNECT_PASSWORD || '';
+const PROVIDER_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 30000);
 
 // Added for Render: fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL) {
@@ -289,6 +299,15 @@ async function initDb() {
       meta JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS pricing_rules (
+      id TEXT PRIMARY KEY,
+      service_type TEXT NOT NULL UNIQUE,
+      markup_percent NUMERIC(5,2) NOT NULL DEFAULT 2,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 }
 
@@ -353,6 +372,104 @@ async function flutterwaveVerify(transactionId) {
   });
 
   return response.data?.data || null;
+}
+
+async function ensurePricingRule(serviceType) {
+  const found = await query(
+    `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
+    [serviceType]
+  );
+
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, true, NOW(), NOW())
+     RETURNING *`,
+    [uid('prc_'), serviceType, DEFAULT_MARKUP_PERCENT]
+  );
+
+  return created.rows[0];
+}
+
+async function getMarkupPercent(serviceType) {
+  const rule = await ensurePricingRule(serviceType);
+  return Number(rule.markup_percent ?? DEFAULT_MARKUP_PERCENT);
+}
+
+async function applyMarkup(serviceType, baseAmount) {
+  const markupPercent = await getMarkupPercent(serviceType);
+  const base = Number(baseAmount);
+  const fee = (base * markupPercent) / 100;
+  const finalPrice = base + fee;
+
+  return {
+    serviceType,
+    basePrice: Number(base.toFixed(2)),
+    markupPercent: Number(markupPercent.toFixed(2)),
+    markupFee: Number(fee.toFixed(2)),
+    finalPrice: Number(finalPrice.toFixed(2))
+  };
+}
+
+function providerHeaders() {
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+
+  if (CLUBKONNECT_API_KEY) {
+    headers.Authorization = `Bearer ${CLUBKONNECT_API_KEY}`;
+  }
+
+  return headers;
+}
+
+function providerAuthPayload() {
+  return {
+    username: CLUBKONNECT_USERNAME || undefined,
+    password: CLUBKONNECT_PASSWORD || undefined
+  };
+}
+
+const PROVIDER_PLAN_PATHS = {
+  airtime: process.env.CLUBKONNECT_AIRTIME_PLANS_PATH || '',
+  data: process.env.CLUBKONNECT_DATA_PLANS_PATH || '',
+  cable_tv: process.env.CLUBKONNECT_CABLE_PLANS_PATH || '',
+  electricity: process.env.CLUBKONNECT_ELECTRICITY_PLANS_PATH || '',
+  betting: process.env.CLUBKONNECT_BETTING_PLANS_PATH || ''
+};
+
+async function fetchProviderPlans(serviceType, params = {}) {
+  if (!CLUBKONNECT_BASE_URL) {
+    throw new Error('CLUBKONNECT_BASE_URL is missing');
+  }
+
+  const path = PROVIDER_PLAN_PATHS[serviceType];
+  if (!path) {
+    throw new Error(`Missing provider path for ${serviceType}`);
+  }
+
+  const response = await axios.get(`${CLUBKONNECT_BASE_URL}${path}`, {
+    headers: providerHeaders(),
+    params: {
+      ...params,
+      ...providerAuthPayload()
+    },
+    timeout: PROVIDER_TIMEOUT_MS
+  });
+
+  return response.data?.data || response.data?.plans || response.data || [];
+}
+
+function normalizeProviderPlan(plan) {
+  const rawPrice = plan.price ?? plan.amount ?? plan.cost ?? 0;
+
+  return {
+    id: plan.id || plan.plan_id || plan.code || plan.slug || uid('plan_'),
+    name: plan.name || plan.title || plan.network || 'Plan',
+    rawPrice: Number(rawPrice),
+    meta: plan
+  };
 }
 
 app.get('/', (req, res) => {
@@ -654,7 +771,6 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Unable to initiate funding');
   }
 });
-
 app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
   try {
     const transactionId = req.params.transactionId;
@@ -749,7 +865,6 @@ app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 /* NOTIFICATIONS */
 
 app.get('/api/notifications', requireAuth, async (req, res) => {
@@ -906,86 +1021,172 @@ app.get('/api/kyc/status', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-async function processServicePayment(req, res, serviceType, category) {
-  const { amount, phone, meterNumber, smartCardNumber, accountNumber, plan, provider = 'mock' } = req.body || {};
-  const amt = toNumber(amount, 0);
-
-  if (amt <= 0) return respondError(res, 400, 'Amount is required');
-
-  const wallet = await ensureWallet(req.user.id);
-  if (toNumber(wallet.balance, 0) < amt) {
-    return respondError(res, 400, 'Insufficient wallet balance');
-  }
-
-  await query(
-    `UPDATE wallets
-     SET balance = balance - $2, updated_at = NOW()
-     WHERE user_id = $1`,
-    [req.user.id, Number(amt).toFixed(2)]
-  );
-
-  let providerReference = uid('srv_');
-  let providerResponse = { provider: 'mock', success: true };
-
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
-    if (process.env.BILLS_PROVIDER_URL) {
-      const response = await axios.post(
-        `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${serviceType}`,
-        {
-          amount: amt,
-          phone,
-          meterNumber,
-          smartCardNumber,
-          accountNumber,
-          plan
-        },
-        {
-          headers: {
-            Authorization: process.env.BILLS_PROVIDER_KEY ? `Bearer ${process.env.BILLS_PROVIDER_KEY}` : undefined,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
+    const serviceType = String(req.params.serviceType || '').toLowerCase();
+
+    if (!['airtime', 'data', 'cable_tv', 'electricity', 'betting'].includes(serviceType)) {
+      return respondError(res, 400, 'Invalid service type');
+    }
+
+    const providerPlans = await fetchProviderPlans(serviceType, {
+      network: req.query.network || undefined,
+      provider: req.query.provider || undefined
+    });
+
+    const normalized = Array.isArray(providerPlans)
+      ? providerPlans.map(normalizeProviderPlan)
+      : [];
+
+    const withPricing = [];
+    for (const plan of normalized) {
+      const pricing = await applyMarkup(serviceType, plan.rawPrice);
+      withPricing.push({
+        ...plan,
+        pricing: {
+          basePrice: pricing.basePrice,
+          markupPercent: pricing.markupPercent,
+          markupFee: pricing.markupFee,
+          finalPrice: pricing.finalPrice
         }
+      });
+    }
+
+    return respondOk(res, {
+      serviceType,
+      plans: withPricing
+    }, 'Plans loaded');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to load plans');
+  }
+});
+
+async function processServicePayment(req, res, serviceType, category) {
+  try {
+    const {
+      phone,
+      meterNumber,
+      smartCardNumber,
+      accountNumber,
+      planId,
+      planName,
+      provider = 'mock',
+      network
+    } = req.body || {};
+
+    const wallet = await ensureWallet(req.user.id);
+
+    let selectedPlan = null;
+    let baseAmount = 0;
+
+    if (planId) {
+      const plans = await fetchProviderPlans(serviceType, {
+        network: network || undefined,
+        provider: provider || undefined
+      });
+
+      const normalized = Array.isArray(plans) ? plans.map(normalizeProviderPlan) : [];
+      selectedPlan = normalized.find(
+        (p) => String(p.id) === String(planId) || String(p.name).toLowerCase() === String(planName || '').toLowerCase()
       );
 
-      providerResponse = response.data;
-      providerReference = response.data?.reference || response.data?.data?.reference || providerReference;
+      if (!selectedPlan) {
+        return respondError(res, 404, 'Selected plan not found');
+      }
+
+      baseAmount = Number(selectedPlan.rawPrice);
+    } else {
+      baseAmount = toNumber(req.body?.amount, 0);
     }
-  } catch (err) {
+
+    if (baseAmount <= 0) {
+      return respondError(res, 400, 'Amount is required');
+    }
+
+    const pricing = await applyMarkup(serviceType, baseAmount);
+    const amt = pricing.finalPrice;
+
+    if (toNumber(wallet.balance, 0) < amt) {
+      return respondError(res, 400, 'Insufficient wallet balance');
+    }
+
     await query(
       `UPDATE wallets
-       SET balance = balance + $2, updated_at = NOW()
+       SET balance = balance - $2, updated_at = NOW()
        WHERE user_id = $1`,
       [req.user.id, Number(amt).toFixed(2)]
     );
-    return respondError(res, 500, err.response?.data?.message || 'Bill payment failed');
+
+    let providerReference = uid('srv_');
+    let providerResponse = { provider: 'mock', success: true };
+
+    try {
+      if (process.env.BILLS_PROVIDER_URL) {
+        const response = await axios.post(
+          `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${serviceType}`,
+          {
+            amount: pricing.basePrice,
+            finalAmount: pricing.finalPrice,
+            phone,
+            meterNumber,
+            smartCardNumber,
+            accountNumber,
+            plan: selectedPlan?.meta || req.body?.plan,
+            planId: selectedPlan?.id || planId,
+            network
+          },
+          {
+            headers: {
+              Authorization: process.env.BILLS_PROVIDER_KEY ? `Bearer ${process.env.BILLS_PROVIDER_KEY}` : undefined,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
+
+        providerResponse = response.data;
+        providerReference = response.data?.reference || response.data?.data?.reference || providerReference;
+      }
+    } catch (err) {
+      await query(
+        `UPDATE wallets
+         SET balance = balance + $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [req.user.id, Number(amt).toFixed(2)]
+      );
+      return respondError(res, 500, err.response?.data?.message || 'Bill payment failed');
+    }
+
+    const tx = await addTransaction({
+      userId: req.user.id,
+      type: 'debit',
+      category,
+      amount: Number(amt).toFixed(2),
+      status: 'success',
+      reference: providerReference,
+      description: `${category} payment`,
+      meta: { serviceType, provider, selectedPlan, pricing, providerResponse }
+    });
+
+    await addNotification(
+      req.user.id,
+      `${category} successful`,
+      `${category} payment of ₦${Number(amt).toFixed(2)} was successful`,
+      { tx_id: tx.id, serviceType, pricing },
+      true
+    );
+
+    return respondOk(res, {
+      transaction: tx,
+      pricing,
+      providerResponse
+    }, `${category} payment successful`);
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
   }
-
-  const tx = await addTransaction({
-    userId: req.user.id,
-    type: 'debit',
-    category,
-    amount: Number(amt).toFixed(2),
-    status: 'success',
-    reference: providerReference,
-    description: `${category} payment`,
-    meta: { serviceType, provider, providerResponse }
-  });
-
-  await addNotification(
-    req.user.id,
-    `${category} successful`,
-    `${category} payment of ₦${Number(amt).toFixed(2)} was successful`,
-    { tx_id: tx.id, serviceType },
-    true
-  );
-
-  return respondOk(res, {
-    transaction: tx,
-    providerResponse
-  }, `${category} payment successful`);
 }
-
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
 app.post('/api/services/data', requireAuth, async (req, res) => processServicePayment(req, res, 'data', 'Data'));
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
@@ -1112,6 +1313,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const result = await query(
@@ -1249,6 +1451,51 @@ app.post('/api/admin/notifications', requireAdmin, async (req, res) => {
     );
 
     return respondOk(res, {}, 'Notification sent');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.put('/api/admin/pricing/:serviceType', requireAdmin, async (req, res) => {
+  try {
+    const serviceType = String(req.params.serviceType || '').toLowerCase();
+    const { markupPercent } = req.body || {};
+
+    if (!['airtime', 'data', 'cable_tv', 'electricity', 'betting'].includes(serviceType)) {
+      return respondError(res, 400, 'Invalid service type');
+    }
+
+    const markup = toNumber(markupPercent, NaN);
+    if (!Number.isFinite(markup) || markup < 0) {
+      return respondError(res, 400, 'Invalid markup percent');
+    }
+
+    const existing = await query(
+      `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
+      [serviceType]
+    );
+
+    let updated;
+
+    if (existing.rows[0]) {
+      updated = await query(
+        `UPDATE pricing_rules
+         SET markup_percent = $2, updated_at = NOW()
+         WHERE service_type = $1
+         RETURNING *`,
+        [serviceType, Number(markup).toFixed(2)]
+      );
+    } else {
+      updated = await query(
+        `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, true, NOW(), NOW())
+         RETURNING *`,
+        [uid('prc_'), serviceType, Number(markup).toFixed(2)]
+      );
+    }
+
+    return respondOk(res, { pricingRule: updated.rows[0] }, 'Pricing updated');
   } catch (err) {
     console.error(err);
     return respondError(res, 500, 'Server error');
