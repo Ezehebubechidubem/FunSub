@@ -625,61 +625,48 @@ function resolveVtpassVariationCode(serviceType, { selectedPlan, planId, planNam
 }
 
 async function callProvider(serviceType, action, payload = {}, params = {}) {
-  const normalizedServiceType = normalizeServiceType(serviceType);
+  const config = getProviderConfig(serviceType);
 
   if (!VTPASS_BASE_URL) {
     throw new Error('VTPASS_BASE_URL is missing');
   }
 
-  let url = '';
+  const endpointPath =
+    action === 'plans'
+      ? config.plansPath
+      : action === 'buy'
+        ? config.buyPath
+        : '';
 
-  // =========================
-  // LOAD PLANS / VARIATIONS
-  // =========================
-  if (action === 'plans') {
-    const serviceID = params.serviceID;
+  if (!endpointPath) {
+    throw new Error(`Missing ${action} path for ${config.serviceType}`);
+  }
 
-    if (!serviceID) {
-      throw new Error(`Missing serviceID for ${normalizedServiceType}`);
-    }
+  const url = `${VTPASS_BASE_URL}${endpointPath}`;
 
-    url = `${VTPASS_BASE_URL}${VTPASS_VARIATIONS_PATH}?serviceID=${encodeURIComponent(serviceID)}`;
+  const options = {
+    method: action === 'plans' ? 'GET' : 'POST',
+    url,
+    headers: providerHeaders(),
+    timeout: PROVIDER_TIMEOUT_MS
+  };
 
-    const response = await axios.get(url, {
-      headers: providerHeaders(),
-      auth: {
-        username: VTPASS_USERNAME,
-        password: VTPASS_PASSWORD
-      },
-      timeout: PROVIDER_TIMEOUT_MS
+  if (options.method === 'GET') {
+    const serviceID = resolveVtpassServiceId(serviceType, { ...params, ...payload });
+    options.params = compactObject({
+      ...params,
+      serviceID,
+      ...providerAuthPayload()
     });
-
-    return response.data;
+  } else {
+    options.data = compactObject({
+      ...payload,
+      ...providerAuthPayload()
+    });
   }
 
-  // =========================
-  // BUY SERVICES
-  // =========================
-  if (action === 'buy') {
-    url = `${VTPASS_BASE_URL}${VTPASS_PAY_PATH}`;
-
-    const response = await axios.post(
-      url,
-      compactObject(payload),
-      {
-        headers: providerHeaders(),
-        auth: {
-          username: VTPASS_USERNAME,
-          password: VTPASS_PASSWORD
-        },
-        timeout: PROVIDER_TIMEOUT_MS
-      }
-    );
-
-    return response.data;
-  }
-
-  throw new Error(`Unsupported provider action: ${action}`);
+  const response = await axios.request(options);
+  return response.data;
 }
 
 function providerRequestLooksSuccessful(data) {
