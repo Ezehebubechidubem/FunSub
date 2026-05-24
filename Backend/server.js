@@ -22,49 +22,49 @@ const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || '';
 const FLW_BASE_URL = process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
-const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'clubkonnect').toLowerCase();
+const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
 const DEFAULT_MARKUP_PERCENT = Number.isFinite(Number(process.env.DEFAULT_MARKUP_PERCENT))
   ? Number(process.env.DEFAULT_MARKUP_PERCENT)
   : 2;
 
-const CLUBKONNECT_BASE_URL = String(process.env.CLUBKONNECT_BASE_URL || '').replace(/\/$/, '');
-const CLUBKONNECT_API_KEY = process.env.CLUBKONNECT_API_KEY || '';
-const CLUBKONNECT_USERNAME = process.env.CLUBKONNECT_USERNAME || '';
-const CLUBKONNECT_PASSWORD = process.env.CLUBKONNECT_PASSWORD || '';
+const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/, '');
+const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
+const VTPASS_USERNAME = process.env.VTPASS_USERNAME || '';
+const VTPASS_PASSWORD = process.env.VTPASS_PASSWORD || '';
 const PROVIDER_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 30000);
 
 const PROVIDER_ENDPOINTS = {
   airtime: {
-    plansPath: process.env.CLUBKONNECT_AIRTIME_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_AIRTIME_BUY_PATH || ''
+    plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_AIRTIME_BUY_PATH || ''
   },
   data: {
-    plansPath: process.env.CLUBKONNECT_DATA_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_DATA_BUY_PATH || ''
+    plansPath: process.env.VTPASS_DATA_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_DATA_BUY_PATH || ''
   },
   cable_tv: {
-    plansPath: process.env.CLUBKONNECT_CABLE_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_CABLE_BUY_PATH || ''
+    plansPath: process.env.VTPASS_CABLE_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_CABLE_BUY_PATH || ''
   },
   electricity: {
-    plansPath: process.env.CLUBKONNECT_ELECTRICITY_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_ELECTRICITY_BUY_PATH || ''
+    plansPath: process.env.VTPASS_ELECTRICITY_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_ELECTRICITY_BUY_PATH || ''
   },
   betting: {
-    plansPath: process.env.CLUBKONNECT_BETTING_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_BETTING_BUY_PATH || ''
+    plansPath: process.env.VTPASS_BETTING_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_BETTING_BUY_PATH || ''
   },
   recharge_pin: {
-    plansPath: process.env.CLUBKONNECT_RECHARGE_PIN_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_RECHARGE_PIN_BUY_PATH || ''
+    plansPath: process.env.VTPASS_RECHARGE_PIN_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_RECHARGE_PIN_BUY_PATH || ''
   },
   data_pin: {
-    plansPath: process.env.CLUBKONNECT_DATA_PIN_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_DATA_PIN_BUY_PATH || ''
+    plansPath: process.env.VTPASS_DATA_PIN_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_DATA_PIN_BUY_PATH || ''
   },
   exam_pin: {
-    plansPath: process.env.CLUBKONNECT_EXAM_PIN_PLANS_PATH || '',
-    buyPath: process.env.CLUBKONNECT_EXAM_PIN_BUY_PATH || ''
+    plansPath: process.env.VTPASS_EXAM_PIN_PLANS_PATH || '',
+    buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || ''
   }
 };
 
@@ -452,9 +452,9 @@ function providerHeaders() {
     'Content-Type': 'application/json'
   };
 
-  if (CLUBKONNECT_API_KEY) {
-    headers.Authorization = `Bearer ${CLUBKONNECT_API_KEY}`;
-    headers['x-api-key'] = CLUBKONNECT_API_KEY;
+  if (VTPASS_API_KEY) {
+    headers.Authorization = `Bearer ${VTPASS_API_KEY}`;
+    headers['x-api-key'] = VTPASS_API_KEY;
   }
 
   return headers;
@@ -462,9 +462,9 @@ function providerHeaders() {
 
 function providerAuthPayload() {
   return {
-    api_key: CLUBKONNECT_API_KEY || undefined,
-    username: CLUBKONNECT_USERNAME || undefined,
-    password: CLUBKONNECT_PASSWORD || undefined
+    api_key: VTPASS_API_KEY || undefined,
+    username: VTPASS_USERNAME || undefined,
+    password: VTPASS_PASSWORD || undefined
   };
 }
 
@@ -533,8 +533,8 @@ function normalizeProviderPlan(plan) {
 async function callProvider(serviceType, action, payload = {}, params = {}) {
   const config = getProviderConfig(serviceType);
 
-  if (!CLUBKONNECT_BASE_URL) {
-    throw new Error('CLUBKONNECT_BASE_URL is missing');
+  if (!VTPASS_BASE_URL) {
+    throw new Error('VTPASS_BASE_URL is missing');
   }
 
   const endpointPath =
@@ -548,7 +548,7 @@ async function callProvider(serviceType, action, payload = {}, params = {}) {
     throw new Error(`Missing ${action} path for ${config.serviceType}`);
   }
 
-  const url = `${CLUBKONNECT_BASE_URL}${endpointPath}`;
+  const url = `${VTPASS_BASE_URL}${endpointPath}`;
 
   const options = {
     method: action === 'plans' ? 'GET' : 'POST',
@@ -1076,6 +1076,7 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+/*
 /* KYC */
 
 app.post(
@@ -1164,12 +1165,12 @@ app.get('/api/kyc/status', requireAuth, async (req, res) => {
 
 /* PROVIDER DEBUG */
 
-app.get('/api/provider/clubkonnect/debug', requireAuth, async (req, res) => {
+app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
   try {
     return respondOk(res, {
       provider: SERVICE_PROVIDER,
-      baseUrlSet: Boolean(CLUBKONNECT_BASE_URL),
-      hasApiKey: Boolean(CLUBKONNECT_API_KEY),
+      baseUrlSet: Boolean(VTPASS_BASE_URL),
+      hasApiKey: Boolean(VTPASS_API_KEY),
       services: PROVIDER_ENDPOINTS
     }, 'Provider config loaded');
   } catch (err) {
@@ -1304,7 +1305,7 @@ async function processServicePayment(req, res, serviceType, category) {
     let providerResponse = { provider: provider, success: true, mock: true };
 
     try {
-      if (provider === 'clubkonnect' || provider === 'clubconnect' || provider === SERVICE_PROVIDER) {
+      if (provider === 'vtpass' || provider === SERVICE_PROVIDER) {
         const payload = buildProviderPayload({
           serviceType: normalizedServiceType,
           amount: pricing.basePrice,
@@ -1411,6 +1412,7 @@ app.post('/api/services/betting', requireAuth, async (req, res) => processServic
 app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'recharge_pin', 'Recharge Pin'));
 app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
 app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
+
 /* WEBHOOK */
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
