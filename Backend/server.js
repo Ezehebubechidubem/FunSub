@@ -977,7 +977,20 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+app.get('/test/data-plans', async (req, res) => {
+  try {
+    const providerPlans = await fetchProviderPlans('data', {
+      network: req.query.network || 'mtn'
+    });
 
+    return respondOk(res, {
+      plans: providerPlans
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to load plans');
+  }
+});
 app.post('/api/auth/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
   try {
     if (!req.file) return respondError(res, 400, 'Avatar file is required');
