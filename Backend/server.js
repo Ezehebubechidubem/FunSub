@@ -33,6 +33,41 @@ const CLUBKONNECT_USERNAME = process.env.CLUBKONNECT_USERNAME || '';
 const CLUBKONNECT_PASSWORD = process.env.CLUBKONNECT_PASSWORD || '';
 const PROVIDER_TIMEOUT_MS = Number(process.env.PROVIDER_TIMEOUT_MS || 30000);
 
+const PROVIDER_ENDPOINTS = {
+  airtime: {
+    plansPath: process.env.CLUBKONNECT_AIRTIME_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_AIRTIME_BUY_PATH || ''
+  },
+  data: {
+    plansPath: process.env.CLUBKONNECT_DATA_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_DATA_BUY_PATH || ''
+  },
+  cable_tv: {
+    plansPath: process.env.CLUBKONNECT_CABLE_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_CABLE_BUY_PATH || ''
+  },
+  electricity: {
+    plansPath: process.env.CLUBKONNECT_ELECTRICITY_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_ELECTRICITY_BUY_PATH || ''
+  },
+  betting: {
+    plansPath: process.env.CLUBKONNECT_BETTING_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_BETTING_BUY_PATH || ''
+  },
+  recharge_pin: {
+    plansPath: process.env.CLUBKONNECT_RECHARGE_PIN_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_RECHARGE_PIN_BUY_PATH || ''
+  },
+  data_pin: {
+    plansPath: process.env.CLUBKONNECT_DATA_PIN_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_DATA_PIN_BUY_PATH || ''
+  },
+  exam_pin: {
+    plansPath: process.env.CLUBKONNECT_EXAM_PIN_PLANS_PATH || '',
+    buyPath: process.env.CLUBKONNECT_EXAM_PIN_BUY_PATH || ''
+  }
+};
+
 // Added for Render: fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing on Render');
@@ -419,6 +454,7 @@ function providerHeaders() {
 
   if (CLUBKONNECT_API_KEY) {
     headers.Authorization = `Bearer ${CLUBKONNECT_API_KEY}`;
+    headers['x-api-key'] = CLUBKONNECT_API_KEY;
   }
 
   return headers;
@@ -426,51 +462,171 @@ function providerHeaders() {
 
 function providerAuthPayload() {
   return {
+    api_key: CLUBKONNECT_API_KEY || undefined,
     username: CLUBKONNECT_USERNAME || undefined,
     password: CLUBKONNECT_PASSWORD || undefined
   };
 }
 
-const PROVIDER_PLAN_PATHS = {
-  airtime: process.env.CLUBKONNECT_AIRTIME_PLANS_PATH || '',
-  data: process.env.CLUBKONNECT_DATA_PLANS_PATH || '',
-  cable_tv: process.env.CLUBKONNECT_CABLE_PLANS_PATH || '',
-  electricity: process.env.CLUBKONNECT_ELECTRICITY_PLANS_PATH || '',
-  betting: process.env.CLUBKONNECT_BETTING_PLANS_PATH || ''
-};
+function normalizeServiceType(v) {
+  const s = String(v || '').toLowerCase().trim();
 
-async function fetchProviderPlans(serviceType, params = {}) {
-  if (!CLUBKONNECT_BASE_URL) {
-    throw new Error('CLUBKONNECT_BASE_URL is missing');
+  const map = {
+    cable: 'cable_tv',
+    'cable-tv': 'cable_tv',
+    cabletv: 'cable_tv',
+    'cable_tv': 'cable_tv',
+
+    'recharge-pin': 'recharge_pin',
+    rechargepin: 'recharge_pin',
+    recharge_pin: 'recharge_pin',
+
+    'data-pin': 'data_pin',
+    datapin: 'data_pin',
+    data_pin: 'data_pin',
+
+    'exam-pin': 'exam_pin',
+    exampin: 'exam_pin',
+    exam_pin: 'exam_pin'
+  };
+
+  return map[s] || s;
+}
+
+function getProviderConfig(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+  return {
+    serviceType: normalized,
+    ...PROVIDER_ENDPOINTS[normalized]
+  };
+}
+
+function compactObject(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
   }
+  return out;
+}
 
-  const path = PROVIDER_PLAN_PATHS[serviceType];
-  if (!path) {
-    throw new Error(`Missing provider path for ${serviceType}`);
-  }
-
-  const response = await axios.get(`${CLUBKONNECT_BASE_URL}${path}`, {
-    headers: providerHeaders(),
-    params: {
-      ...params,
-      ...providerAuthPayload()
-    },
-    timeout: PROVIDER_TIMEOUT_MS
-  });
-
-  return response.data?.data || response.data?.plans || response.data || [];
+function extractArrayFromProviderResponse(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.plans)) return data.plans;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.response)) return data.response;
+  return [];
 }
 
 function normalizeProviderPlan(plan) {
-  const rawPrice = plan.price ?? plan.amount ?? plan.cost ?? 0;
+  const rawPrice = plan.price ?? plan.amount ?? plan.cost ?? plan.value ?? 0;
 
   return {
-    id: plan.id || plan.plan_id || plan.code || plan.slug || uid('plan_'),
-    name: plan.name || plan.title || plan.network || 'Plan',
+    id: plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
+    name: plan.name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
     rawPrice: Number(rawPrice),
     meta: plan
   };
 }
+
+async function callProvider(serviceType, action, payload = {}, params = {}) {
+  const config = getProviderConfig(serviceType);
+
+  if (!CLUBKONNECT_BASE_URL) {
+    throw new Error('CLUBKONNECT_BASE_URL is missing');
+  }
+
+  const endpointPath =
+    action === 'plans'
+      ? config.plansPath
+      : action === 'buy'
+        ? config.buyPath
+        : '';
+
+  if (!endpointPath) {
+    throw new Error(`Missing ${action} path for ${config.serviceType}`);
+  }
+
+  const url = `${CLUBKONNECT_BASE_URL}${endpointPath}`;
+
+  const options = {
+    method: action === 'plans' ? 'GET' : 'POST',
+    url,
+    headers: providerHeaders(),
+    timeout: PROVIDER_TIMEOUT_MS
+  };
+
+  if (options.method === 'GET') {
+    options.params = compactObject({
+      ...params,
+      ...providerAuthPayload()
+    });
+  } else {
+    options.data = compactObject({
+      ...payload,
+      ...providerAuthPayload()
+    });
+  }
+
+  const response = await axios.request(options);
+  return response.data;
+}
+
+function providerRequestLooksSuccessful(data) {
+  if (!data) return false;
+  if (data.success === true) return true;
+
+  const status = String(data.status || data.code || data.responseCode || '').toLowerCase();
+  if (status === 'successful' || status === 'success' || status === 'ok' || status === '00') return true;
+
+  return false;
+}
+
+async function fetchProviderPlans(serviceType, params = {}) {
+  const response = await callProvider(serviceType, 'plans', {}, params);
+  return extractArrayFromProviderResponse(response);
+}
+
+function buildProviderPayload({
+  serviceType,
+  amount,
+  phone,
+  meterNumber,
+  smartCardNumber,
+  accountNumber,
+  planId,
+  planName,
+  network,
+  selectedPlan,
+  extra = {}
+}) {
+  return compactObject({
+    serviceType,
+    amount,
+    finalAmount: amount,
+    phone,
+    meterNumber,
+    smartCardNumber,
+    accountNumber,
+    planId: planId || selectedPlan?.id,
+    planName: planName || selectedPlan?.name,
+    plan: selectedPlan?.meta || undefined,
+    network,
+    ...extra
+  });
+}
+
+const SERVICE_CATALOG = [
+  { key: 'recharge_pin', label: 'Recharge Pin', route: '/api/services/recharge-pin' },
+  { key: 'data_pin', label: 'Data Pin', route: '/api/services/data-pin' },
+  { key: 'exam_pin', label: 'Exam PIN', route: '/api/services/exam-pin' },
+  { key: 'electricity', label: 'Electricity', route: '/api/services/electricity' },
+  { key: 'cable_tv', label: 'Cable TV', route: '/api/services/cable' },
+  { key: 'airtime', label: 'Airtime', route: '/api/services/airtime' },
+  { key: 'data', label: 'Data', route: '/api/services/data' },
+  { key: 'betting', label: 'Betting', route: '/api/services/betting' }
+];
 
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'PhoneStop backend is running' });
@@ -771,6 +927,7 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Unable to initiate funding');
   }
 });
+
 app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
   try {
     const transactionId = req.params.transactionId;
@@ -865,6 +1022,7 @@ app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+
 /* NOTIFICATIONS */
 
 app.get('/api/notifications', requireAuth, async (req, res) => {
@@ -918,21 +1076,6 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
-app.patch('/api/notifications/read-all', requireAuth, async (req, res) => {
-  try {
-    await query(
-      `UPDATE notifications SET is_read = true WHERE user_id = $1`,
-      [req.user.id]
-    );
-
-    return respondOk(res, {}, 'All notifications marked read');
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Server error');
-  }
-});
-
 /* KYC */
 
 app.post(
@@ -1019,13 +1162,51 @@ app.get('/api/kyc/status', requireAuth, async (req, res) => {
   }
 });
 
+/* PROVIDER DEBUG */
+
+app.get('/api/provider/clubkonnect/debug', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      provider: SERVICE_PROVIDER,
+      baseUrlSet: Boolean(CLUBKONNECT_BASE_URL),
+      hasApiKey: Boolean(CLUBKONNECT_API_KEY),
+      services: PROVIDER_ENDPOINTS
+    }, 'Provider config loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* SERVICES LIST */
+
+app.get('/api/services', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      services: SERVICE_CATALOG
+    }, 'Services loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
 /* BILLS / SERVICES */
 
 app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
-    const serviceType = String(req.params.serviceType || '').toLowerCase();
+    const serviceType = normalizeServiceType(req.params.serviceType);
 
-    if (!['airtime', 'data', 'cable_tv', 'electricity', 'betting'].includes(serviceType)) {
+    if (![
+      'airtime',
+      'data',
+      'cable_tv',
+      'electricity',
+      'betting',
+      'recharge_pin',
+      'data_pin',
+      'exam_pin'
+    ].includes(serviceType)) {
       return respondError(res, 400, 'Invalid service type');
     }
 
@@ -1034,9 +1215,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       provider: req.query.provider || undefined
     });
 
-    const normalized = Array.isArray(providerPlans)
-      ? providerPlans.map(normalizeProviderPlan)
-      : [];
+    const normalized = extractArrayFromProviderResponse(providerPlans).map(normalizeProviderPlan);
 
     const withPricing = [];
     for (const plan of normalized) {
@@ -1064,6 +1243,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
 async function processServicePayment(req, res, serviceType, category) {
   try {
+    const normalizedServiceType = normalizeServiceType(serviceType);
     const {
       phone,
       meterNumber,
@@ -1071,7 +1251,7 @@ async function processServicePayment(req, res, serviceType, category) {
       accountNumber,
       planId,
       planName,
-      provider = 'mock',
+      provider = SERVICE_PROVIDER,
       network
     } = req.body || {};
 
@@ -1080,15 +1260,17 @@ async function processServicePayment(req, res, serviceType, category) {
     let selectedPlan = null;
     let baseAmount = 0;
 
-    if (planId) {
-      const plans = await fetchProviderPlans(serviceType, {
+    if (planId || planName) {
+      const plans = await fetchProviderPlans(normalizedServiceType, {
         network: network || undefined,
         provider: provider || undefined
       });
 
-      const normalized = Array.isArray(plans) ? plans.map(normalizeProviderPlan) : [];
-      selectedPlan = normalized.find(
-        (p) => String(p.id) === String(planId) || String(p.name).toLowerCase() === String(planName || '').toLowerCase()
+      const normalizedPlans = extractArrayFromProviderResponse(plans).map(normalizeProviderPlan);
+      selectedPlan = normalizedPlans.find(
+        (p) =>
+          String(p.id) === String(planId) ||
+          String(p.name).toLowerCase() === String(planName || '').toLowerCase()
       );
 
       if (!selectedPlan) {
@@ -1104,7 +1286,7 @@ async function processServicePayment(req, res, serviceType, category) {
       return respondError(res, 400, 'Amount is required');
     }
 
-    const pricing = await applyMarkup(serviceType, baseAmount);
+    const pricing = await applyMarkup(normalizedServiceType, baseAmount);
     const amt = pricing.finalPrice;
 
     if (toNumber(wallet.balance, 0) < amt) {
@@ -1119,12 +1301,43 @@ async function processServicePayment(req, res, serviceType, category) {
     );
 
     let providerReference = uid('srv_');
-    let providerResponse = { provider: 'mock', success: true };
+    let providerResponse = { provider: provider, success: true, mock: true };
 
     try {
-      if (process.env.BILLS_PROVIDER_URL) {
+      if (provider === 'clubkonnect' || provider === 'clubconnect' || provider === SERVICE_PROVIDER) {
+        const payload = buildProviderPayload({
+          serviceType: normalizedServiceType,
+          amount: pricing.basePrice,
+          phone,
+          meterNumber,
+          smartCardNumber,
+          accountNumber,
+          planId,
+          planName,
+          network,
+          selectedPlan,
+          extra: {
+            finalAmount: pricing.finalPrice,
+            pricing
+          }
+        });
+
+        const response = await callProvider(normalizedServiceType, 'buy', payload, {});
+        providerResponse = response;
+
+        providerReference =
+          response?.reference ||
+          response?.data?.reference ||
+          response?.transactionId ||
+          response?.data?.transactionId ||
+          providerReference;
+
+        if (!providerRequestLooksSuccessful(response)) {
+          throw new Error(response?.message || response?.error || 'Provider purchase failed');
+        }
+      } else if (process.env.BILLS_PROVIDER_URL) {
         const response = await axios.post(
-          `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${serviceType}`,
+          `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${normalizedServiceType}`,
           {
             amount: pricing.basePrice,
             finalAmount: pricing.finalPrice,
@@ -1155,7 +1368,7 @@ async function processServicePayment(req, res, serviceType, category) {
          WHERE user_id = $1`,
         [req.user.id, Number(amt).toFixed(2)]
       );
-      return respondError(res, 500, err.response?.data?.message || 'Bill payment failed');
+      return respondError(res, 500, err.response?.data?.message || err.message || 'Bill payment failed');
     }
 
     const tx = await addTransaction({
@@ -1166,14 +1379,14 @@ async function processServicePayment(req, res, serviceType, category) {
       status: 'success',
       reference: providerReference,
       description: `${category} payment`,
-      meta: { serviceType, provider, selectedPlan, pricing, providerResponse }
+      meta: { serviceType: normalizedServiceType, provider, selectedPlan, pricing, providerResponse }
     });
 
     await addNotification(
       req.user.id,
       `${category} successful`,
       `${category} payment of ₦${Number(amt).toFixed(2)} was successful`,
-      { tx_id: tx.id, serviceType, pricing },
+      { tx_id: tx.id, serviceType: normalizedServiceType, pricing },
       true
     );
 
@@ -1187,12 +1400,17 @@ async function processServicePayment(req, res, serviceType, category) {
     return respondError(res, 500, 'Server error');
   }
 }
+
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
 app.post('/api/services/data', requireAuth, async (req, res) => processServicePayment(req, res, 'data', 'Data'));
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
 app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
 app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
 
+// New service routes from your screenshot
+app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'recharge_pin', 'Recharge Pin'));
+app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
+app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
 /* WEBHOOK */
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
@@ -1459,10 +1677,19 @@ app.post('/api/admin/notifications', requireAdmin, async (req, res) => {
 
 app.put('/api/admin/pricing/:serviceType', requireAdmin, async (req, res) => {
   try {
-    const serviceType = String(req.params.serviceType || '').toLowerCase();
+    const serviceType = normalizeServiceType(req.params.serviceType);
     const { markupPercent } = req.body || {};
 
-    if (!['airtime', 'data', 'cable_tv', 'electricity', 'betting'].includes(serviceType)) {
+    if (![
+      'airtime',
+      'data',
+      'cable_tv',
+      'electricity',
+      'betting',
+      'recharge_pin',
+      'data_pin',
+      'exam_pin'
+    ].includes(serviceType)) {
       return respondError(res, 400, 'Invalid service type');
     }
 
