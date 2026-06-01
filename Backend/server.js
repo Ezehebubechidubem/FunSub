@@ -838,6 +838,13 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Latest deployment running',
+    time: new Date().toISOString()
+  });
+});
 
 app.post('/api/auth/register', async (req, res) => {
   try {
