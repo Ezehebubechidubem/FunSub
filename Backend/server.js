@@ -1125,29 +1125,6 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
-
-app.get('/test/data-plans', async (req, res) => {
-  try {
-    const providerPlans = await fetchProviderPlans('data', {
-      network: req.query.network || 'mtn'
-    });
-
-    return respondOk(res, {
-      plans: providerPlans
-    });
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Unable to load plans');
-  }
-});
-app.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Latest deployment running',
-    time: new Date().toISOString()
-  });
-});
-
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { fullName, email, phone, password, confirmPassword, state } = req.body || {};
@@ -1842,11 +1819,11 @@ app.get('/api/services/:serviceType/plans', async (req, res) => {
     return respondError(res, 500, 'Unable to load plans');
   }
 });
-app.post('/api/services/airtime', requireAuth, async (req, res) =>
+app.post('/api/services/airtime', async (req, res) =>
   processServicePayment(req, res, 'airtime', 'Airtime')
 );
 
-app.post('/api/services/data', requireAuth, async (req, res) =>
+app.post('/api/services/data', async (req, res) =>
   processServicePayment(req, res, 'data', 'Data')
 );
 
