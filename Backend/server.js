@@ -795,7 +795,29 @@ function buildProviderPayload({
     ...extra
   });
 }
+async function loadDataPlans(network) {
+  const serviceID = getDataServiceID(network);
 
+  if (!serviceID) {
+    const error = new Error('Invalid network');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const response = await axios.get(
+    `${VTPASS_BASE_URL}/api/service-variations?serviceID=${serviceID}`,
+    {
+      headers: {
+        'api-key': VTPASS_API_KEY,
+        'secret-key': VTPASS_SECRET_KEY,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    }
+  );
+
+  return response.data;
+}
 async function requeryVtpassTransaction(requestId) {
   if (!VTPASS_BASE_URL) {
     throw new Error('VTPASS_BASE_URL is missing');
