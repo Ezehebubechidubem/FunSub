@@ -43,7 +43,7 @@ data_pin: envNumber(process.env.DATA_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
 exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
 };
 
-const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(//$/, '');
+const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/, '');
 const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
 const VTPASS_REQUERY_PATH = String(process.env.VTPASS_REQUERY_PATH || '');
 const VTPASS_USERNAME = process.env.VTPASS_USERNAME || '';
