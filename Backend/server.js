@@ -160,23 +160,14 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     const body = req.body || {};
 
     // Use logged-in user if available, otherwise allow temporary body.userId
-    // and a test fallback while you are still testing the backend.
-    const userId = req.user?.id || body.userId || (process.env.TEST_MODE === 'true' ? 1 : null);
+    const userId = req.user?.id || body.userId || null;
 
     if (!userId) {
       return respondError(res, 400, 'userId is required');
     }
 
-    const finalUserId = Number(userId);
+    await ensureWallet(userId);
 
-    if (!Number.isInteger(finalUserId) || finalUserId <= 0) {
-      return respondError(res, 400, 'Invalid userId');
-    }
-
-    // Make sure wallet exists
-    await ensureWallet(finalUserId);
-
-    // Build purchase context
     let pricing;
     let selectedPlan = null;
     let providerPayload = null;
@@ -298,7 +289,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
       const walletResult = await client.query(
         'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [finalUserId]
+        [userId]
       );
 
       const wallet = walletResult.rows[0];
@@ -317,7 +308,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         `UPDATE wallets
          SET balance = balance - $2, updated_at = NOW()
          WHERE user_id = $1`,
-        [finalUserId, purchaseAmount]
+        [userId, purchaseAmount]
       );
 
       const inserted = await client.query(
@@ -328,7 +319,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
          RETURNING *`,
         [
           uid('tx_'),
-          finalUserId,
+          userId,
           'purchase',
           normalizedServiceType,
           purchaseAmount,
@@ -371,14 +362,19 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       }
     );
 
+    console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
+
     const success = providerRequestLooksSuccessful(providerResponse);
+
+    console.log('SUCCESS RESULT:', success);
+    console.log('PAYLOAD SENT:', JSON.stringify(providerPayload, null, 2));
 
     if (!success) {
       await query(
         `UPDATE wallets
          SET balance = balance + $2, updated_at = NOW()
          WHERE user_id = $1`,
-        [finalUserId, purchaseAmount]
+        [userId, purchaseAmount]
       );
 
       await query(
@@ -423,7 +419,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
 
     await addNotification(
-      finalUserId,
+      userId,
       `${serviceName} purchased`,
       `${description} was successful`,
       {
@@ -444,32 +440,17 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       providerResponse
     }, `${serviceName} purchased successfully`);
   } catch (err) {
-    console.error(err.response?.data || err.message || err);
+    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('ERROR STACK:', err?.stack);
+    console.error('ERROR RESPONSE DATA:', err?.response?.data);
 
     return respondError(
       res,
       500,
-      `Unable to process ${serviceName.toLowerCase()} purchase`
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
     );
   }
-}
-function getDefaultMarkupPercent(serviceType) {
-  const key = normalizeServiceType(serviceType);
-  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
-}
-
-function applyWalletFundingFee(grossAmount) {
-  const gross = toNumber(grossAmount, 0);
-  const feePercent = FLW_WALLET_FEE_PERCENT;
-  const feeAmount = (gross * feePercent) / 100;
-  const netAmount = gross - feeAmount;
-
-  return {
-    grossAmount: Number(gross.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount: Number(feeAmount.toFixed(2)),
-    netAmount: Number(netAmount.toFixed(2))
-  };
 }
 
 async function addTransaction({
