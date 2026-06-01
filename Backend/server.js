@@ -838,6 +838,20 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/test/data-plans', async (req, res) => {
+  try {
+    const providerPlans = await fetchProviderPlans('data', {
+      network: req.query.network || 'mtn'
+    });
+
+    return respondOk(res, {
+      plans: providerPlans
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to load plans');
+  }
+});
 app.get('/test', (req, res) => {
   res.json({
     success: true,
