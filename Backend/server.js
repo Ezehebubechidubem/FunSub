@@ -153,25 +153,6 @@ function respondError(res, status, message) {
 async function query(text, params = []) {
   return pool.query(text, params);
 }
-
-function getDefaultMarkupPercent(serviceType) {
-  const key = normalizeServiceType(serviceType);
-  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
-}
-
-function applyWalletFundingFee(grossAmount) {
-  const gross = toNumber(grossAmount, 0);
-  const feePercent = FLW_WALLET_FEE_PERCENT;
-  const feeAmount = (gross * feePercent) / 100;
-  const netAmount = gross - feeAmount;
-
-  return {
-    grossAmount: Number(gross.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount: Number(feeAmount.toFixed(2)),
-    netAmount: Number(netAmount.toFixed(2))
-  };
-}
 async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
@@ -179,14 +160,21 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     const body = req.body || {};
 
     // Use logged-in user if available, otherwise allow temporary body.userId
-    const userId = req.user?.id || body.userId || null;
+    // and a test fallback while you are still testing the backend.
+    const userId = req.user?.id || body.userId || (process.env.TEST_MODE === 'true' ? 1 : null);
 
     if (!userId) {
       return respondError(res, 400, 'userId is required');
     }
 
+    const finalUserId = Number(userId);
+
+    if (!Number.isInteger(finalUserId) || finalUserId <= 0) {
+      return respondError(res, 400, 'Invalid userId');
+    }
+
     // Make sure wallet exists
-    await ensureWallet(userId);
+    await ensureWallet(finalUserId);
 
     // Build purchase context
     let pricing;
@@ -310,7 +298,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
       const walletResult = await client.query(
         'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [userId]
+        [finalUserId]
       );
 
       const wallet = walletResult.rows[0];
@@ -329,7 +317,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         `UPDATE wallets
          SET balance = balance - $2, updated_at = NOW()
          WHERE user_id = $1`,
-        [userId, purchaseAmount]
+        [finalUserId, purchaseAmount]
       );
 
       const inserted = await client.query(
@@ -340,7 +328,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
          RETURNING *`,
         [
           uid('tx_'),
-          userId,
+          finalUserId,
           'purchase',
           normalizedServiceType,
           purchaseAmount,
@@ -390,7 +378,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         `UPDATE wallets
          SET balance = balance + $2, updated_at = NOW()
          WHERE user_id = $1`,
-        [userId, purchaseAmount]
+        [finalUserId, purchaseAmount]
       );
 
       await query(
@@ -435,7 +423,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
 
     await addNotification(
-      userId,
+      finalUserId,
       `${serviceName} purchased`,
       `${description} was successful`,
       {
@@ -465,26 +453,23 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
   }
 }
-async function ensureWallet(userId) {
-  const found = await query('SELECT * FROM wallets WHERE user_id = $1 LIMIT 1', [userId]);
-  if (found.rows[0]) return found.rows[0];
-
-  const created = await query(
-    `INSERT INTO wallets (id, user_id, balance, currency)
-     VALUES ($1, $2, 0, 'NGN')
-     RETURNING *`,
-    [uid('wal_'), userId]
-  );
-  return created.rows[0];
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
 }
 
-async function addNotification(userId, title, message, meta = {}, isSystem = true) {
-  await query(
-    `INSERT INTO notifications
-     (id, user_id, title, message, meta, is_read, is_system, created_at)
-     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
-    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
-  );
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
+
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
 }
 
 async function addTransaction({
