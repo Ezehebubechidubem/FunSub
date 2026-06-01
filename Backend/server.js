@@ -47,6 +47,14 @@ const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/,
 const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
 const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
 const VTPASS_REQUERY_PATH = String(process.env.VTPASS_REQUERY_PATH || '');
+const VTPASS_USERNAME = process.env.VTPASS_USERNAME || '';
+const VTPASS_PASSWORD = process.env.VTPASS_PASSWORD || '';
+
+const VTPASS_VARIATIONS_PATH =
+  process.env.VTPASS_VARIATIONS_PATH || '/service-variations';
+
+const VTPASS_PAY_PATH =
+  process.env.VTPASS_PAY_PATH || '/pay';
 
 const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
 const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
