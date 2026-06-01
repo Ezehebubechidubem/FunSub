@@ -92,22 +92,7 @@ const PROVIDER_ENDPOINTS = {
     buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || ''
   }
 };
-// for data
-const DATA_SERVICE_MAP = {
-  mtn: 'mtn-data',
-  glo: 'glo-data',
-  airtel: 'airtel-data',
-  '9mobile': '9mobile-data'
-};
 
-function normalizeNetwork(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function getDataServiceID(network) {
-  const key = normalizeNetwork(network || 'mtn');
-  return DATA_SERVICE_MAP[key] || null;
-}
 // Added for Render: fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing on Render');
@@ -795,29 +780,7 @@ function buildProviderPayload({
     ...extra
   });
 }
-async function loadDataPlans(network) {
-  const serviceID = getDataServiceID(network);
 
-  if (!serviceID) {
-    const error = new Error('Invalid network');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const response = await axios.get(
-    `${VTPASS_BASE_URL}/api/service-variations?serviceID=${serviceID}`,
-    {
-      headers: {
-        'api-key': VTPASS_API_KEY,
-        'secret-key': VTPASS_SECRET_KEY,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
-    }
-  );
-
-  return response.data;
-}
 async function requeryVtpassTransaction(requestId) {
   if (!VTPASS_BASE_URL) {
     throw new Error('VTPASS_BASE_URL is missing');
@@ -1357,19 +1320,7 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-app.get('/api/public/services/data/plans', async (req, res) => {
-  try {
-    const plans = await loadDataPlans(req.query.network);
 
-    return respondOk(res, {
-      network: req.query.network || 'mtn',
-      plans
-    }, 'Data plans loaded');
-  } catch (err) {
-    console.error(err);
-    return respondError(res, err.statusCode || 500, err.message);
-  }
-});
 /* KYC */
 
 app.post(
