@@ -838,18 +838,25 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
-app.get('/test/data-plans', async (req, res) => {
+app.get('/test/data-plans/:network', async (req, res) => {
   try {
-    const providerPlans = await fetchProviderPlans('data', {
-      network: req.query.network || 'mtn'
-    });
+    const { network } = req.params;
 
-    return respondOk(res, {
-      plans: providerPlans
-    });
+    const response = await axios.get(
+      `${VTPASS_BASE_URL}/service-variations?serviceID=${network}`,
+      {
+        auth: {
+          username: VTPASS_USERNAME,
+          password: VTPASS_PASSWORD
+        }
+      }
+    );
+
+    res.json(response.data);
   } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Unable to load plans');
+    res.status(500).json({
+      error: err.response?.data || err.message
+    });
   }
 });
 app.get('/test', (req, res) => {
