@@ -1439,7 +1439,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans',async (req, res) => {
+app.get('/api/services/:serviceType/plans', async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1456,7 +1456,6 @@ app.get('/api/services/:serviceType/plans',async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
-    // Special handling for DATA plans using your direct VTpass mapping
     if (serviceType === 'data') {
       const network = String(req.query.network || 'mtn').toLowerCase();
 
@@ -1474,13 +1473,47 @@ app.get('/api/services/:serviceType/plans',async (req, res) => {
       }
 
       const response = await axios.get(
-        `https://vtpass.com/api/service-variations?serviceID=${serviceID}`
+        `https://vtpass.com/api/service-variations?serviceID=${serviceID}`,
+        {
+          headers: {
+            'api-key': VTPASS_API_KEY,
+            'secret-key': VTPASS_SECRET_KEY,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
       );
+
+      const variations =
+        response.data?.content?.variations ||
+        response.data?.content?.varations ||
+        response.data?.variations ||
+        response.data?.varations ||
+        [];
+
+      const withPricing = [];
+      for (const item of variations) {
+        const rawPrice = Number(item.variation_amount || item.amount || 0);
+        const pricing = await applyMarkup('data', rawPrice);
+
+        withPricing.push({
+          id: item.variation_code || item.code || item.id || null,
+          name: item.name || item.variation_name || 'Data Plan',
+          rawPrice,
+          meta: item,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
 
       return respondOk(res, {
         serviceType,
         network,
-        plans: response.data
+        plans: withPricing
       }, 'Plans loaded');
     }
 
