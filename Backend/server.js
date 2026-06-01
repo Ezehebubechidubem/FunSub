@@ -840,7 +840,7 @@ app.get('/health', async (req, res) => {
 /* AUTH */
 app.get('/test/data-plans', async (req, res) => {
    try {
-      const response = await axios.get(...);
+      const response = await axios.get('https://vtpass.com/api/service-variations?serviceID=mtn-data');
       res.json(response.data);
    } catch (err) {
       res.json(err.response?.data || err.message);
