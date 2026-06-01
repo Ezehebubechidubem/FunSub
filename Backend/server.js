@@ -838,7 +838,7 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
-app.get('/test/data-plans/:network', async (req, res) => {
+app.get('/test/data-plans', async (req, res) => {
   try {
     const { network } = req.params;
 
