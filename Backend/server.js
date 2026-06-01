@@ -1841,19 +1841,37 @@ app.get('/api/services/:serviceType/plans', async (req, res) => {
     return respondError(res, 500, 'Unable to load plans');
   }
 });
-app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
-app.post('/api/services/data', async (req, res) =>
+app.post('/api/services/airtime', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'airtime', 'Airtime')
+);
+
+app.post('/api/services/data', requireAuth, async (req, res) =>
   processServicePayment(req, res, 'data', 'Data')
 );
-app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
-app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
-app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
 
-// New service routes from your screenshot
-app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'recharge_pin', 'Recharge Pin'));
-app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
-app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
+app.post('/api/services/electricity', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'electricity', 'Electricity')
+);
 
+app.post('/api/services/cable', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'cable_tv', 'Cable TV')
+);
+
+app.post('/api/services/betting', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'betting', 'Betting')
+);
+
+app.post('/api/services/recharge-pin', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'recharge_pin', 'Recharge Pin')
+);
+
+app.post('/api/services/data-pin', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'data_pin', 'Data Pin')
+);
+
+app.post('/api/services/exam-pin', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'exam_pin', 'Exam PIN')
+);
 /* WEBHOOK */
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
