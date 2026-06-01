@@ -832,3 +832,805 @@ app.get('/health', async (req, res) => {
     return respondError(res, 500, 'Database error');
   }
 });
+/* AUTH */
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { fullName, email, phone, password, confirmPassword, state } = req.body || {};
+
+    if (!fullName || !email || !phone || !password || !confirmPassword || !state) {
+      return respondError(res, 400, 'All fields are required');
+    }
+
+    if (String(password).length < 6) {
+      return respondError(res, 400, 'Password must be at least 6 characters');
+    }
+
+    if (String(password) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const exists = await query(
+      'SELECT id FROM users WHERE email = $1 OR phone = $2 LIMIT 1',
+      [normalizedEmail, normalizedPhone]
+    );
+
+    if (exists.rows[0]) {
+      return respondError(res, 409, 'User already exists');
+    }
+
+    const password_hash = await bcrypt.hash(String(password), 10);
+    const userId = uid('usr_');
+
+    const inserted = await query(
+      `INSERT INTO users
+       (id, role, full_name, email, phone, password_hash, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at)
+       VALUES
+       ($1, 'user', $2, $3, $4, $5, $6, NULL, 'unverified', false, false, NOW(), NOW())
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at`,
+      [userId, fullName.trim(), normalizedEmail, normalizedPhone, password_hash, state.trim()]
+    );
+
+    await ensureWallet(userId);
+    await addNotification(userId, 'Welcome to PhoneStop', 'Registration successful', { type: 'auth' }, true);
+
+    const token = signToken({ id: userId, role: 'user' });
+
+    return respondOk(res, {
+      token,
+      user: inserted.rows[0]
+    }, 'Registration successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { identifier, email, phone, password } = req.body || {};
+    const raw = identifier || email || phone || '';
+    const cleanEmail = normalizeEmail(raw);
+    const cleanPhone = normalizePhone(raw);
+
+    if (!raw || !password) {
+      return respondError(res, 400, 'Identifier and password are required');
+    }
+
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, password_hash, state, avatar_url, kyc_status, profile_complete, online, created_at
+       FROM users
+       WHERE email = $1 OR phone = $2
+       LIMIT 1`,
+      [cleanEmail, cleanPhone]
+    );
+
+    const user = result.rows[0];
+    if (!user) return respondError(res, 401, 'Invalid credentials');
+
+    const ok = await bcrypt.compare(String(password), user.password_hash);
+    if (!ok) return respondError(res, 401, 'Invalid credentials');
+
+    await query(
+      `UPDATE users
+       SET online = true, last_login_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [user.id]
+    );
+
+    const wallet = await ensureWallet(user.id);
+    const token = signToken({ id: user.id, role: user.role });
+
+    await addNotification(user.id, 'Login successful', 'You are now logged in', { type: 'auth' }, true);
+
+    return respondOk(res, {
+      token,
+      user: { ...user, password_hash: undefined },
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    }, 'Login successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const result = await query(
+    `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at, last_login_at
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  const wallet = await ensureWallet(userId);
+
+  return respondOk(res, {
+    user: result.rows[0],
+    wallet: {
+      id: wallet.id,
+      balance: Number(wallet.balance).toFixed(2),
+      currency: wallet.currency
+    }
+  });
+});
+
+app.patch('/api/auth/profile', requireAuth, async (req, res) => {
+  try {
+    const { fullName, state } = req.body || {};
+
+    const result = await query(
+      `UPDATE users
+       SET full_name = COALESCE($2, full_name),
+           state = COALESCE($3, state),
+           profile_complete = true,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete`,
+      [req.user.id, fullName ? String(fullName).trim() : null, state ? String(state).trim() : null]
+    );
+
+    return respondOk(res, { user: result.rows[0] }, 'Profile updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return respondError(res, 400, 'Avatar file is required');
+
+    const avatar_url = `/uploads/avatars/${req.file.filename}`;
+
+    const result = await query(
+      `UPDATE users
+       SET avatar_url = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, full_name, email, phone, avatar_url`,
+      [req.user.id, avatar_url]
+    );
+
+    await addNotification(req.user.id, 'Profile image updated', 'Your profile picture was updated', { avatar_url }, true);
+
+    return respondOk(res, { user: result.rows[0], avatar_url }, 'Avatar updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return respondError(res, 400, 'All password fields are required');
+    }
+
+    if (String(newPassword).length < 6) {
+      return respondError(res, 400, 'New password must be at least 6 characters');
+    }
+
+    if (String(newPassword) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const result = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return respondError(res, 404, 'User not found');
+
+    const ok = await bcrypt.compare(String(currentPassword), user.password_hash);
+    if (!ok) return respondError(res, 400, 'Current password is incorrect');
+
+    const password_hash = await bcrypt.hash(String(newPassword), 10);
+
+    await query(
+      `UPDATE users
+       SET password_hash = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, password_hash]
+    );
+
+    await addNotification(req.user.id, 'Password changed', 'Your password was updated successfully', { type: 'security' }, true);
+
+    return respondOk(res, {}, 'Password updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* WALLET */
+
+app.get('/api/wallet/balance', requireAuth, async (req, res) => {
+  try {
+    const wallet = await ensureWallet(req.user.id);
+    return respondOk(res, {
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
+  try {
+    const { amount } = req.body || {};
+    const amt = toNumber(amount, 0);
+
+    if (amt < 100) return respondError(res, 400, 'Minimum funding amount is 100');
+
+    const userResult = await query(
+      `SELECT id, full_name, email, phone
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) return respondError(res, 404, 'User not found');
+
+    const init = await flutterwaveInitialize({
+      amount: amt,
+      user,
+      description: 'Wallet funding'
+    });
+
+    await query(
+      `INSERT INTO payment_intents
+       (id, user_id, tx_ref, amount, currency, provider, status, meta, created_at)
+       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, NOW())`,
+      [uid('pit_'), user.id, init.tx_ref, Number(amt).toFixed(2), JSON.stringify({ purpose: 'wallet_funding' })]
+    );
+
+    await addTransaction({
+      userId: user.id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(amt).toFixed(2),
+      status: 'pending',
+      reference: init.tx_ref,
+      description: 'Wallet funding initiated',
+      meta: { provider: 'flutterwave' }
+    });
+
+    return respondOk(res, {
+      tx_ref: init.tx_ref,
+      payment_link: init.payment_link
+    }, 'Funding initiated');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to initiate funding');
+  }
+});
+
+app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
+  try {
+    const transactionId = req.params.transactionId;
+    const data = await flutterwaveVerify(transactionId);
+
+    if (!data) return respondError(res, 400, 'Unable to verify payment');
+
+    const status = String(data.status || '').toLowerCase();
+    const amount = toNumber(data.amount, 0);
+    const txRef = data.tx_ref;
+
+    if (status !== 'successful') {
+      await query(`UPDATE payment_intents SET status = 'failed' WHERE tx_ref = $1`, [txRef]);
+      return respondError(res, 400, 'Payment not successful');
+    }
+
+    const intent = await query(
+      `SELECT * FROM payment_intents WHERE tx_ref = $1 AND user_id = $2 LIMIT 1`,
+      [txRef, req.user.id]
+    );
+
+    if (!intent.rows[0]) return respondError(res, 404, 'Payment intent not found');
+
+    if (intent.rows[0].status === 'successful') {
+      return respondOk(res, { alreadyProcessed: true }, 'Payment already processed');
+    }
+
+    const fee = applyWalletFundingFee(amount);
+
+    await query(
+      `UPDATE wallets
+       SET balance = balance + $2, updated_at = NOW()
+       WHERE user_id = $1`,
+      [req.user.id, Number(fee.netAmount).toFixed(2)]
+    );
+
+    await query(
+      `UPDATE payment_intents
+       SET status = 'successful', verified_at = NOW()
+       WHERE tx_ref = $1`,
+      [txRef]
+    );
+
+    const tx = await addTransaction({
+      userId: req.user.id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(fee.netAmount).toFixed(2),
+      status: 'success',
+      reference: txRef,
+      description: 'Wallet funded successfully',
+      meta: {
+        transaction_id: transactionId,
+        provider: 'flutterwave',
+        grossAmount: fee.grossAmount,
+        feePercent: fee.feePercent,
+        feeAmount: fee.feeAmount,
+        creditedAmount: fee.netAmount
+      }
+    });
+
+    await addNotification(
+      req.user.id,
+      'Wallet funded',
+      `₦${Number(fee.netAmount).toFixed(2)} has been added to your wallet`,
+      { tx_id: tx.id, txRef, fee },
+      true
+    );
+
+    const wallet = await ensureWallet(req.user.id);
+
+    return respondOk(res, {
+      wallet: {
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      },
+      fee
+    }, 'Wallet funded successfully');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to verify payment');
+  }
+});
+/* TRANSACTIONS */
+
+app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 20), 100);
+
+    const result = await query(
+      `SELECT * FROM transactions
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [req.user.id, limit]
+    );
+
+    return respondOk(res, { transactions: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* NOTIFICATIONS */
+
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [req.user.id]
+    );
+
+    return respondOk(res, { notifications: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/notifications/unread-count', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT COUNT(*)::int AS count
+       FROM notifications
+       WHERE user_id = $1 AND is_read = false`,
+      [req.user.id]
+    );
+
+    return respondOk(res, { count: result.rows[0]?.count || 0 });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE notifications
+       SET is_read = true
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!result.rows[0]) return respondError(res, 404, 'Notification not found');
+
+    return respondOk(res, { notification: result.rows[0] }, 'Notification marked read');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* KYC */
+
+app.post(
+  '/api/kyc/submit',
+  requireAuth,
+  kycUpload.fields([
+    { name: 'selfie', maxCount: 1 },
+    { name: 'idFront', maxCount: 1 },
+    { name: 'idBack', maxCount: 1 },
+    { name: 'utilityBill', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      const { idType, idNumber, address } = req.body || {};
+      if (!idType || !idNumber) return respondError(res, 400, 'ID type and ID number are required');
+
+      const selfie = req.files?.selfie?.[0];
+      const idFront = req.files?.idFront?.[0];
+      const idBack = req.files?.idBack?.[0];
+      const utilityBill = req.files?.utilityBill?.[0];
+
+      if (!selfie || !idFront) {
+        return respondError(res, 400, 'Selfie and ID front are required');
+      }
+
+      const inserted = await query(
+        `INSERT INTO kyc_requests
+         (id, user_id, id_type, id_number, selfie_url, id_front_url, id_back_url, utility_bill_url, address, status, submitted_at)
+         VALUES
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',NOW())
+         RETURNING *`,
+        [
+          uid('kyc_'),
+          req.user.id,
+          idType,
+          idNumber,
+          `/uploads/kyc/${selfie.filename}`,
+          `/uploads/kyc/${idFront.filename}`,
+          idBack ? `/uploads/kyc/${idBack.filename}` : null,
+          utilityBill ? `/uploads/kyc/${utilityBill.filename}` : null,
+          address || null
+        ]
+      );
+
+      await query(
+        `UPDATE users
+         SET kyc_status = 'pending', updated_at = NOW()
+         WHERE id = $1`,
+        [req.user.id]
+      );
+
+      await addNotification(req.user.id, 'KYC submitted', 'Your KYC request has been submitted', { kyc_id: inserted.rows[0].id }, true);
+
+      return respondOk(res, { kyc: inserted.rows[0] }, 'KYC submitted successfully');
+    } catch (err) {
+      console.error(err);
+      return respondError(res, 500, 'Server error');
+    }
+  }
+);
+
+app.get('/api/kyc/status', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM kyc_requests
+       WHERE user_id = $1
+       ORDER BY submitted_at DESC
+       LIMIT 1`,
+      [req.user.id]
+    );
+
+    const user = await query(
+      `SELECT kyc_status FROM users WHERE id = $1 LIMIT 1`,
+      [req.user.id]
+    );
+
+    return respondOk(res, {
+      kycStatus: user.rows[0]?.kyc_status || 'unverified',
+      kyc: result.rows[0] || null
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* PROVIDER DEBUG */
+
+app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      provider: SERVICE_PROVIDER,
+      baseUrlSet: Boolean(VTPASS_BASE_URL),
+      hasApiKey: Boolean(VTPASS_API_KEY),
+      hasPublicKey: Boolean(VTPASS_PUBLIC_KEY),
+      hasSecretKey: Boolean(VTPASS_SECRET_KEY),
+      variationsPathSet: Boolean(VTPASS_VARIATIONS_PATH),
+      payPathSet: Boolean(VTPASS_PAY_PATH),
+      requeryPathSet: Boolean(VTPASS_REQUERY_PATH),
+      services: PROVIDER_ENDPOINTS
+    }, 'Provider config loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.body || {};
+    if (!requestId) return respondError(res, 400, 'requestId is required');
+
+    const result = await requeryVtpassTransaction(requestId);
+    return respondOk(res, { result }, 'Transaction status loaded');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to query transaction status');
+  }
+});
+
+/* SERVICES LIST */
+
+app.get('/api/services', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      services: SERVICE_CATALOG
+    }, 'Services loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* BILLS / SERVICES */
+
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
+  try {
+    const serviceType = normalizeServiceType(req.params.serviceType);
+
+    if (![
+      'airtime',
+      'data',
+      'cable_tv',
+      'electricity',
+      'betting',
+      'recharge_pin',
+      'data_pin',
+      'exam_pin'
+    ].includes(serviceType)) {
+      return respondError(res, 400, 'Invalid service type');
+    }
+
+    if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH) {
+      return respondOk(res, {
+        serviceType,
+        plans: []
+      }, 'Airtime does not require plans');
+    }
+
+    const providerPlans = await fetchProviderPlans(serviceType, {
+      network: req.query.network || undefined,
+      provider: req.query.provider || undefined,
+      serviceID: req.query.serviceID || req.query.serviceId || undefined
+    });
+
+    const normalized = extractArrayFromProviderResponse(providerPlans).map(normalizeProviderPlan);
+
+    const withPricing = [];
+    for (const plan of normalized) {
+      const pricing = await applyMarkup(serviceType, plan.rawPrice);
+      withPricing.push({
+        ...plan,
+        pricing: {
+          basePrice: pricing.basePrice,
+          markupPercent: pricing.markupPercent,
+          markupFee: pricing.markupFee,
+          finalPrice: pricing.finalPrice
+        }
+      });
+    }
+
+    return respondOk(res, {
+      serviceType,
+      plans: withPricing
+    }, 'Plans loaded');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to load plans');
+  }
+});
+
+async function processServicePayment(req, res, serviceType, category) {
+  try {
+    const normalizedServiceType = normalizeServiceType(serviceType);
+    const {
+      phone,
+      meterNumber,
+      smartCardNumber,
+      accountNumber,
+      planId,
+      planName,
+      provider = SERVICE_PROVIDER,
+      network,
+      serviceID,
+      serviceId
+    } = req.body || {};
+
+    const wallet = await ensureWallet(req.user.id);
+
+    let selectedPlan = null;
+    let baseAmount = 0;
+
+    if (planId || planName) {
+      const plans = await fetchProviderPlans(normalizedServiceType, {
+        network: network || undefined,
+        provider: provider || undefined,
+        serviceID: serviceID || serviceId || undefined
+      });
+
+      const normalizedPlans = extractArrayFromProviderResponse(plans).map(normalizeProviderPlan);
+      selectedPlan = normalizedPlans.find(
+        (p) =>
+          String(p.id) === String(planId) ||
+          String(p.name).toLowerCase() === String(planName || '').toLowerCase()
+      );
+
+      if (!selectedPlan) {
+        return respondError(res, 404, 'Selected plan not found');
+      }
+
+      baseAmount = Number(selectedPlan.rawPrice);
+    } else {
+      baseAmount = toNumber(req.body?.amount, 0);
+    }
+
+    if (baseAmount <= 0) {
+      return respondError(res, 400, 'Amount is required');
+    }
+
+    const pricing = await applyMarkup(normalizedServiceType, baseAmount);
+    const amt = pricing.finalPrice;
+
+    if (toNumber(wallet.balance, 0) < amt) {
+      return respondError(res, 400, 'Insufficient wallet balance');
+    }
+
+    await query(
+      `UPDATE wallets
+       SET balance = balance - $2, updated_at = NOW()
+       WHERE user_id = $1`,
+      [req.user.id, Number(amt).toFixed(2)]
+    );
+
+    let providerReference = uid('srv_');
+    let providerResponse = { provider: provider, success: true, mock: true };
+
+    try {
+      if (provider === 'vtpass' || provider === SERVICE_PROVIDER) {
+        const payload = buildProviderPayload({
+          serviceType: normalizedServiceType,
+          amount: pricing.basePrice,
+          phone,
+          meterNumber,
+          smartCardNumber,
+          accountNumber,
+          planId,
+          planName,
+          network,
+          selectedPlan,
+          extra: {
+            serviceID: serviceID || serviceId,
+            finalAmount: pricing.finalPrice,
+            pricing
+          }
+        });
+
+        const response = await callProvider(normalizedServiceType, 'buy', payload, {});
+        providerResponse = response;
+
+        providerReference =
+          response?.requestId ||
+          response?.request_id ||
+          response?.content?.requestId ||
+          response?.reference ||
+          response?.data?.reference ||
+          response?.transactionId ||
+          response?.data?.transactionId ||
+          providerReference;
+
+        if (!providerRequestLooksSuccessful(response)) {
+          throw new Error(response?.message || response?.error || response?.response_description || 'Provider purchase failed');
+        }
+      } else if (process.env.BILLS_PROVIDER_URL) {
+        const response = await axios.post(
+          `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${normalizedServiceType}`,
+          {
+            amount: pricing.basePrice,
+            finalAmount: pricing.finalPrice,
+            phone,
+            meterNumber,
+            smartCardNumber,
+            accountNumber,
+            plan: selectedPlan?.meta || req.body?.plan,
+            planId: selectedPlan?.id || planId,
+            network
+          },
+          {
+            headers: {
+              Authorization: process.env.BILLS_PROVIDER_KEY ? `Bearer ${process.env.BILLS_PROVIDER_KEY}` : undefined,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
+
+        providerResponse = response.data;
+        providerReference = response.data?.reference || response.data?.data?.reference || providerReference;
+      }
+    } catch (err) {
+      await query(
+        `UPDATE wallets
+         SET balance = balance + $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [req.user.id, Number(amt).toFixed(2)]
+      );
+      return respondError(res, 500, err.response?.data?.message || err.message || err?.response_description || 'Bill payment failed');
+    }
+
+    const tx = await addTransaction({
+      userId: req.user.id,
+      type: 'debit',
+      category,
+      amount: Number(amt).toFixed(2),
+      status: 'success',
+      reference: providerReference,
+      description: `${category} payment`,
+      meta: { serviceType: normalizedServiceType, provider, selectedPlan, pricing, providerResponse }
+    });
+
+    await addNotification(
+      req.user.id,
+      `${category} successful`,
+      `${category} payment of ₦${Number(amt).toFixed(2)} was successful`,
+      { tx_id: tx.id, serviceType: normalizedServiceType, pricing },
+      true
+    );
+
+    return respondOk(res, {
+      transaction: tx,
+      pricing,
+      providerResponse
+    }, `${category} payment successful`);
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+}
