@@ -839,25 +839,12 @@ app.get('/health', async (req, res) => {
 });
 /* AUTH */
 app.get('/test/data-plans', async (req, res) => {
-  try {
-    const { network } = req.params;
-
-    const response = await axios.get(
-      `${VTPASS_BASE_URL}/service-variations?serviceID=${network}`,
-      {
-        auth: {
-          username: VTPASS_USERNAME,
-          password: VTPASS_PASSWORD
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({
-      error: err.response?.data || err.message
-    });
-  }
+   try {
+      const response = await axios.get(...);
+      res.json(response.data);
+   } catch (err) {
+      res.json(err.response?.data || err.message);
+   }
 });
 app.get('/test', (req, res) => {
   res.json({
