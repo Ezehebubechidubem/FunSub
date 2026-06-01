@@ -483,12 +483,14 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
   try {
-    if (!req.user?.id) {
-      return respondError(res, 401, 'Unauthorized');
-    }
-
     const body = req.body || {};
-    const userId = req.user.id;
+
+    // Use logged-in user if available, otherwise allow temporary body.userId
+    const userId = req.user?.id || body.userId || null;
+
+    if (!userId) {
+      return respondError(res, 400, 'userId is required');
+    }
 
     // Make sure wallet exists
     await ensureWallet(userId);
@@ -548,7 +550,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, 'variation_code is required');
       }
 
-      if (!destination && !body.phone && !body.smartcard_number && !body.meter_number && !body.customer_id) {
+      if (
+        !destination &&
+        !body.phone &&
+        !body.smartcard_number &&
+        !body.meter_number &&
+        !body.customer_id
+      ) {
         return respondError(res, 400, 'Customer number is required');
       }
 
@@ -563,6 +571,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       selectedPlan = plans.find(plan => {
         const metaVariation =
           String(plan.meta?.variation_code || plan.meta?.variationCode || plan.meta?.code || '').trim();
+
         return (
           String(plan.id).trim() === variationCode ||
           metaVariation === variationCode
@@ -598,7 +607,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
     const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
 
-    // Deduct wallet first, then refund if provider fails
     const client = await pool.connect();
     let txRow = null;
     let transactionStarted = false;
@@ -668,7 +676,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       client.release();
     }
 
-    // Call provider after wallet debit
     const providerResponse = await callProvider(
       normalizedServiceType,
       'buy',
@@ -686,7 +693,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     const success = providerRequestLooksSuccessful(providerResponse);
 
     if (!success) {
-      // Refund wallet
       await query(
         `UPDATE wallets
          SET balance = balance + $2, updated_at = NOW()
@@ -766,11 +772,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
   }
 }
-async function getMarkupPercent(serviceType) {
-  const rule = await ensurePricingRule(serviceType);
-  return Number(rule.markup_percent ?? getDefaultMarkupPercent(serviceType));
-}
-
 async function applyMarkup(serviceType, baseAmount) {
   const markupPercent = await getMarkupPercent(serviceType);
   const base = Number(baseAmount);
