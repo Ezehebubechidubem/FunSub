@@ -1339,59 +1339,17 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-app.get('/api/services/:serviceType/plans', async (req, res) => {
+app.get('/api/public/services/data/plans', async (req, res) => {
   try {
-    const serviceType = normalizeServiceType(req.params.serviceType);
-
-    if (![
-      'airtime',
-      'data',
-      'cable_tv',
-      'electricity',
-      'betting',
-      'recharge_pin',
-      'data_pin',
-      'exam_pin'
-    ].includes(serviceType)) {
-      return respondError(res, 400, 'Invalid service type');
-    }
-
-    if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH) {
-      return respondOk(res, {
-        serviceType,
-        plans: []
-      }, 'Airtime does not require plans');
-    }
-
-    const providerPlans = await fetchProviderPlans(serviceType, {
-      network: req.query.network || undefined,
-      provider: req.query.provider || undefined,
-      serviceID: req.query.serviceID || req.query.serviceId || undefined
-    });
-
-    const normalized = extractArrayFromProviderResponse(providerPlans).map(normalizeProviderPlan);
-
-    const withPricing = [];
-    for (const plan of normalized) {
-      const pricing = await applyMarkup(serviceType, plan.rawPrice);
-      withPricing.push({
-        ...plan,
-        pricing: {
-          basePrice: pricing.basePrice,
-          markupPercent: pricing.markupPercent,
-          markupFee: pricing.markupFee,
-          finalPrice: pricing.finalPrice
-        }
-      });
-    }
+    const plans = await loadDataPlans(req.query.network);
 
     return respondOk(res, {
-      serviceType,
-      plans: withPricing
-    }, 'Plans loaded');
+      network: req.query.network || 'mtn',
+      plans
+    }, 'Data plans loaded');
   } catch (err) {
-    console.error(err.response?.data || err.message || err);
-    return respondError(res, 500, 'Unable to load plans');
+    console.error(err);
+    return respondError(res, err.statusCode || 500, err.message);
   }
 });
 /* KYC */
