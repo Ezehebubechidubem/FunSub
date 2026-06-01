@@ -44,7 +44,6 @@ const SERVICE_MARKUP_DEFAULTS = {
 };
 
 const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/, '');
-const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
 const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
 const VTPASS_REQUERY_PATH = String(process.env.VTPASS_REQUERY_PATH || '');
 const VTPASS_USERNAME = process.env.VTPASS_USERNAME || '';
