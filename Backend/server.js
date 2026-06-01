@@ -52,8 +52,6 @@ const VTPASS_PASSWORD = process.env.VTPASS_PASSWORD || '';
 const VTPASS_VARIATIONS_PATH =
   process.env.VTPASS_VARIATIONS_PATH || '/service-variations';
 
-const VTPASS_PAY_PATH =
-  process.env.VTPASS_PAY_PATH || '/pay';
 
 const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
 const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
