@@ -1412,7 +1412,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
+app.get('/api/services/:serviceType/plans', async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1427,6 +1427,68 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       'exam_pin'
     ].includes(serviceType)) {
       return respondError(res, 400, 'Invalid service type');
+    }
+
+    // Special handling for DATA plans
+    if (serviceType === 'data') {
+      const network = String(req.query.network || 'mtn').trim().toLowerCase();
+
+      const serviceMap = {
+        mtn: 'mtn-data',
+        glo: 'glo-data',
+        airtel: 'airtel-data',
+        '9mobile': 'etisalat-data'
+      };
+
+      const serviceID = serviceMap[network];
+
+      if (!serviceID) {
+        return respondError(res, 400, 'Invalid network');
+      }
+
+      const response = await axios.get(
+        `https://vtpass.com/api/service-variations?serviceID=${serviceID}`,
+        {
+          headers: {
+            'api-key': VTPASS_API_KEY,
+            'secret-key': VTPASS_SECRET_KEY,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      const variations =
+        response.data?.content?.variations ||
+        response.data?.content?.varations ||
+        response.data?.variations ||
+        response.data?.varations ||
+        [];
+
+      const plans = [];
+
+      for (const item of variations) {
+        const rawPrice = Number(item.variation_amount || 0);
+        const pricing = await applyMarkup('data', rawPrice);
+
+        plans.push({
+          id: item.variation_code || null,
+          name: item.name || 'Data Plan',
+          rawPrice,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType,
+        network,
+        plans
+      }, 'Plans loaded');
     }
 
     if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH) {
@@ -1467,173 +1529,6 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Unable to load plans');
   }
 });
-
-async function processServicePayment(req, res, serviceType, category) {
-  try {
-    const normalizedServiceType = normalizeServiceType(serviceType);
-    const {
-      phone,
-      meterNumber,
-      smartCardNumber,
-      accountNumber,
-      planId,
-      planName,
-      provider = SERVICE_PROVIDER,
-      network,
-      serviceID,
-      serviceId
-    } = req.body || {};
-
-    const wallet = await ensureWallet(req.user.id);
-
-    let selectedPlan = null;
-    let baseAmount = 0;
-
-    if (planId || planName) {
-      const plans = await fetchProviderPlans(normalizedServiceType, {
-        network: network || undefined,
-        provider: provider || undefined,
-        serviceID: serviceID || serviceId || undefined
-      });
-
-      const normalizedPlans = extractArrayFromProviderResponse(plans).map(normalizeProviderPlan);
-      selectedPlan = normalizedPlans.find(
-        (p) =>
-          String(p.id) === String(planId) ||
-          String(p.name).toLowerCase() === String(planName || '').toLowerCase()
-      );
-
-      if (!selectedPlan) {
-        return respondError(res, 404, 'Selected plan not found');
-      }
-
-      baseAmount = Number(selectedPlan.rawPrice);
-    } else {
-      baseAmount = toNumber(req.body?.amount, 0);
-    }
-
-    if (baseAmount <= 0) {
-      return respondError(res, 400, 'Amount is required');
-    }
-
-    const pricing = await applyMarkup(normalizedServiceType, baseAmount);
-    const amt = pricing.finalPrice;
-
-    if (toNumber(wallet.balance, 0) < amt) {
-      return respondError(res, 400, 'Insufficient wallet balance');
-    }
-
-    await query(
-      `UPDATE wallets
-       SET balance = balance - $2, updated_at = NOW()
-       WHERE user_id = $1`,
-      [req.user.id, Number(amt).toFixed(2)]
-    );
-
-    let providerReference = uid('srv_');
-    let providerResponse = { provider: provider, success: true, mock: true };
-
-    try {
-      if (provider === 'vtpass' || provider === SERVICE_PROVIDER) {
-        const payload = buildProviderPayload({
-          serviceType: normalizedServiceType,
-          amount: pricing.basePrice,
-          phone,
-          meterNumber,
-          smartCardNumber,
-          accountNumber,
-          planId,
-          planName,
-          network,
-          selectedPlan,
-          extra: {
-            serviceID: serviceID || serviceId,
-            finalAmount: pricing.finalPrice,
-            pricing
-          }
-        });
-
-        const response = await callProvider(normalizedServiceType, 'buy', payload, {});
-        providerResponse = response;
-
-        providerReference =
-          response?.requestId ||
-          response?.request_id ||
-          response?.content?.requestId ||
-          response?.reference ||
-          response?.data?.reference ||
-          response?.transactionId ||
-          response?.data?.transactionId ||
-          providerReference;
-
-        if (!providerRequestLooksSuccessful(response)) {
-          throw new Error(response?.message || response?.error || response?.response_description || 'Provider purchase failed');
-        }
-      } else if (process.env.BILLS_PROVIDER_URL) {
-        const response = await axios.post(
-          `${process.env.BILLS_PROVIDER_URL.replace(/\/$/, '')}/${normalizedServiceType}`,
-          {
-            amount: pricing.basePrice,
-            finalAmount: pricing.finalPrice,
-            phone,
-            meterNumber,
-            smartCardNumber,
-            accountNumber,
-            plan: selectedPlan?.meta || req.body?.plan,
-            planId: selectedPlan?.id || planId,
-            network
-          },
-          {
-            headers: {
-              Authorization: process.env.BILLS_PROVIDER_KEY ? `Bearer ${process.env.BILLS_PROVIDER_KEY}` : undefined,
-              'Content-Type': 'application/json'
-            },
-            timeout: 30000
-          }
-        );
-
-        providerResponse = response.data;
-        providerReference = response.data?.reference || response.data?.data?.reference || providerReference;
-      }
-    } catch (err) {
-      await query(
-        `UPDATE wallets
-         SET balance = balance + $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [req.user.id, Number(amt).toFixed(2)]
-      );
-      return respondError(res, 500, err.response?.data?.message || err.message || err?.response_description || 'Bill payment failed');
-    }
-
-    const tx = await addTransaction({
-      userId: req.user.id,
-      type: 'debit',
-      category,
-      amount: Number(amt).toFixed(2),
-      status: 'success',
-      reference: providerReference,
-      description: `${category} payment`,
-      meta: { serviceType: normalizedServiceType, provider, selectedPlan, pricing, providerResponse }
-    });
-
-    await addNotification(
-      req.user.id,
-      `${category} successful`,
-      `${category} payment of ₦${Number(amt).toFixed(2)} was successful`,
-      { tx_id: tx.id, serviceType: normalizedServiceType, pricing },
-      true
-    );
-
-    return respondOk(res, {
-      transaction: tx,
-      pricing,
-      providerResponse
-    }, `${category} payment successful`);
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Server error');
-  }
-}
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
 app.post('/api/services/data', requireAuth, async (req, res) => processServicePayment(req, res, 'data', 'Data'));
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
