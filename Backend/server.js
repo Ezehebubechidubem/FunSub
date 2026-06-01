@@ -839,12 +839,18 @@ app.get('/health', async (req, res) => {
 });
 /* AUTH */
 app.get('/test/data-plans', async (req, res) => {
-   try {
-      const response = await axios.get('https://vtpass.com/api/service-variations?serviceID=mtn-data');
-      res.json(response.data);
-   } catch (err) {
-      res.json(err.response?.data || err.message);
-   }
+  try {
+    const providerPlans = await fetchProviderPlans('data', {
+      network: req.query.network || 'mtn'
+    });
+
+    return respondOk(res, {
+      plans: providerPlans
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to load plans');
+  }
 });
 app.get('/test', (req, res) => {
   res.json({
