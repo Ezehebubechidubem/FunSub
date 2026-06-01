@@ -92,7 +92,22 @@ const PROVIDER_ENDPOINTS = {
     buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || ''
   }
 };
+// for data
+const DATA_SERVICE_MAP = {
+  mtn: 'mtn-data',
+  glo: 'glo-data',
+  airtel: 'airtel-data',
+  '9mobile': '9mobile-data'
+};
 
+function normalizeNetwork(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getDataServiceID(network) {
+  const key = normalizeNetwork(network || 'mtn');
+  return DATA_SERVICE_MAP[key] || null;
+}
 // Added for Render: fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is missing on Render');
