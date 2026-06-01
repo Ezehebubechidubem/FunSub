@@ -845,7 +845,8 @@ app.get('/api/services/data/plans', async (req, res) => {
     mtn: 'mtn-data',
     glo: 'glo-data',
     airtel: 'airtel-data',
-    '9mobile': '9mobile-data'
+    9mobile: 'etisalat-data',
+
   };
 
   const serviceID = serviceMap[network];
