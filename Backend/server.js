@@ -1823,12 +1823,9 @@ app.get('/api/services/:serviceType/plans', async (req, res) => {
 app.post('/api/services/airtime', async (req, res) =>
   processServicePayment(req, res, 'airtime', 'Airtime')
 );
-app.post('/api/services/data', (req, res) => {
-  res.json({
-    success: true,
-    message: "Route reached"
-  });
-});
+app.post('/api/services/data', async (req, res) =>
+  processServicePayment(req, res, 'data', 'Data')
+);
 
 app.post('/api/services/electricity', requireAuth, async (req, res) =>
   processServicePayment(req, res, 'electricity', 'Electricity')
