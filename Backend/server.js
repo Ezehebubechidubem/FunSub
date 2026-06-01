@@ -838,25 +838,7 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
-app.get('/api/services/data/plans', async (req, res) => {
-  const network = req.query.network || 'mtn';
 
-  const serviceMap = {
-    mtn: 'mtn-data',
-    glo: 'glo-data',
-    airtel: 'airtel-data',
-    "9mobile": 'etisalat-data'
-
-  };
-
-  const serviceID = serviceMap[network];
-
-  const response = await axios.get(
-    `https://vtpass.com/api/service-variations?serviceID=${serviceID}`
-  );
-
-  res.json(response.data);
-});
 app.get('/test/data-plans', async (req, res) => {
   try {
     const providerPlans = await fetchProviderPlans('data', {
