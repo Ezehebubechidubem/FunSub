@@ -530,13 +530,20 @@ pricing = await applyMarkup(normalizedServiceType, planAmount);
 }
 function requireAuth(req, res, next) {
   try {
+    console.log('AUTH HEADER INSIDE AUTH:', req.headers.authorization);
+
     const token = authHeader(req);
-    if (!token) return respondError(res, 401, 'Unauthorized');
+
+    console.log('TOKEN:', token);
 
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    console.log('DECODED:', decoded);
+
     req.user = decoded;
     next();
   } catch (err) {
+    console.log('JWT ERROR:', err.message);
     return respondError(res, 401, 'Unauthorized');
   }
 }
@@ -1890,7 +1897,13 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
   }
 });
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
-app.post('/api/services/data', requireAuth, async (req, res) => processServicePayment(req, res, 'data', 'Data'));
+app.post('/api/services/data', requireAuth, async (req, res) => {
+  console.log('====================');
+  console.log('AUTH HEADER:', req.headers.authorization);
+  console.log('BODY:', req.body);
+
+  return processServicePayment(req, res, 'data', 'Data');
+});
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
 app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
 app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
