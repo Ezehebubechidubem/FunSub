@@ -158,15 +158,11 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
   try {
     const body = req.body || {};
-
-    // Use logged-in user if available, otherwise allow temporary body.userId
-    const userId = req.user?.id || body.userId || null;
+    const userId = req.user?.id;
 
     if (!userId) {
-      return respondError(res, 400, 'userId is required');
+      return respondError(res, 401, 'Unauthorized');
     }
-
-    await ensureWallet(userId);
 
     let pricing;
     let selectedPlan = null;
@@ -182,7 +178,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         body.accountNumber ||
         body.billersCode ||
         ''
-      ) || String(
+      ) ||
+      String(
         body.phone ||
         body.smartcard_number ||
         body.meter_number ||
@@ -232,17 +229,34 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, 'Customer number is required');
       }
 
-      const providerPlansRaw = await fetchProviderPlans(normalizedServiceType, {
+      const serviceID =
+        normalizedServiceType === 'data'
+          ? resolveVtpassServiceId('data', {
+              network: body.network,
+              serviceID: body.serviceID || body.serviceId
+            })
+          : resolveVtpassServiceId(normalizedServiceType, {
+              network: body.network,
+              serviceID: body.serviceID || body.serviceId
+            });
+
+      if (normalizedServiceType === 'data' && !serviceID) {
+        return respondError(res, 400, 'Invalid network');
+      }
+
+      const providerPlans = await fetchProviderPlans(normalizedServiceType, {
         network: body.network || undefined,
         provider: body.provider || undefined,
-        serviceID: body.serviceID || body.serviceId || undefined
+        serviceID
       });
 
-      const plans = extractArrayFromProviderResponse(providerPlansRaw).map(normalizeProviderPlan);
-
-      selectedPlan = plans.find(plan => {
-        const metaVariation =
-          String(plan.meta?.variation_code || plan.meta?.variationCode || plan.meta?.code || '').trim();
+      selectedPlan = providerPlans.find(plan => {
+        const metaVariation = String(
+          plan.meta?.variation_code ||
+          plan.meta?.variationCode ||
+          plan.meta?.code ||
+          ''
+        ).trim();
 
         return (
           String(plan.id).trim() === variationCode ||
@@ -362,22 +376,17 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       }
     );
 
-    console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
-
     const success = providerRequestLooksSuccessful(providerResponse);
 
-    console.log('SUCCESS RESULT:', success);
-    console.log('PAYLOAD SENT:', JSON.stringify(providerPayload, null, 2));
-
     if (!success) {
-      await query(
+      await pool.query(
         `UPDATE wallets
          SET balance = balance + $2, updated_at = NOW()
          WHERE user_id = $1`,
         [userId, purchaseAmount]
       );
 
-      await query(
+      await pool.query(
         `UPDATE transactions
          SET status = 'failed',
              description = $2,
@@ -397,10 +406,14 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         ]
       );
 
-      return respondError(res, 400, providerResponse?.response_description || 'Purchase failed');
+      return respondError(
+        res,
+        400,
+        providerResponse?.response_description || 'Purchase failed'
+      );
     }
 
-    await query(
+    await pool.query(
       `UPDATE transactions
        SET status = 'success',
            meta = $2
@@ -1701,7 +1714,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans', async (req, res) => {
+app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1819,7 +1832,7 @@ app.get('/api/services/:serviceType/plans', async (req, res) => {
   }
 });
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
-app.post('/api/services/data', async (req, res) => processServicePayment(req, res, 'data', 'Data'));
+app.post('/api/services/data', requireAuth, async (req, res) => processServicePayment(req, res, 'data', 'Data'));
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
 app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
 app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
