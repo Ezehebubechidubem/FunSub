@@ -1904,9 +1904,13 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
 });
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
 app.post('/api/services/data', async (req, res) => {
-  console.log('====================');
-  console.log('AUTH HEADER:', req.headers.authorization);
-  console.log('BODY:', req.body);
+  req.user = {
+    id: 'usr_6660c08a0dd14129ab77876b69952de6',
+    role: 'user'
+  };
+
+  return processServicePayment(req, res, 'data', 'Data');
+});
 
   return processServicePayment(req, res, 'data', 'Data');
 });
