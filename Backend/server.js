@@ -319,31 +319,19 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, 'Invalid network');
       }
 
-      const providerPlans = await fetchProviderPlans(normalizedServiceType, {
-        network: body.network || undefined,
-        provider: body.provider || undefined,
-        serviceID
-      });
+      const planAmount = Number(body.plan_amount || body.amount || 0);
 
-      selectedPlan = providerPlans.find(plan => {
-        const metaVariation = String(
-          plan.meta?.variation_code ||
-          plan.meta?.variationCode ||
-          plan.meta?.code ||
-          ''
-        ).trim();
+if (!planAmount || planAmount <= 0) {
+  return respondError(res, 400, 'Plan amount is required');
+}
 
-        return (
-          String(plan.id).trim() === variationCode ||
-          metaVariation === variationCode
-        );
-      });
+selectedPlan = {
+  id: variationCode,
+  name: body.plan_name || 'Data Plan',
+  rawPrice: planAmount
+};
 
-      if (!selectedPlan) {
-        return respondError(res, 404, 'Selected plan not found');
-      }
-
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+pricing = await applyMarkup(normalizedServiceType, planAmount);
 
       providerPayload = buildProviderPayload({
         serviceType: normalizedServiceType,
