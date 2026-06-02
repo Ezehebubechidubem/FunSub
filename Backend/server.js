@@ -1148,10 +1148,8 @@ app.get('/health', async (req, res) => {
 });
 /* AUTH */
 app.get('/test-auth', requireAuth, (req, res) => {
-  res.json({
-    success: true,
-    user: req.user
-  });
+  console.log("TEST AUTH USER:", req.user);
+  res.json({ success: true, user: req.user });
 });
 app.get('/test/wallets', async (req, res) => {
   try {
