@@ -166,19 +166,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 400, 'userId is required');
     }
 
-    if (typeof ensureWallet === 'function') {
-  await ensureWallet(userId);
-} else {
-  console.log('ensureWallet is missing, skipping for test mode');
-}
-console.log("USER ID:", userId);
-
-const testWallet = await query(
-  "SELECT * FROM wallets WHERE user_id = $1",
-  [userId]
-);
-
-console.log("WALLET FOUND:", testWallet.rows);
+    await ensureWallet(userId);
 
     let pricing;
     let selectedPlan = null;
@@ -554,7 +542,37 @@ const kycUpload = multer({
   }),
   limits: { fileSize: 12 * 1024 * 1024 }
 });
+async function ensureWallet(userId) {
+  const existing = await query(
+    `SELECT id FROM wallets WHERE user_id = $1`,
+    [userId]
+  );
 
+  if (existing.rows.length > 0) {
+    return existing.rows[0];
+  }
+
+  const created = await query(
+    `
+    INSERT INTO wallets (
+      user_id,
+      balance,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      $1,
+      0,
+      NOW(),
+      NOW()
+    )
+    RETURNING *
+    `,
+    [userId]
+  );
+
+  return created.rows[0];
+}
 async function initDb() {
   await query(`
     CREATE TABLE IF NOT EXISTS users (
