@@ -166,11 +166,15 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 400, 'userId is required');
     }
 
-    if (typeof ensureWallet === 'function') {
-  await ensureWallet(userId);
-} else {
-  console.log('ensureWallet is missing, skipping for test mode');
-}
+    await ensureWallet(userId);
+console.log("USER ID:", userId);
+
+const testWallet = await query(
+  "SELECT * FROM wallets WHERE user_id = $1",
+  [userId]
+);
+
+console.log("WALLET FOUND:", testWallet.rows);
 
     let pricing;
     let selectedPlan = null;
