@@ -530,21 +530,28 @@ pricing = await applyMarkup(normalizedServiceType, planAmount);
 }
 function requireAuth(req, res, next) {
   try {
-    console.log('AUTH HEADER INSIDE AUTH:', req.headers.authorization);
-
     const token = authHeader(req);
 
-    console.log('TOKEN:', token);
+    console.log("TOKEN:", token);
+
+    if (!token) {
+      console.log("NO TOKEN FOUND");
+      return respondError(res, 401, "Unauthorized");
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    console.log('DECODED:', decoded);
+    console.log("DECODED:", decoded);
 
     req.user = decoded;
+
     next();
+
   } catch (err) {
-    console.log('JWT ERROR:', err.message);
-    return respondError(res, 401, 'Unauthorized');
+
+    console.log("AUTH ERROR:", err.message);
+
+    return respondError(res, 401, "Unauthorized");
   }
 }
 
