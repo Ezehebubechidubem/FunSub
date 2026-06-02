@@ -6,9 +6,7 @@
   <title>Data Plans</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       font-family: Arial, sans-serif;
@@ -23,9 +21,42 @@
       margin: 0 auto;
     }
 
-    h2 {
-      margin-bottom: 10px;
+    .topbar {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      border: 1px solid #eee;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
     }
+
+    .user-box {
+      font-size: 14px;
+      color: #444;
+    }
+
+    .user-box strong {
+      color: #0b6bcb;
+    }
+
+    .logout-btn {
+      border: none;
+      background: #e11d48;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .logout-btn:hover {
+      opacity: 0.92;
+    }
+
+    h2 { margin-bottom: 10px; }
 
     .btns {
       display: flex;
@@ -45,13 +76,9 @@
       transition: 0.2s ease;
     }
 
-    .btns button:hover {
-      background: #555;
-    }
+    .btns button:hover { background: #555; }
 
-    .btns button.active {
-      background: #0b6bcb;
-    }
+    .btns button.active { background: #0b6bcb; }
 
     #status {
       margin: 10px 0 15px;
@@ -99,14 +126,17 @@
       border: 1px solid #eee;
     }
 
-    .loading {
-      opacity: 0.7;
-    }
+    .loading { opacity: 0.7; }
   </style>
 </head>
 
 <body>
   <div class="container">
+    <div class="topbar">
+      <div class="user-box" id="userBox">Not logged in</div>
+      <button class="logout-btn" type="button" onclick="logout()">Logout</button>
+    </div>
+
     <h2>📡 Data Plans</h2>
 
     <div class="btns">
@@ -123,6 +153,50 @@
   <script>
     const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
 
+    function getToken() {
+      return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    }
+
+    function getUser() {
+      const raw =
+        localStorage.getItem("user") ||
+        localStorage.getItem("currentUser") ||
+        localStorage.getItem("profile") ||
+        "";
+
+      if (!raw) return null;
+
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+
+    function updateUserBox() {
+      const userBox = document.getElementById("userBox");
+      const user = getUser();
+      const token = getToken();
+
+      if (user?.email || user?.username || user?.name || token) {
+        userBox.innerHTML = `
+          Logged in as <strong>${user?.username || user?.name || user?.email || "User"}</strong>
+          ${user?.id ? ` (ID: ${user.id})` : ""}
+        `;
+      } else {
+        userBox.textContent = "Not logged in";
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("currentUser");
+      localStorage.removeItem("profile");
+      location.href = "login.html";
+    }
+
     function formatNaira(value) {
       const num = Number(value);
       if (Number.isNaN(num)) return "N/A";
@@ -136,15 +210,10 @@
       if (!name) return "Data Plan";
 
       let cleaned = String(name).trim();
-
-      // Remove trailing price-like text such as:
-      // " - N100", " - ₦1,000", " - NGN 500", " - 100"
       cleaned = cleaned.replace(
         /\s*[-–—]\s*(?:₦|N|NGN)?\s*[\d,]+(?:\.\d+)?\s*$/i,
         ""
       );
-
-      // Remove common duplicate whitespace
       cleaned = cleaned.replace(/\s+/g, " ").trim();
 
       return cleaned || "Data Plan";
@@ -167,10 +236,29 @@
       plansEl.innerHTML = `<div class="empty loading">Please wait...</div>`;
 
       try {
-        const res = await fetch(`${BASE_URL}?network=${encodeURIComponent(network)}`);
-        const data = await res.json();
+        const token = getToken();
 
+        const headers = {
+          "Content-Type": "application/json"
+        };
+
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        const res = await fetch(
+          `${BASE_URL}?network=${encodeURIComponent(network)}`,
+          { headers }
+        );
+
+        const data = await res.json();
         console.log("API RESPONSE:", data);
+
+        if (res.status === 401) {
+          statusEl.innerText = "Please log in again";
+          plansEl.innerHTML = `<div class="empty">Your session expired. Please log in again.</div>`;
+          return;
+        }
 
         const plans = Array.isArray(data?.plans) ? data.plans : [];
 
@@ -206,6 +294,7 @@
     }
 
     window.addEventListener("DOMContentLoaded", () => {
+      updateUserBox();
       const firstBtn = document.querySelector(".btns button");
       loadPlans("mtn", firstBtn);
     });
