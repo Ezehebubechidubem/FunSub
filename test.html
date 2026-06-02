@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Plans</title>
+  <title>Buy Data</title>
 
   <style>
     * { box-sizing: border-box; }
@@ -56,13 +56,20 @@
       opacity: 0.92;
     }
 
-    h2 { margin-bottom: 10px; }
+    h2 { margin-bottom: 8px; }
+
+    .sub {
+      margin-top: 0;
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 18px;
+    }
 
     .btns {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin: 15px 0 20px;
+      margin: 15px 0 18px;
     }
 
     .btns button {
@@ -79,6 +86,50 @@
     .btns button:hover { background: #555; }
 
     .btns button.active { background: #0b6bcb; }
+
+    .form-box {
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    select, input, button.primary {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid #d9e1ea;
+      outline: none;
+      font-size: 15px;
+      background: #fff;
+    }
+
+    select:focus, input:focus {
+      border-color: #0b6bcb;
+    }
+
+    button.primary {
+      margin-top: 16px;
+      background: #0b6bcb;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.primary:hover {
+      opacity: 0.95;
+    }
 
     #status {
       margin: 10px 0 15px;
@@ -98,6 +149,18 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
       border: 1px solid #eee;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-1px);
+      border-color: #cfe0ff;
+    }
+
+    .card.selected {
+      border-color: #0b6bcb;
+      box-shadow: 0 0 0 2px rgba(11, 107, 203, 0.12);
     }
 
     .plan-name {
@@ -137,7 +200,8 @@
       <button class="logout-btn" type="button" onclick="logout()">Logout</button>
     </div>
 
-    <h2>📡 Data Plans</h2>
+    <h2>📡 Buy Data</h2>
+    <p class="sub">Select network, choose a plan, then buy with your wallet.</p>
 
     <div class="btns">
       <button type="button" onclick="loadPlans('mtn', this)">MTN</button>
@@ -146,12 +210,33 @@
       <button type="button" onclick="loadPlans('9mobile', this)">9mobile</button>
     </div>
 
+    <div class="form-box">
+      <label>Selected Plan</label>
+      <select id="planSelect">
+        <option value="">Loading plans...</option>
+      </select>
+
+      <label>Phone Number</label>
+      <input type="tel" id="phone" placeholder="08012345678" />
+
+      <button class="primary" type="button" onclick="buyData()">Buy Data</button>
+    </div>
+
     <div id="status"></div>
     <div id="plans" class="plans-grid"></div>
   </div>
 
   <script>
     const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
+    const BUY_URL = "https://funsub.onrender.com/api/services/data";
+
+    const planSelect = document.getElementById("planSelect");
+    const plansEl = document.getElementById("plans");
+    const statusEl = document.getElementById("status");
+    const userBox = document.getElementById("userBox");
+
+    let currentNetwork = "mtn";
+    let currentPlans = [];
 
     function getToken() {
       return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
@@ -174,7 +259,6 @@
     }
 
     function updateUserBox() {
-      const userBox = document.getElementById("userBox");
       const user = getUser();
       const token = getToken();
 
@@ -195,6 +279,16 @@
       localStorage.removeItem("currentUser");
       localStorage.removeItem("profile");
       location.href = "login.html";
+    }
+
+    function getServiceID(network) {
+      const map = {
+        mtn: "mtn-data",
+        glo: "glo-data",
+        airtel: "airtel-data",
+        "9mobile": "etisalat-data"
+      };
+      return map[String(network || "").trim().toLowerCase()] || "";
     }
 
     function formatNaira(value) {
@@ -219,6 +313,16 @@
       return cleaned || "Data Plan";
     }
 
+    function setStatus(message, type = "info") {
+      statusEl.className = "";
+      statusEl.style.padding = "10px 0";
+      statusEl.style.fontWeight = "bold";
+      if (type === "error") statusEl.style.color = "#b42318";
+      else if (type === "success") statusEl.style.color = "#0f7a3b";
+      else statusEl.style.color = "#0b6bcb";
+      statusEl.textContent = message;
+    }
+
     function setActiveButton(activeBtn) {
       document.querySelectorAll(".btns button").forEach(btn => {
         btn.classList.remove("active");
@@ -226,36 +330,98 @@
       if (activeBtn) activeBtn.classList.add("active");
     }
 
+    function setSelectedCard(planId) {
+      document.querySelectorAll(".card").forEach(card => {
+        card.classList.remove("selected");
+        if (card.dataset.planId === String(planId)) {
+          card.classList.add("selected");
+        }
+      });
+    }
+
+    function renderPlans(plans) {
+      plansEl.innerHTML = "";
+      currentPlans = plans;
+
+      if (!plans.length) {
+        plansEl.innerHTML = `<div class="empty">No plans found</div>`;
+        return;
+      }
+
+      plans.forEach((plan, index) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.planId = String(plan.id);
+
+        const displayName = cleanPlanName(plan?.name);
+        const finalPrice = plan?.pricing?.finalPrice;
+        const rawPrice = plan?.rawPrice;
+
+        card.innerHTML = `
+          <div class="plan-name">${displayName}</div>
+          <div class="price">${formatNaira(finalPrice)}</div>
+          <div class="small">Plan ID: ${plan.id || "N/A"}</div>
+        `;
+
+        card.addEventListener("click", () => {
+          planSelect.value = String(plan.id);
+          setSelectedCard(plan.id);
+        });
+
+        plansEl.appendChild(card);
+
+        const option = document.createElement("option");
+        option.value = String(plan.id);
+        option.textContent = `${displayName} — ${formatNaira(finalPrice)}`;
+        option.dataset.rawPrice = String(rawPrice ?? "");
+        option.dataset.planName = String(plan?.name || "");
+        planSelect.appendChild(option);
+
+        if (index === 0) {
+          planSelect.value = String(plan.id);
+          card.classList.add("selected");
+        }
+      });
+
+      planSelect.onchange = () => {
+        setSelectedCard(planSelect.value);
+      };
+    }
+
     async function loadPlans(network, btnEl) {
+      currentNetwork = network;
       setActiveButton(btnEl);
 
-      const statusEl = document.getElementById("status");
-      const plansEl = document.getElementById("plans");
-
-      statusEl.innerText = `Loading ${network.toUpperCase()} plans...`;
+      setStatus(`Loading ${network.toUpperCase()} plans...`, "info");
+      planSelect.innerHTML = `<option value="">Loading...</option>`;
       plansEl.innerHTML = `<div class="empty loading">Please wait...</div>`;
 
       try {
         const token = getToken();
-
-        const headers = {
-          "Content-Type": "application/json"
-        };
-
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
+        if (!token) {
+          setStatus("You are not logged in. Please log in first.", "error");
+          planSelect.innerHTML = `<option value="">Login required</option>`;
+          plansEl.innerHTML = `<div class="empty">Login required</div>`;
+          return;
         }
 
+        const serviceID = getServiceID(network);
+
         const res = await fetch(
-          `${BASE_URL}?network=${encodeURIComponent(network)}`,
-          { headers }
+          `${BASE_URL}?network=${encodeURIComponent(network)}&serviceID=${encodeURIComponent(serviceID)}`,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          }
         );
 
         const data = await res.json();
         console.log("API RESPONSE:", data);
 
         if (res.status === 401) {
-          statusEl.innerText = "Please log in again";
+          setStatus("Please log in again", "error");
+          planSelect.innerHTML = `<option value="">Unauthorized</option>`;
           plansEl.innerHTML = `<div class="empty">Your session expired. Please log in again.</div>`;
           return;
         }
@@ -263,40 +429,91 @@
         const plans = Array.isArray(data?.plans) ? data.plans : [];
 
         if (!plans.length) {
-          statusEl.innerText = `${network.toUpperCase()} plans loaded`;
-          plansEl.innerHTML = `<div class="empty">No plans found</div>`;
+          setStatus(`${network.toUpperCase()} plans loaded`, "success");
+          planSelect.innerHTML = `<option value="">No plans found</option>`;
+          plansEl.innerHTML = `<div class="empty">No plans available for this network.</div>`;
           return;
         }
 
-        statusEl.innerText = `${network.toUpperCase()} plans loaded`;
-        plansEl.innerHTML = "";
-
-        plans.forEach(plan => {
-          const finalPrice = plan?.pricing?.finalPrice;
-          const displayName = cleanPlanName(plan?.name);
-
-          const div = document.createElement("div");
-          div.className = "card";
-
-          div.innerHTML = `
-            <div class="plan-name">${displayName}</div>
-            <div class="price">${formatNaira(finalPrice)}</div>
-            <div class="small">Your price only</div>
-          `;
-
-          plansEl.appendChild(div);
-        });
+        setStatus(`${network.toUpperCase()} plans loaded`, "success");
+        planSelect.innerHTML = "";
+        renderPlans(plans);
       } catch (err) {
         console.error(err);
-        statusEl.innerText = "Error loading plans";
+        setStatus("Error loading plans", "error");
+        planSelect.innerHTML = `<option value="">Error loading plans</option>`;
         plansEl.innerHTML = `<div class="empty">Unable to load plans right now.</div>`;
+      }
+    }
+
+    async function buyData() {
+      const token = getToken();
+      const phone = document.getElementById("phone").value.trim();
+      const variation_code = String(planSelect.value || "").trim();
+      const selectedOption = planSelect.selectedOptions[0];
+      const plan_name = selectedOption?.dataset.planName || "";
+      const plan_amount = selectedOption?.dataset.rawPrice || "";
+      const serviceID = getServiceID(currentNetwork);
+
+      if (!token) {
+        setStatus("You are not logged in. Please log in first.", "error");
+        return;
+      }
+
+      if (!phone) {
+        setStatus("Please enter phone number", "error");
+        return;
+      }
+
+      if (!variation_code) {
+        setStatus("Please select a plan", "error");
+        return;
+      }
+
+      setStatus("Processing purchase...", "info");
+
+      try {
+        const res = await fetch(BUY_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            network: currentNetwork,
+            serviceID,
+            variation_code,
+            plan_amount,
+            plan_name,
+            phone
+          })
+        });
+
+        const data = await res.json();
+        console.log("PURCHASE RESPONSE:", data);
+
+        if (res.ok) {
+          setStatus(data.message || "Purchase successful", "success");
+        } else {
+          setStatus(data.message || "Purchase failed", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus("Transaction failed", "error");
       }
     }
 
     window.addEventListener("DOMContentLoaded", () => {
       updateUserBox();
+
       const firstBtn = document.querySelector(".btns button");
-      loadPlans("mtn", firstBtn);
+      if (getToken()) {
+        loadPlans("mtn", firstBtn);
+      } else {
+        setStatus("You are not logged in. Please log in first.", "error");
+        planSelect.innerHTML = `<option value="">Login required</option>`;
+        plansEl.innerHTML = `<div class="empty">Please log in to buy data.</div>`;
+      }
     });
   </script>
 </body>
