@@ -239,16 +239,11 @@
     let currentPlans = [];
 
     function getToken() {
-      return localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+      return localStorage.getItem("funsub_token") || "";
     }
 
     function getUser() {
-      const raw =
-        localStorage.getItem("user") ||
-        localStorage.getItem("currentUser") ||
-        localStorage.getItem("profile") ||
-        "";
-
+      const raw = localStorage.getItem("funsub_user") || "";
       if (!raw) return null;
 
       try {
@@ -261,23 +256,25 @@
     function updateUserBox() {
       const user = getUser();
       const token = getToken();
+      const loggedIn = localStorage.getItem("funsub_logged_in") === "true";
 
-      if (user?.email || user?.username || user?.name || token) {
-        userBox.innerHTML = `
-          Logged in as <strong>${user?.username || user?.name || user?.email || "User"}</strong>
-          ${user?.id ? ` (ID: ${user.id})` : ""}
-        `;
-      } else {
-        userBox.textContent = "Not logged in";
+      if (loggedIn || token || user) {
+        const name = user?.username || user?.name || user?.email || "User";
+        const id = user?.id ? ` (ID: ${user.id})` : "";
+        userBox.innerHTML = `Logged in as <strong>${name}</strong>${id}`;
+        return true;
       }
+
+      userBox.textContent = "Not logged in";
+      return false;
     }
 
     function logout() {
-      localStorage.removeItem("token");
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("user");
-      localStorage.removeItem("currentUser");
-      localStorage.removeItem("profile");
+      localStorage.removeItem("funsub_user");
+      localStorage.removeItem("funsub_logged_in");
+      localStorage.removeItem("funsub_remembered");
+      localStorage.removeItem("funsub_token");
+      localStorage.removeItem("funsub_wallet");
       location.href = "login.html";
     }
 
@@ -504,10 +501,10 @@
     }
 
     window.addEventListener("DOMContentLoaded", () => {
-      updateUserBox();
-
+      const logged = updateUserBox();
       const firstBtn = document.querySelector(".btns button");
-      if (getToken()) {
+
+      if (logged) {
         loadPlans("mtn", firstBtn);
       } else {
         setStatus("You are not logged in. Please log in first.", "error");
