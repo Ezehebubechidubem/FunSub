@@ -1147,7 +1147,7 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
-app.get('/test-auth', requireAuth, (req, res) => {
+app.get('/test-auth', (req, res) => {
   console.log("TEST AUTH USER:", req.user);
   res.json({ success: true, user: req.user });
 });
