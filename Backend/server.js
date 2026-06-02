@@ -238,7 +238,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     if (!userId) {
       return respondError(res, 401, 'Unauthorized');
     }
-
+console.log("REQ.USER IN PROCESS:", req.user);
+console.log("REQ.BODY IN PROCESS:", req.body);
     let pricing;
     let selectedPlan = null;
     let providerPayload = null;
