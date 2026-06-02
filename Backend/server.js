@@ -14,7 +14,6 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const app = express();
-app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 const envNumber = (value, fallback) => {
@@ -153,317 +152,46 @@ function respondError(res, status, message) {
 async function query(text, params = []) {
   return pool.query(text, params);
 }
-async function processServicePayment(req, res, serviceType, serviceName) {
-  const normalizedServiceType = normalizeServiceType(serviceType);
 
-  try {
-    const body = req.body || {};
-    const userId = req.user?.id;
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
+}
 
-    if (!userId) {
-      return respondError(res, 401, 'Unauthorized');
-    }
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
 
-    let pricing;
-    let selectedPlan = null;
-    let providerPayload = null;
-    let description = `${serviceName} purchase`;
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
+}
 
-    const destination =
-      normalizePhone(
-        body.phone ||
-        body.smartcard_number ||
-        body.meter_number ||
-        body.customer_id ||
-        body.accountNumber ||
-        body.billersCode ||
-        ''
-      ) ||
-      String(
-        body.phone ||
-        body.smartcard_number ||
-        body.meter_number ||
-        body.customer_id ||
-        body.accountNumber ||
-        body.billersCode ||
-        ''
-      ).trim();
+async function ensureWallet(userId) {
+  const found = await query('SELECT * FROM wallets WHERE user_id = $1 LIMIT 1', [userId]);
+  if (found.rows[0]) return found.rows[0];
 
-    if (normalizedServiceType === 'airtime') {
-      const amount = toNumber(body.amount, 0);
+  const created = await query(
+    `INSERT INTO wallets (id, user_id, balance, currency)
+     VALUES ($1, $2, 0, 'NGN')
+     RETURNING *`,
+    [uid('wal_'), userId]
+  );
+  return created.rows[0];
+}
 
-      if (amount <= 0 || !destination) {
-        return respondError(res, 400, 'amount and phone are required');
-      }
-
-      pricing = await applyMarkup('airtime', amount);
-
-      providerPayload = buildProviderPayload({
-        serviceType: 'airtime',
-        amount,
-        phone: destination,
-        network: body.network,
-        extra: body.extra || {}
-      });
-    } else {
-      const variationCode = String(
-        body.variation_code ||
-        body.planId ||
-        body.plan_id ||
-        body.planCode ||
-        body.code ||
-        ''
-      ).trim();
-
-      if (!variationCode) {
-        return respondError(res, 400, 'variation_code is required');
-      }
-
-      if (
-        !destination &&
-        !body.phone &&
-        !body.smartcard_number &&
-        !body.meter_number &&
-        !body.customer_id
-      ) {
-        return respondError(res, 400, 'Customer number is required');
-      }
-
-      const serviceID =
-        normalizedServiceType === 'data'
-          ? resolveVtpassServiceId('data', {
-              network: body.network,
-              serviceID: body.serviceID || body.serviceId
-            })
-          : resolveVtpassServiceId(normalizedServiceType, {
-              network: body.network,
-              serviceID: body.serviceID || body.serviceId
-            });
-
-      if (normalizedServiceType === 'data' && !serviceID) {
-        return respondError(res, 400, 'Invalid network');
-      }
-
-      const providerPlans = await fetchProviderPlans(normalizedServiceType, {
-        network: body.network || undefined,
-        provider: body.provider || undefined,
-        serviceID
-      });
-
-      selectedPlan = providerPlans.find(plan => {
-        const metaVariation = String(
-          plan.meta?.variation_code ||
-          plan.meta?.variationCode ||
-          plan.meta?.code ||
-          ''
-        ).trim();
-
-        return (
-          String(plan.id).trim() === variationCode ||
-          metaVariation === variationCode
-        );
-      });
-
-      if (!selectedPlan) {
-        return respondError(res, 404, 'Selected plan not found');
-      }
-
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
-
-      providerPayload = buildProviderPayload({
-        serviceType: normalizedServiceType,
-        amount: selectedPlan.rawPrice,
-        phone: body.phone || destination || undefined,
-        meterNumber: body.meter_number || destination || undefined,
-        smartCardNumber: body.smartcard_number || destination || undefined,
-        accountNumber: body.accountNumber || destination || undefined,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        network: body.network,
-        selectedPlan,
-        extra: body.extra || {}
-      });
-
-      description = `${serviceName} - ${selectedPlan.name}`;
-    }
-
-    if (!pricing || !providerPayload) {
-      return respondError(res, 400, 'Unable to prepare purchase');
-    }
-
-    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
-
-    const client = await pool.connect();
-    let txRow = null;
-    let transactionStarted = false;
-
-    try {
-      await client.query('BEGIN');
-      transactionStarted = true;
-
-      const walletResult = await client.query(
-        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [userId]
-      );
-
-      const wallet = walletResult.rows[0];
-      if (!wallet) {
-        await client.query('ROLLBACK');
-        return respondError(res, 404, 'Wallet not found');
-      }
-
-      const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < Number(purchaseAmount)) {
-        await client.query('ROLLBACK');
-        return respondError(res, 400, 'Insufficient wallet balance');
-      }
-
-      await client.query(
-        `UPDATE wallets
-         SET balance = balance - $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
-
-      const inserted = await client.query(
-        `INSERT INTO transactions
-         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
-         VALUES
-         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
-         RETURNING *`,
-        [
-          uid('tx_'),
-          userId,
-          'purchase',
-          normalizedServiceType,
-          purchaseAmount,
-          uid('ref_'),
-          description,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing
-          })
-        ]
-      );
-
-      txRow = inserted.rows[0];
-
-      await client.query('COMMIT');
-      transactionStarted = false;
-    } catch (err) {
-      if (transactionStarted) {
-        try { await client.query('ROLLBACK'); } catch (_) {}
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    const providerResponse = await callProvider(
-      normalizedServiceType,
-      'buy',
-      providerPayload,
-      {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId,
-        selectedPlan,
-        planId: selectedPlan?.id,
-        planName: selectedPlan?.name,
-        extra: body.extra || {}
-      }
-    );
-
-    const success = providerRequestLooksSuccessful(providerResponse);
-
-    if (!success) {
-      await pool.query(
-        `UPDATE wallets
-         SET balance = balance + $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
-
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'failed',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} failed`,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing,
-            providerResponse
-          })
-        ]
-      );
-
-      return respondError(
-        res,
-        400,
-        providerResponse?.response_description || 'Purchase failed'
-      );
-    }
-
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'success',
-           meta = $2
-       WHERE id = $1`,
-      [
-        txRow.id,
-        JSON.stringify({
-          serviceType: normalizedServiceType,
-          serviceName,
-          providerPayload,
-          selectedPlan,
-          pricing,
-          providerResponse
-        })
-      ]
-    );
-
-    await addNotification(
-      userId,
-      `${serviceName} purchased`,
-      `${description} was successful`,
-      {
-        transactionId: txRow.id,
-        serviceType: normalizedServiceType,
-        pricing,
-        providerResponse
-      },
-      true
-    );
-
-    return respondOk(res, {
-      transaction: {
-        ...txRow,
-        status: 'success'
-      },
-      pricing,
-      providerResponse
-    }, `${serviceName} purchased successfully`);
-  } catch (err) {
-    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
-    console.error('ERROR MESSAGE:', err?.message);
-    console.error('ERROR STACK:', err?.stack);
-    console.error('ERROR RESPONSE DATA:', err?.response?.data);
-
-    return respondError(
-      res,
-      500,
-      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
-    );
-  }
+async function addNotification(userId, title, message, meta = {}, isSystem = true) {
+  await query(
+    `INSERT INTO notifications
+     (id, user_id, title, message, meta, is_read, is_system, created_at)
+     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
+    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
+  );
 }
 
 async function addTransaction({
@@ -555,37 +283,7 @@ const kycUpload = multer({
   }),
   limits: { fileSize: 12 * 1024 * 1024 }
 });
-async function ensureWallet(userId) {
-  const existing = await query(
-    `SELECT id FROM wallets WHERE user_id = $1`,
-    [userId]
-  );
 
-  if (existing.rows.length > 0) {
-    return existing.rows[0];
-  }
-
-  const created = await query(
-    `
-    INSERT INTO wallets (
-      user_id,
-      balance,
-      created_at,
-      updated_at
-    )
-    VALUES (
-      $1,
-      0,
-      NOW(),
-      NOW()
-    )
-    RETURNING *
-    `,
-    [userId]
-  );
-
-  return created.rows[0];
-}
 async function initDb() {
   await query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -1714,7 +1412,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
+app.get('/api/services/:serviceType/plans', async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1987,6 +1685,21 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 300`
+    );
+    return respondOk(res, { users: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
 app.get('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     const result = await query(
@@ -2020,7 +1733,6 @@ app.get('/api/admin/users/:id', requireAdmin, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 app.get('/api/admin/transactions', requireAdmin, async (req, res) => {
   try {
     const result = await query(
