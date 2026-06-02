@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Plans</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+      margin: 0;
+      color: #222;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    .btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 15px 0 20px;
+    }
+
+    .btns button {
+      padding: 10px 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: #333;
+      color: white;
+      font-size: 14px;
+      transition: 0.2s ease;
+    }
+
+    .btns button:hover {
+      background: #555;
+    }
+
+    .btns button.active {
+      background: #0b6bcb;
+    }
+
+    #status {
+      margin: 10px 0 15px;
+      font-weight: bold;
+      min-height: 24px;
+    }
+
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid #eee;
+    }
+
+    .plan-name {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .price {
+      color: #0a8f2a;
+      font-weight: 700;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #666;
+    }
+
+    .empty {
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      border: 1px solid #eee;
+    }
+
+    .loading {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>📡 Data Plans</h2>
+
+    <div class="btns">
+      <button type="button" onclick="loadPlans('mtn', this)">MTN</button>
+      <button type="button" onclick="loadPlans('glo', this)">GLO</button>
+      <button type="button" onclick="loadPlans('airtel', this)">Airtel</button>
+      <button type="button" onclick="loadPlans('9mobile', this)">9mobile</button>
+    </div>
+
+    <div id="status"></div>
+    <div id="plans" class="plans-grid"></div>
+  </div>
+
+  <script>
+    const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
+
+    function formatNaira(value) {
+      const num = Number(value);
+      if (Number.isNaN(num)) return "N/A";
+      return "₦" + num.toLocaleString("en-NG", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function cleanPlanName(name) {
+      if (!name) return "Data Plan";
+
+      let cleaned = String(name).trim();
+
+      // Remove trailing price-like text such as:
+      // " - N100", " - ₦1,000", " - NGN 500", " - 100"
+      cleaned = cleaned.replace(
+        /\s*[-–—]\s*(?:₦|N|NGN)?\s*[\d,]+(?:\.\d+)?\s*$/i,
+        ""
+      );
+
+      // Remove common duplicate whitespace
+      cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+      return cleaned || "Data Plan";
+    }
+
+    function setActiveButton(activeBtn) {
+      document.querySelectorAll(".btns button").forEach(btn => {
+        btn.classList.remove("active");
+      });
+      if (activeBtn) activeBtn.classList.add("active");
+    }
+
+    async function loadPlans(network, btnEl) {
+      setActiveButton(btnEl);
+
+      const statusEl = document.getElementById("status");
+      const plansEl = document.getElementById("plans");
+
+      statusEl.innerText = `Loading ${network.toUpperCase()} plans...`;
+      plansEl.innerHTML = `<div class="empty loading">Please wait...</div>`;
+
+      try {
+        const res = await fetch(`${BASE_URL}?network=${encodeURIComponent(network)}`);
+        const data = await res.json();
+
+        console.log("API RESPONSE:", data);
+
+        const plans = Array.isArray(data?.plans) ? data.plans : [];
+
+        if (!plans.length) {
+          statusEl.innerText = `${network.toUpperCase()} plans loaded`;
+          plansEl.innerHTML = `<div class="empty">No plans found</div>`;
+          return;
+        }
+
+        statusEl.innerText = `${network.toUpperCase()} plans loaded`;
+        plansEl.innerHTML = "";
+
+        plans.forEach(plan => {
+          const finalPrice = plan?.pricing?.finalPrice;
+          const displayName = cleanPlanName(plan?.name);
+
+          const div = document.createElement("div");
+          div.className = "card";
+
+          div.innerHTML = `
+            <div class="plan-name">${displayName}</div>
+            <div class="price">${formatNaira(finalPrice)}</div>
+            <div class="small">Your price only</div>
+          `;
+
+          plansEl.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+        statusEl.innerText = "Error loading plans";
+        plansEl.innerHTML = `<div class="empty">Unable to load plans right now.</div>`;
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      const firstBtn = document.querySelector(".btns button");
+      loadPlans("mtn", firstBtn);
+    });
+  </script>
+</body>
+</html>
