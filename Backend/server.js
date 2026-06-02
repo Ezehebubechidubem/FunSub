@@ -1132,7 +1132,32 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/test/check-wallet', async (req, res) => {
+  const result = await pool.query(
+    'SELECT * FROM wallets WHERE user_id = 1'
+  );
 
+  res.json(result.rows);
+});
+app.get('/test/fund-wallet', async (req, res) => {
+  try {
+    await pool.query(`
+      UPDATE wallets
+      SET balance = balance + 100000
+      WHERE user_id = 1
+    `);
+
+    res.json({
+      success: true,
+      message: 'Wallet funded'
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { fullName, email, phone, password, confirmPassword, state } = req.body || {};
