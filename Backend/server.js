@@ -1145,25 +1145,42 @@ app.get('/test/wallets', async (req, res) => {
     });
   }
 });
-app.get('/test/check-wallet', async (req, res) => {
-  const result = await pool.query(
-    'SELECT * FROM wallets WHERE user_id = 1'
-  );
-
-  res.json(result.rows);
-});
 app.get('/test/fund-wallet', async (req, res) => {
   try {
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE wallets
       SET balance = balance + 100000
-      WHERE user_id = 1
-    `);
+      WHERE user_id = $1
+      `,
+      ['usr_6660c08a0dd14129ab77876b69952de6']
+    );
 
     res.json({
       success: true,
-      message: 'Wallet funded'
+      message: 'Wallet funded successfully'
     });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
+app.get('/test/check-wallet', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM wallets
+      WHERE user_id = $1
+      `,
+      ['usr_6660c08a0dd14129ab77876b69952de6']
+    );
+
+    res.json(result.rows);
+
   } catch (err) {
     res.status(500).json({
       success: false,
