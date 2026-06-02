@@ -1132,6 +1132,19 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/test/wallets', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM wallets LIMIT 20'
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({
+      error: err.message
+    });
+  }
+});
 app.get('/test/check-wallet', async (req, res) => {
   const result = await pool.query(
     'SELECT * FROM wallets WHERE user_id = 1'
