@@ -542,13 +542,14 @@ function providerHeaders(kind = 'get') {
 
   if (kind === 'get') {
     if (VTPASS_PUBLIC_KEY) headers['public-key'] = VTPASS_PUBLIC_KEY;
+    if (VTPASS_SECRET_KEY) headers['secret-key'] = VTPASS_SECRET_KEY;
   } else if (kind === 'post') {
     if (VTPASS_SECRET_KEY) headers['secret-key'] = VTPASS_SECRET_KEY;
+    if (VTPASS_PUBLIC_KEY) headers['public-key'] = VTPASS_PUBLIC_KEY;
   }
 
   return headers;
 }
-
 function providerAuthPayload() {
   return {};
 }
@@ -613,12 +614,32 @@ function normalizeProviderPlan(plan) {
 
   return {
     id: plan.variation_code || plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
+    variationCode: plan.variation_code || plan.variationCode || plan.code || plan.id || '',
     name: plan.name || plan.variation_name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
     rawPrice: Number(rawPrice),
     meta: plan
   };
 }
+function normalizeVariationCode(v) {
+  return String(v || '').trim().toLowerCase();
+}
 
+function findMatchingPlan(providerPlans, variationCode) {
+  const target = normalizeVariationCode(variationCode);
+
+  return providerPlans.find(plan => {
+    const candidates = [
+      plan?.id,
+      plan?.variationCode,
+      plan?.meta?.variation_code,
+      plan?.meta?.variationCode,
+      plan?.meta?.code,
+      plan?.meta?.id
+    ].map(normalizeVariationCode);
+
+    return candidates.includes(target);
+  });
+}
 function resolveVtpassServiceId(serviceType, source = {}) {
   const explicit = source.serviceID || source.serviceId || source.service_id;
   if (explicit) return String(explicit).trim();
@@ -901,20 +922,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         serviceID
       })).map(normalizeProviderPlan);
 
-      selectedPlan = providerPlans.find(plan => {
-        const planId = String(plan.id || '').trim().toLowerCase();
-        const metaVariation = String(
-          plan.meta?.variation_code ||
-          plan.meta?.variationCode ||
-          plan.meta?.code ||
-          ''
-        ).trim().toLowerCase();
-
-        return (
-          planId === variationCode.toLowerCase() ||
-          metaVariation === variationCode.toLowerCase()
-        );
-      });
+      selectedPlan = findMatchingPlan(providerPlans, variationCode);
 
       if (!selectedPlan) {
         return respondError(res, 404, 'Variation code does not exist for selected product');
