@@ -830,14 +830,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 401, 'Unauthorized');
     }
 
-    console.log('REQ.USER IN PROCESS:', req.user);
-    console.log('REQ.BODY IN PROCESS:', req.body);
-
-    let pricing;
-    let selectedPlan = null;
-    let providerPayload = null;
-    let description = `${serviceName} purchase`;
-
     const rawDestination =
       body.phone ||
       body.smartcard_number ||
@@ -847,8 +839,12 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       body.billersCode ||
       '';
 
-    const destination =
-      normalizePhone(rawDestination) || String(rawDestination).trim();
+    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    let pricing = null;
+    let selectedPlan = null;
+    let providerPayload = null;
+    let description = `${serviceName} purchase`;
 
     if (normalizedServiceType === 'airtime') {
       const amount = toNumber(body.amount, 0);
@@ -895,48 +891,39 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         serviceID: body.serviceID || body.serviceId
       });
 
-      if (normalizedServiceType === 'data' && !serviceID) {
-        return respondError(res, 400, 'Invalid network');
+      if (!serviceID) {
+        return respondError(res, 400, 'Invalid serviceID');
       }
 
-      const planAmount = Number(body.plan_amount || body.amount || 0);
+      const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
+        network: body.network || undefined,
+        provider: body.provider || undefined,
+        serviceID
+      })).map(normalizeProviderPlan);
 
-      if (Number.isFinite(planAmount) && planAmount > 0) {
-        selectedPlan = {
-          id: variationCode,
-          name: body.plan_name || `${serviceName} Plan`,
-          rawPrice: planAmount,
-          meta: {}
-        };
-      } else {
-        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-          network: body.network || undefined,
-          provider: body.provider || undefined,
-          serviceID
-        })).map(normalizeProviderPlan);
+      selectedPlan = providerPlans.find(plan => {
+        const planId = String(plan.id || '').trim().toLowerCase();
+        const metaVariation = String(
+          plan.meta?.variation_code ||
+          plan.meta?.variationCode ||
+          plan.meta?.code ||
+          ''
+        ).trim().toLowerCase();
 
-        selectedPlan = providerPlans.find(plan => {
-          const planId = String(plan.id || '').trim().toLowerCase();
-          const metaVariation = String(
-            plan.meta?.variation_code ||
-            plan.meta?.variationCode ||
-            plan.meta?.code ||
-            ''
-          ).trim().toLowerCase();
+        return (
+          planId === variationCode.toLowerCase() ||
+          metaVariation === variationCode.toLowerCase()
+        );
+      });
 
-          return (
-            planId === variationCode.toLowerCase() ||
-            metaVariation === variationCode.toLowerCase()
-          );
-        });
-
-        if (!selectedPlan) {
-          return respondError(res, 404, 'Selected plan not found');
-        }
+      if (!selectedPlan) {
+        return respondError(res, 404, 'Variation code does not exist for selected product');
       }
 
+      // Apply markup only internally
       pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
+      // Send ONLY VTpass raw price to VTpass
       providerPayload = buildProviderPayload({
         serviceType: normalizedServiceType,
         amount: selectedPlan.rawPrice,
@@ -951,7 +938,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         extra: {
           ...(body.extra || {}),
           serviceID,
-          variation_code: variationCode
+          variation_code: selectedPlan.id
         }
       });
 
@@ -1026,7 +1013,9 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       transactionStarted = false;
     } catch (err) {
       if (transactionStarted) {
-        try { await client.query('ROLLBACK'); } catch (_) {}
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
       }
       throw err;
     } finally {
@@ -1891,7 +1880,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1954,6 +1943,7 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
           id: item.variation_code || null,
           name: item.name || 'Data Plan',
           rawPrice,
+          displayPrice: pricing.basePrice,
           pricing: {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
@@ -1990,6 +1980,7 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
       const pricing = await applyMarkup(serviceType, plan.rawPrice);
       withPricing.push({
         ...plan,
+        displayPrice: pricing.basePrice,
         pricing: {
           basePrice: pricing.basePrice,
           markupPercent: pricing.markupPercent,
