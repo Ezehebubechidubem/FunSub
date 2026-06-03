@@ -238,32 +238,26 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     if (!userId) {
       return respondError(res, 401, 'Unauthorized');
     }
-console.log("REQ.USER IN PROCESS:", req.user);
-console.log("REQ.BODY IN PROCESS:", req.body);
+
+    console.log('REQ.USER IN PROCESS:', req.user);
+    console.log('REQ.BODY IN PROCESS:', req.body);
+
     let pricing;
     let selectedPlan = null;
     let providerPayload = null;
     let description = `${serviceName} purchase`;
 
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      '';
+
     const destination =
-      normalizePhone(
-        body.phone ||
-        body.smartcard_number ||
-        body.meter_number ||
-        body.customer_id ||
-        body.accountNumber ||
-        body.billersCode ||
-        ''
-      ) ||
-      String(
-        body.phone ||
-        body.smartcard_number ||
-        body.meter_number ||
-        body.customer_id ||
-        body.accountNumber ||
-        body.billersCode ||
-        ''
-      ).trim();
+      normalizePhone(rawDestination) || String(rawDestination).trim();
 
     if (normalizedServiceType === 'airtime') {
       const amount = toNumber(body.amount, 0);
@@ -305,16 +299,10 @@ console.log("REQ.BODY IN PROCESS:", req.body);
         return respondError(res, 400, 'Customer number is required');
       }
 
-      const serviceID =
-        normalizedServiceType === 'data'
-          ? resolveVtpassServiceId('data', {
-              network: body.network,
-              serviceID: body.serviceID || body.serviceId
-            })
-          : resolveVtpassServiceId(normalizedServiceType, {
-              network: body.network,
-              serviceID: body.serviceID || body.serviceId
-            });
+      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
+        network: body.network,
+        serviceID: body.serviceID || body.serviceId
+      });
 
       if (normalizedServiceType === 'data' && !serviceID) {
         return respondError(res, 400, 'Invalid network');
@@ -322,17 +310,41 @@ console.log("REQ.BODY IN PROCESS:", req.body);
 
       const planAmount = Number(body.plan_amount || body.amount || 0);
 
-if (!planAmount || planAmount <= 0) {
-  return respondError(res, 400, 'Plan amount is required');
-}
+      if (Number.isFinite(planAmount) && planAmount > 0) {
+        selectedPlan = {
+          id: variationCode,
+          name: body.plan_name || `${serviceName} Plan`,
+          rawPrice: planAmount,
+          meta: {}
+        };
+      } else {
+        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
+          network: body.network || undefined,
+          provider: body.provider || undefined,
+          serviceID
+        })).map(normalizeProviderPlan);
 
-selectedPlan = {
-  id: variationCode,
-  name: body.plan_name || 'Data Plan',
-  rawPrice: planAmount
-};
+        selectedPlan = providerPlans.find(plan => {
+          const planId = String(plan.id || '').trim().toLowerCase();
+          const metaVariation = String(
+            plan.meta?.variation_code ||
+            plan.meta?.variationCode ||
+            plan.meta?.code ||
+            ''
+          ).trim().toLowerCase();
 
-pricing = await applyMarkup(normalizedServiceType, planAmount);
+          return (
+            planId === variationCode.toLowerCase() ||
+            metaVariation === variationCode.toLowerCase()
+          );
+        });
+
+        if (!selectedPlan) {
+          return respondError(res, 404, 'Selected plan not found');
+        }
+      }
+
+      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
       providerPayload = buildProviderPayload({
         serviceType: normalizedServiceType,
@@ -345,7 +357,11 @@ pricing = await applyMarkup(normalizedServiceType, planAmount);
         planName: selectedPlan.name,
         network: body.network,
         selectedPlan,
-        extra: body.extra || {}
+        extra: {
+          ...(body.extra || {}),
+          serviceID,
+          variation_code: variationCode
+        }
       });
 
       description = `${serviceName} - ${selectedPlan.name}`;
@@ -1021,7 +1037,13 @@ async function fetchProviderPlans(serviceType, params = {}) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const serviceID = resolveVtpassServiceId(normalizedServiceType, params);
 
-  const response = await callProvider(normalizedServiceType, 'plans', {}, { ...params, serviceID });
+  const response = await callProvider(
+    normalizedServiceType,
+    'plans',
+    {},
+    { ...params, serviceID }
+  );
+
   return extractArrayFromProviderResponse(response);
 }
 
@@ -1044,6 +1066,51 @@ function buildProviderPayload({
     ...extra
   });
 
+  const request_id = extra.request_id || uid('vt_');
+  const variation_code = resolveVtpassVariationCode(normalizedServiceType, {
+    selectedPlan,
+    planId,
+    planName,
+    extra
+  });
+
+  const payload = {
+    request_id,
+    serviceID
+  };
+
+  if (normalizedServiceType === 'airtime') {
+    payload.amount = amount;
+    payload.phone = phone;
+  } else if (normalizedServiceType === 'data') {
+    payload.variation_code = variation_code;
+    payload.billersCode = phone || accountNumber || meterNumber || smartCardNumber || '';
+    payload.phone = phone || accountNumber || meterNumber || smartCardNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else if (normalizedServiceType === 'cable_tv') {
+    payload.variation_code = variation_code;
+    payload.billersCode = smartCardNumber || accountNumber || meterNumber || phone || '';
+    payload.phone = phone || smartCardNumber || accountNumber || meterNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else if (normalizedServiceType === 'electricity') {
+    payload.variation_code = variation_code;
+    payload.billersCode = meterNumber || accountNumber || phone || '';
+    payload.phone = phone || meterNumber || accountNumber || '';
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+  } else {
+    if (variation_code) payload.variation_code = variation_code;
+    if (phone) payload.phone = phone;
+    if (amount !== undefined && amount !== null && amount !== '') payload.amount = amount;
+    if (meterNumber) payload.billersCode = meterNumber;
+    if (smartCardNumber) payload.smartcard_number = smartCardNumber;
+    if (accountNumber) payload.account_number = accountNumber;
+  }
+
+  return compactObject({
+    ...payload,
+    ...extra
+  });
+}
   const request_id = extra.request_id || uid('vt_');
   const variation_code = resolveVtpassVariationCode(normalizedServiceType, {
     selectedPlan,
@@ -1903,16 +1970,9 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
   }
 });
 app.post('/api/services/airtime', requireAuth, async (req, res) => processServicePayment(req, res, 'airtime', 'Airtime'));
-app.post('/api/services/data', async (req, res) => {
-  req.user = {
-    id: 'usr_6660c08a0dd14129ab77876b69952de6',
-    role: 'user'
-  };
-
-  return processServicePayment(req, res, 'data', 'Data');
-});
-
-  
+app.post('/api/services/data', requireAuth, async (req, res) =>
+  processServicePayment(req, res, 'data', 'Data')
+); 
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
 app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
 app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
