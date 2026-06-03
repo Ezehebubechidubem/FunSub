@@ -1912,8 +1912,7 @@ app.post('/api/services/data', async (req, res) => {
   return processServicePayment(req, res, 'data', 'Data');
 });
 
-  return processServicePayment(req, res, 'data', 'Data');
-});
+  
 app.post('/api/services/electricity', requireAuth, async (req, res) => processServicePayment(req, res, 'electricity', 'Electricity'));
 app.post('/api/services/cable', requireAuth, async (req, res) => processServicePayment(req, res, 'cable_tv', 'Cable TV'));
 app.post('/api/services/betting', requireAuth, async (req, res) => processServicePayment(req, res, 'betting', 'Betting'));
