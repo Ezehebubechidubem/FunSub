@@ -1202,6 +1202,15 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/api/debug/vtpass', (req, res) => {
+  res.json({
+    apiKey: process.env.VTPASS_API_KEY,
+    secretKey: process.env.VTPASS_SECRET_KEY
+      ? process.env.VTPASS_SECRET_KEY.slice(0, 10) + '...'
+      : null,
+    baseURL: process.env.VTPASS_BASE_URL
+  });
+});
 app.get('/api/debug/auth-check', requireDebugAccess, (req, res) => {
   try {
     const token = authHeader(req);
