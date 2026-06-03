@@ -516,19 +516,72 @@ async function getMarkupPercent(serviceType) {
   return Number(rule.markup_percent ?? getDefaultMarkupPercent(serviceType));
 }
 
-async function applyMarkup(serviceType, baseAmount) {
-  const markupPercent = await getMarkupPercent(serviceType);
-  const base = Number(baseAmount);
-  const fee = (base * markupPercent) / 100;
-  const finalPrice = base + fee;
+async function applyMarkup(serviceType, basePrice) {
+  const price = Number(basePrice || 0);
+
+  if (!Number.isFinite(price) || price < 0) {
+    return {
+      basePrice: 0,
+      markupPercent: 0,
+      markupFee: 0,
+      finalPrice: 0
+    };
+  }
+
+  const markupPercentMap = {
+    airtime: 0,
+    data: 3,
+    cable_tv: 3,
+    electricity: 3,
+    betting: 3,
+    recharge_pin: 3,
+    data_pin: 3,
+    exam_pin: 3
+  };
+
+  const markupPercent = Number(markupPercentMap[serviceType] ?? 0);
+  const markupFee = Number(((price * markupPercent) / 100).toFixed(2));
+  const finalPrice = Number((price + markupFee).toFixed(2));
 
   return {
-    serviceType,
-    basePrice: Number(base.toFixed(2)),
-    markupPercent: Number(markupPercent.toFixed(2)),
-    markupFee: Number(fee.toFixed(2)),
-    finalPrice: Number(finalPrice.toFixed(2))
+    basePrice: price,
+    markupPercent,
+    markupFee,
+    finalPrice
   };
+}
+
+async function fetchVtpassDataVariations(serviceID) {
+  const response = await axios.get(
+    `https://vtpass.com/api/service-variations?serviceID=${encodeURIComponent(serviceID)}`,
+    {
+      headers: {
+        'api-key': VTPASS_API_KEY,
+        'secret-key': VTPASS_SECRET_KEY,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    }
+  );
+
+  return (
+    response.data?.content?.variations ||
+    response.data?.content?.varations ||
+    response.data?.variations ||
+    response.data?.varations ||
+    []
+  );
+}
+
+function resolveDataServiceID(network, serviceIDFromBody = '') {
+  const serviceMap = {
+    mtn: 'mtn-data',
+    glo: 'glo-data',
+    airtel: 'airtel-data',
+    '9mobile': 'etisalat-data'
+  };
+
+  return serviceMap[String(network || '').trim().toLowerCase()] || String(serviceIDFromBody || '').trim();
 }
 
 function providerHeaders(kind = 'get') {
@@ -840,307 +893,241 @@ function buildProviderPayload({
   });
 }
   
-async function processServicePayment(req, res, serviceType, serviceName) {
-  const normalizedServiceType = normalizeServiceType(serviceType);
-
+async function processServicePayment(req, res, serviceType, serviceLabel) {
   try {
-    const body = req.body || {};
-    const userId = req.user?.id || req.user?.userId;
+    const user = req.user;
 
-    if (!userId) {
-      return respondError(res, 401, 'Unauthorized');
-    }
+    const network = String(req.body.network || '').trim().toLowerCase();
+    const phone = String(req.body.phone || '').trim();
+    const variation_code = String(req.body.variation_code || '').trim();
+    const serviceIDFromBody = String(req.body.serviceID || '').trim();
 
-    const rawDestination =
-      body.phone ||
-      body.smartcard_number ||
-      body.meter_number ||
-      body.customer_id ||
-      body.accountNumber ||
-      body.billersCode ||
-      '';
+    if (serviceType === 'data') {
+      const serviceID = resolveDataServiceID(network, serviceIDFromBody);
 
-    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
-
-    let pricing = null;
-    let selectedPlan = null;
-    let providerPayload = null;
-    let description = `${serviceName} purchase`;
-
-    if (normalizedServiceType === 'airtime') {
-      const amount = toNumber(body.amount, 0);
-
-      if (amount <= 0 || !destination) {
-        return respondError(res, 400, 'amount and phone are required');
+      if (!serviceID) {
+        return respondError(res, 400, 'Invalid network');
       }
 
-      pricing = await applyMarkup('airtime', amount);
+      if (!phone) {
+        return respondError(res, 400, 'Phone number is required');
+      }
 
-      providerPayload = buildProviderPayload({
-        serviceType: 'airtime',
-        amount,
-        phone: destination,
-        network: body.network,
-        extra: body.extra || {}
-      });
-    } else {
-      const variationCode = String(
-        body.variation_code ||
-        body.planId ||
-        body.plan_id ||
-        body.planCode ||
-        body.code ||
-        ''
-      ).trim();
-
-      if (!variationCode) {
+      if (!variation_code) {
         return respondError(res, 400, 'variation_code is required');
       }
 
-      if (
-        !destination &&
-        !body.phone &&
-        !body.smartcard_number &&
-        !body.meter_number &&
-        !body.customer_id
-      ) {
-        return respondError(res, 400, 'Customer number is required');
+      const vtpassRes = await axios.get(
+        `https://vtpass.com/api/service-variations?serviceID=${encodeURIComponent(serviceID)}`,
+        {
+          headers: {
+            'api-key': VTPASS_API_KEY,
+            'secret-key': VTPASS_SECRET_KEY,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      const variations =
+        vtpassRes.data?.content?.variations ||
+        vtpassRes.data?.content?.varations ||
+        vtpassRes.data?.variations ||
+        vtpassRes.data?.varations ||
+        [];
+
+      if (!Array.isArray(variations)) {
+        return respondError(res, 500, 'Invalid VTpass response structure');
       }
 
-      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId
-      });
-
-      if (!serviceID) {
-        return respondError(res, 400, 'Invalid serviceID');
-      }
-
-      const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-        network: body.network || undefined,
-        provider: body.provider || undefined,
-        serviceID
-      })).map(normalizeProviderPlan);
-      console.log("========== DEBUG ==========");
-console.log("REQUESTED:", variationCode);
-console.log("SERVICE ID:", serviceID);
-console.log("PROVIDER PLANS COUNT:", providerPlans.length);
-
-providerPlans.forEach(p => {
-  console.log("PLAN:", {
-    id: p.id,
-    variationCode: p.variationCode,
-    name: p.name
-  });
-});
-      selectedPlan = findMatchingPlan(providerPlans, variationCode);
+      const selectedPlan = variations.find((v) =>
+        String(v?.variation_code || '').trim() === variation_code
+      );
 
       if (!selectedPlan) {
-        return respondError(res, 404, 'Variation code does not exist for selected product');
+        console.log('VTpass plan mismatch', {
+          serviceID,
+          network,
+          variation_code,
+          availableCodes: variations.map(v => v?.variation_code).filter(Boolean)
+        });
+
+        return respondError(res, 400, 'VARIATION CODE DOES NOT EXIST FOR SELECTED PRODUCT');
       }
 
-      // Apply markup only internally
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+      const basePrice = Number(selectedPlan?.variation_amount || 0);
+      const pricing = await applyMarkup('data', basePrice);
 
-      // Send ONLY VTpass raw price to VTpass
-      providerPayload = buildProviderPayload({
-        serviceType: normalizedServiceType,
-        amount: selectedPlan.rawPrice,
-        phone: body.phone || destination || undefined,
-        meterNumber: body.meter_number || destination || undefined,
-        smartCardNumber: body.smartcard_number || destination || undefined,
-        accountNumber: body.accountNumber || destination || undefined,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        network: body.network,
+      const vtpassPayload = {
+        serviceID,
+        variation_code: selectedPlan.variation_code,
+        phone
+      };
+
+      console.log('DATA PURCHASE DEBUG:', {
+        userId: user?.id,
+        serviceID,
+        network,
         selectedPlan,
-        extra: {
-          ...(body.extra || {}),
-          serviceID,
-          variation_code: selectedPlan.id
-        }
+        pricing,
+        vtpassPayload
       });
 
-      description = `${serviceName} - ${selectedPlan.name}`;
-    }
-
-    if (!pricing || !providerPayload) {
-      return respondError(res, 400, 'Unable to prepare purchase');
-    }
-
-    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
-
-    const client = await pool.connect();
-    let txRow = null;
-    let transactionStarted = false;
-
-    try {
-      await client.query('BEGIN');
-      transactionStarted = true;
-
-      const walletResult = await client.query(
-        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [userId]
-      );
-
-      const wallet = walletResult.rows[0];
-      if (!wallet) {
-        await client.query('ROLLBACK');
-        return respondError(res, 404, 'Wallet not found');
+      if (!Number.isFinite(pricing.finalPrice) || pricing.finalPrice <= 0) {
+        return respondError(res, 400, 'Invalid computed purchase amount');
       }
 
-      const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < Number(purchaseAmount)) {
-        await client.query('ROLLBACK');
-        return respondError(res, 400, 'Insufficient wallet balance');
+      if (typeof deductWalletBalance === 'function') {
+        await deductWalletBalance(user.id, pricing.finalPrice, {
+          serviceType: 'data',
+          serviceLabel,
+          serviceID,
+          variation_code: selectedPlan.variation_code,
+          basePrice,
+          markupFee: pricing.markupFee
+        });
       }
 
-      await client.query(
-        `UPDATE wallets
-         SET balance = balance - $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
+      const providerResponse = await axios.post(
+        'https://vtpass.com/api/pay',
+        vtpassPayload,
+        {
+          headers: {
+            'api-key': VTPASS_API_KEY,
+            'secret-key': VTPASS_SECRET_KEY,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
       );
 
-      const inserted = await client.query(
-        `INSERT INTO transactions
-         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
-         VALUES
-         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
-         RETURNING *`,
-        [
-          uid('tx_'),
-          userId,
-          'purchase',
-          normalizedServiceType,
-          purchaseAmount,
-          uid('ref_'),
-          description,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing
-          })
-        ]
-      );
+      const providerData = providerResponse.data || {};
+      const providerCode = String(providerData?.response_description || '').trim();
 
-      txRow = inserted.rows[0];
+      if (providerCode && providerCode !== '000' && providerCode.toLowerCase() !== 'success') {
+        console.log('VTPASS REJECTED DATA PURCHASE', providerData);
 
-      await client.query('COMMIT');
-      transactionStarted = false;
-    } catch (err) {
-      if (transactionStarted) {
-        try {
-          await client.query('ROLLBACK');
-        } catch (_) {}
+        if (typeof refundWalletBalance === 'function') {
+          await refundWalletBalance(user.id, pricing.finalPrice, {
+            serviceType: 'data',
+            serviceLabel,
+            reason: 'VTpass rejected transaction',
+            providerData
+          });
+        }
+
+        return respondError(
+          res,
+          400,
+          providerData?.message || providerData?.description || 'Data purchase failed'
+        );
       }
-      throw err;
-    } finally {
-      client.release();
+
+      return respondOk(res, {
+        message: 'Purchase successful',
+        serviceType: 'data',
+        serviceID,
+        network,
+        variation_code: selectedPlan.variation_code,
+        providerAmount: basePrice,
+        markupPercent: pricing.markupPercent,
+        markupFee: pricing.markupFee,
+        chargedAmount: pricing.finalPrice,
+        providerResponse: providerData
+      });
     }
 
-    const providerResponse = await callProvider(
-      normalizedServiceType,
-      'buy',
-      providerPayload,
-      {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId,
-        selectedPlan,
-        planId: selectedPlan?.id,
-        planName: selectedPlan?.name,
-        extra: body.extra || {}
+    if (serviceType === 'airtime') {
+      const amount = Number(req.body.amount || 0);
+
+      if (!phone) {
+        return respondError(res, 400, 'Phone number is required');
       }
-    );
 
-    const success = providerRequestLooksSuccessful(providerResponse);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return respondError(res, 400, 'Amount is required');
+      }
 
-    if (!success) {
-      await pool.query(
-        `UPDATE wallets
-         SET balance = balance + $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
+      const pricing = await applyMarkup('airtime', amount);
 
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'failed',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} failed`,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing,
-            providerResponse
-          })
-        ]
-      );
+      const vtpassPayload = {
+        serviceID: 'mtn',
+        phone,
+        amount: pricing.basePrice
+      };
 
-      return respondError(
-        res,
-        400,
-        providerResponse?.response_description || 'Purchase failed'
-      );
-    }
-
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'success',
-           meta = $2
-       WHERE id = $1`,
-      [
-        txRow.id,
-        JSON.stringify({
-          serviceType: normalizedServiceType,
-          serviceName,
-          providerPayload,
-          selectedPlan,
-          pricing,
-          providerResponse
-        })
-      ]
-    );
-
-    await addNotification(
-      userId,
-      `${serviceName} purchased`,
-      `${description} was successful`,
-      {
-        transactionId: txRow.id,
-        serviceType: normalizedServiceType,
+      console.log('AIRTIME PURCHASE DEBUG:', {
+        userId: user?.id,
+        network,
+        phone,
+        requestedAmount: amount,
         pricing,
-        providerResponse
-      },
-      true
-    );
+        vtpassPayload
+      });
 
-    return respondOk(res, {
-      transaction: {
-        ...txRow,
-        status: 'success'
-      },
-      pricing,
-      providerResponse
-    }, `${serviceName} purchased successfully`);
+      if (typeof deductWalletBalance === 'function') {
+        await deductWalletBalance(user.id, pricing.finalPrice, {
+          serviceType: 'airtime',
+          serviceLabel,
+          amount: pricing.finalPrice
+        });
+      }
+
+      const providerResponse = await axios.post(
+        'https://vtpass.com/api/pay',
+        vtpassPayload,
+        {
+          headers: {
+            'api-key': VTPASS_API_KEY,
+            'secret-key': VTPASS_SECRET_KEY,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      const providerData = providerResponse.data || {};
+      const providerCode = String(providerData?.response_description || '').trim();
+
+      if (providerCode && providerCode !== '000' && providerCode.toLowerCase() !== 'success') {
+        console.log('VTPASS REJECTED AIRTIME PURCHASE', providerData);
+
+        if (typeof refundWalletBalance === 'function') {
+          await refundWalletBalance(user.id, pricing.finalPrice, {
+            serviceType: 'airtime',
+            serviceLabel,
+            reason: 'VTpass rejected transaction',
+            providerData
+          });
+        }
+
+        return respondError(
+          res,
+          400,
+          providerData?.message || providerData?.description || 'Airtime purchase failed'
+        );
+      }
+
+      return respondOk(res, {
+        message: 'Purchase successful',
+        serviceType: 'airtime',
+        network,
+        providerAmount: pricing.basePrice,
+        markupPercent: pricing.markupPercent,
+        markupFee: pricing.markupFee,
+        chargedAmount: pricing.finalPrice,
+        providerResponse: providerData
+      });
+    }
+
+    return respondError(res, 400, `Unsupported service type: ${serviceType}`);
   } catch (err) {
-    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
-    console.error('ERROR MESSAGE:', err?.message);
-    console.error('ERROR STACK:', err?.stack);
-    console.error('ERROR RESPONSE DATA:', err?.response?.data);
+    console.error(err.response?.data || err.message || err);
 
     return respondError(
       res,
       500,
-      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
+      err.response?.data?.message || err.response?.data?.description || 'Service payment failed'
     );
   }
 }
@@ -1916,53 +1903,33 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
-    // Special handling for DATA plans
     if (serviceType === 'data') {
       const network = String(req.query.network || 'mtn').trim().toLowerCase();
-
-      const serviceMap = {
-        mtn: 'mtn-data',
-        glo: 'glo-data',
-        airtel: 'airtel-data',
-        '9mobile': 'etisalat-data'
-      };
-
-      const serviceID = serviceMap[network];
+      const serviceID = resolveDataServiceID(network, req.query.serviceID || req.query.serviceId || '');
 
       if (!serviceID) {
         return respondError(res, 400, 'Invalid network');
       }
 
-      const response = await axios.get(
-        `https://vtpass.com/api/service-variations?serviceID=${serviceID}`,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const variations = await fetchVtpassDataVariations(serviceID);
 
-      const variations =
-        response.data?.content?.variations ||
-        response.data?.content?.varations ||
-        response.data?.variations ||
-        response.data?.varations ||
-        [];
+      if (!Array.isArray(variations)) {
+        return respondError(res, 500, 'Invalid VTpass response structure');
+      }
 
       const plans = [];
 
       for (const item of variations) {
-        const rawPrice = Number(item.variation_amount || 0);
+        const variation_code = String(item?.variation_code || '').trim();
+        const rawPrice = Number(item?.variation_amount || 0);
         const pricing = await applyMarkup('data', rawPrice);
 
         plans.push({
-          id: item.variation_code || null,
-          name: item.name || 'Data Plan',
+          variation_code,
+          id: variation_code,
+          name: item?.name || 'Data Plan',
           rawPrice,
-          displayPrice: pricing.basePrice,
+          fixedPrice: item?.fixedPrice || item?.fixed_price || 'Yes',
           pricing: {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
@@ -1972,18 +1939,27 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
         });
       }
 
-      return respondOk(res, {
-        serviceType,
-        network,
-        plans
-      }, 'Plans loaded');
+      return respondOk(
+        res,
+        {
+          serviceType,
+          network,
+          serviceID,
+          plans
+        },
+        'Plans loaded'
+      );
     }
 
-    if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH) {
-      return respondOk(res, {
-        serviceType,
-        plans: []
-      }, 'Airtime does not require plans');
+    if (serviceType === 'airtime') {
+      return respondOk(
+        res,
+        {
+          serviceType,
+          plans: []
+        },
+        'Airtime does not require plans'
+      );
     }
 
     const providerPlans = await fetchProviderPlans(serviceType, {
@@ -1999,7 +1975,6 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       const pricing = await applyMarkup(serviceType, plan.rawPrice);
       withPricing.push({
         ...plan,
-        displayPrice: pricing.basePrice,
         pricing: {
           basePrice: pricing.basePrice,
           markupPercent: pricing.markupPercent,
@@ -2009,10 +1984,14 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       });
     }
 
-    return respondOk(res, {
-      serviceType,
-      plans: withPricing
-    }, 'Plans loaded');
+    return respondOk(
+      res,
+      {
+        serviceType,
+        plans: withPricing
+      },
+      'Plans loaded'
+    );
   } catch (err) {
     console.error(err.response?.data || err.message || err);
     return respondError(res, 500, 'Unable to load plans');
