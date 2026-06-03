@@ -1132,7 +1132,16 @@ async function requeryVtpassTransaction(requestId) {
 
   return response.data;
 }
+function requireDebugAccess(req, res, next) {
+  const got = req.headers['x-debug-key'] || req.query.debug_key;
+  const expected = process.env.DEBUG_KEY;
 
+  if (!expected || got !== expected) {
+    return respondError(res, 403, 'Debug access denied');
+  }
+
+  next();
+}
 async function applyWalletCreditWithFee(userId, grossAmount) {
   const fee = applyWalletFundingFee(grossAmount);
 
@@ -1170,6 +1179,46 @@ app.get('/health', async (req, res) => {
   }
 });
 /* AUTH */
+app.get('/api/debug/auth-check', requireDebugAccess, (req, res) => {
+  try {
+    const token = authHeader(req);
+    if (!token) {
+      return respondOk(res, {
+        step: 'token-missing',
+        authorization: req.headers.authorization || null
+      }, 'Auth debug');
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    return respondOk(res, {
+      step: 'token-ok',
+      token,
+      decoded
+    }, 'Auth debug');
+  } catch (err) {
+    return respondOk(res, {
+      step: 'token-error',
+      authorization: req.headers.authorization || null,
+      error: err.message
+    }, 'Auth debug');
+  }
+});
+app.post('/api/debug/echo', requireDebugAccess, express.json(), (req, res) => {
+  return respondOk(res, {
+    headers: req.headers,
+    body: req.body
+  }, 'Debug echo');
+});
+app.get('/api/debug/auth', requireDebugAccess, (req, res) => {
+  return respondOk(res, {
+    authorization: req.headers.authorization || null,
+    cookies: req.headers.cookie || null,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'] || null
+  }, 'Debug auth data');
+});
+
 app.get('/api/test-auth', requireAuth, (req, res) => {
   res.json({
     success: true,
