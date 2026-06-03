@@ -125,33 +125,69 @@ function debugLog(title, data) {
   console.log('================================\n');
 }
 
-// Added for Render: fail fast if DATABASE_URL is missing
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is missing on Render');
-}
+console.log('========== ENV CHECK ==========');
+console.log('DEBUG_MODE:', process.env.DEBUG_MODE || 'false');
+console.log('VTPASS_API_KEY:', process.env.VTPASS_API_KEY ? 'SET' : 'MISSING');
+console.log('VTPASS_SECRET_KEY:', process.env.VTPASS_SECRET_KEY ? 'SET' : 'MISSING');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'undefined');
+console.log('================================');
+const vtpass = axios.create({
+  baseURL: 'https://vtpass.com/api',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'api-key': process.env.VTPASS_API_KEY,
+    'secret-key': process.env.VTPASS_SECRET_KEY
+  }
+});
 
-const UPLOAD_ROOT = path.join(__dirname, 'uploads');
-const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
-const KYC_DIR = path.join(UPLOAD_ROOT, 'kyc');
+vtpass.interceptors.request.use((config) => {
+  if (DEBUG_MODE) {
+    console.log('\n========== VTPASS REQUEST ==========');
+    console.log(JSON.stringify({
+      method: config.method,
+      url: config.url,
+      baseURL: config.baseURL,
+      params: config.params || {},
+      data: config.data || null,
+      headers: {
+        'api-key': config.headers?.['api-key'] ? 'SET' : 'MISSING',
+        'secret-key': config.headers?.['secret-key'] ? 'SET' : 'MISSING',
+        'content-type': config.headers?.['Content-Type'] || config.headers?.['content-type'] || ''
+      }
+    }, null, 2));
+    console.log('====================================\n');
+  }
+  return config;
+});
 
-for (const dir of [UPLOAD_ROOT, AVATAR_DIR, KYC_DIR]) {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
-app.use(helmet());
-app.use(cors({ origin: FRONTEND_URL === '*' ? true : FRONTEND_URL, credentials: true }));
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(UPLOAD_ROOT));
-
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: envNumber(process.env.RATE_LIMIT_MAX, 300),
-    standardHeaders: true,
-    legacyHeaders: false
-  })
+vtpass.interceptors.response.use(
+  (response) => {
+    if (DEBUG_MODE) {
+      console.log('\n========== VTPASS RESPONSE ==========');
+      console.log(JSON.stringify({
+        status: response.status,
+        data: response.data
+      }, null, 2));
+      console.log('=====================================\n');
+    }
+    return response;
+  },
+  (error) => {
+    if (DEBUG_MODE) {
+      console.log('\n========== VTPASS ERROR ==========');
+      console.log(JSON.stringify({
+        status: error.response?.status || null,
+        data: error.response?.data || null,
+        message: error.message || null,
+        stack: error.stack || null
+      }, null, 2));
+      console.log('==================================\n');
+    }
+    return Promise.reject(error);
+  }
 );
+
 
 // Changed for Render: always use SSL for Postgres
 const pool = new Pool({
@@ -177,7 +213,6 @@ function authHeader(req) {
   if (h.startsWith('Bearer ')) return h.slice(7);
   return h;
 }
-
 function respondOk(res, content = {}, message = 'OK', debug = null, statusCode = 200) {
   const payload = {
     success: true,
@@ -612,28 +647,6 @@ async function applyMarkup(serviceType, basePrice) {
   };
 }
 
-async function fetchVtpassDataVariations(serviceID) {
-  const response = await axios.get(
-    `https://vtpass.com/api/service-variations?serviceID=${encodeURIComponent(serviceID)}`,
-    {
-      headers: {
-        'api-key': VTPASS_API_KEY,
-        'secret-key': VTPASS_SECRET_KEY,
-        'Content-Type': 'application/json'
-      },
-      timeout: 30000
-    }
-  );
-
-  return (
-    response.data?.content?.variations ||
-    response.data?.content?.varations ||
-    response.data?.variations ||
-    response.data?.varations ||
-    []
-  );
-}
-
 function resolveDataServiceID(network, serviceIDFromBody = '') {
   const serviceMap = {
     mtn: 'mtn-data',
@@ -645,6 +658,19 @@ function resolveDataServiceID(network, serviceIDFromBody = '') {
   return serviceMap[String(network || '').trim().toLowerCase()] || String(serviceIDFromBody || '').trim();
 }
 
+async function fetchVtpassDataVariations(serviceID) {
+  const response = await vtpass.get('/service-variations', {
+    params: { serviceID }
+  });
+
+  return (
+    response.data?.content?.variations ||
+    response.data?.content?.varations ||
+    response.data?.variations ||
+    response.data?.varations ||
+    []
+  );
+}
 function providerHeaders(kind = 'get') {
   const headers = {
     'Content-Type': 'application/json'
@@ -975,13 +1001,6 @@ async function processServicePayment(req, res, serviceType, serviceLabel) {
     const serviceIDFromBody = String(req.body.serviceID || '').trim();
 
     if (serviceType === 'data') {
-      const serviceMap = {
-        mtn: 'mtn-data',
-        glo: 'glo-data',
-        airtel: 'airtel-data',
-        '9mobile': 'etisalat-data'
-      };
-
       const serviceID = resolveDataServiceID(network, serviceIDFromBody);
 
       debugLog('PAYMENT DATA CONTEXT', {
@@ -1011,17 +1030,9 @@ async function processServicePayment(req, res, serviceType, serviceLabel) {
         });
       }
 
-      const vtpassRes = await axios.get(
-        `https://vtpass.com/api/service-variations?serviceID=${encodeURIComponent(serviceID)}`,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const vtpassRes = await vtpass.get('/service-variations', {
+        params: { serviceID }
+      });
 
       debugLog('PAYMENT VTPASS RAW RESPONSE', {
         requestId: req.requestId,
@@ -1076,18 +1087,7 @@ async function processServicePayment(req, res, serviceType, serviceLabel) {
         pricing
       });
 
-      const providerResponse = await axios.post(
-        'https://vtpass.com/api/pay',
-        vtpassPayload,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const providerResponse = await vtpass.post('/pay', vtpassPayload);
 
       debugLog('PAYMENT PROVIDER RESPONSE', {
         requestId: req.requestId,
@@ -1156,18 +1156,7 @@ async function processServicePayment(req, res, serviceType, serviceLabel) {
         pricing
       });
 
-      const providerResponse = await axios.post(
-        'https://vtpass.com/api/pay',
-        vtpassPayload,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const providerResponse = await vtpass.post('/pay', vtpassPayload);
 
       debugLog('AIRTIME PROVIDER RESPONSE', {
         requestId: req.requestId,
@@ -2007,14 +1996,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
     if (serviceType === 'data') {
       const network = String(req.query.network || 'mtn').trim().toLowerCase();
-      const serviceMap = {
-        mtn: 'mtn-data',
-        glo: 'glo-data',
-        airtel: 'airtel-data',
-        '9mobile': 'etisalat-data'
-      };
-
-      const serviceID = serviceMap[network] || String(req.query.serviceID || req.query.serviceId || '').trim();
+      const serviceID = resolveDataServiceID(network, req.query.serviceID || req.query.serviceId || '');
 
       debugLog('PLANS DATA CONTEXT', {
         requestId: req.requestId,
@@ -2029,17 +2011,9 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
         });
       }
 
-      const response = await axios.get(
-        `https://vtpass.com/api/service-variations?serviceID=${encodeURIComponent(serviceID)}`,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const response = await vtpass.get('/service-variations', {
+        params: { serviceID }
+      });
 
       debugLog('VTPASS RAW PLANS RESPONSE', {
         requestId: req.requestId,
