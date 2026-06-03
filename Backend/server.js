@@ -801,7 +801,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
   try {
     const body = req.body || {};
-    const userId = req.user?.id;
+    const userId = req.user?.id || req.user?.userId;
 
     if (!userId) {
       return respondError(res, 401, 'Unauthorized');
