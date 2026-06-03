@@ -228,323 +228,7 @@ async function addTransaction({
 
   return inserted.rows[0];
 }
-async function processServicePayment(req, res, serviceType, serviceName) {
-  const normalizedServiceType = normalizeServiceType(serviceType);
 
-  try {
-    const body = req.body || {};
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return respondError(res, 401, 'Unauthorized');
-    }
-
-    console.log('REQ.USER IN PROCESS:', req.user);
-    console.log('REQ.BODY IN PROCESS:', req.body);
-
-    let pricing;
-    let selectedPlan = null;
-    let providerPayload = null;
-    let description = `${serviceName} purchase`;
-
-    const rawDestination =
-      body.phone ||
-      body.smartcard_number ||
-      body.meter_number ||
-      body.customer_id ||
-      body.accountNumber ||
-      body.billersCode ||
-      '';
-
-    const destination =
-      normalizePhone(rawDestination) || String(rawDestination).trim();
-
-    if (normalizedServiceType === 'airtime') {
-      const amount = toNumber(body.amount, 0);
-
-      if (amount <= 0 || !destination) {
-        return respondError(res, 400, 'amount and phone are required');
-      }
-
-      pricing = await applyMarkup('airtime', amount);
-
-      providerPayload = buildProviderPayload({
-        serviceType: 'airtime',
-        amount,
-        phone: destination,
-        network: body.network,
-        extra: body.extra || {}
-      });
-    } else {
-      const variationCode = String(
-        body.variation_code ||
-        body.planId ||
-        body.plan_id ||
-        body.planCode ||
-        body.code ||
-        ''
-      ).trim();
-
-      if (!variationCode) {
-        return respondError(res, 400, 'variation_code is required');
-      }
-
-      if (
-        !destination &&
-        !body.phone &&
-        !body.smartcard_number &&
-        !body.meter_number &&
-        !body.customer_id
-      ) {
-        return respondError(res, 400, 'Customer number is required');
-      }
-
-      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId
-      });
-
-      if (normalizedServiceType === 'data' && !serviceID) {
-        return respondError(res, 400, 'Invalid network');
-      }
-
-      const planAmount = Number(body.plan_amount || body.amount || 0);
-
-      if (Number.isFinite(planAmount) && planAmount > 0) {
-        selectedPlan = {
-          id: variationCode,
-          name: body.plan_name || `${serviceName} Plan`,
-          rawPrice: planAmount,
-          meta: {}
-        };
-      } else {
-        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-          network: body.network || undefined,
-          provider: body.provider || undefined,
-          serviceID
-        })).map(normalizeProviderPlan);
-
-        selectedPlan = providerPlans.find(plan => {
-          const planId = String(plan.id || '').trim().toLowerCase();
-          const metaVariation = String(
-            plan.meta?.variation_code ||
-            plan.meta?.variationCode ||
-            plan.meta?.code ||
-            ''
-          ).trim().toLowerCase();
-
-          return (
-            planId === variationCode.toLowerCase() ||
-            metaVariation === variationCode.toLowerCase()
-          );
-        });
-
-        if (!selectedPlan) {
-          return respondError(res, 404, 'Selected plan not found');
-        }
-      }
-
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
-
-      providerPayload = buildProviderPayload({
-        serviceType: normalizedServiceType,
-        amount: selectedPlan.rawPrice,
-        phone: body.phone || destination || undefined,
-        meterNumber: body.meter_number || destination || undefined,
-        smartCardNumber: body.smartcard_number || destination || undefined,
-        accountNumber: body.accountNumber || destination || undefined,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        network: body.network,
-        selectedPlan,
-        extra: {
-          ...(body.extra || {}),
-          serviceID,
-          variation_code: variationCode
-        }
-      });
-
-      description = `${serviceName} - ${selectedPlan.name}`;
-    }
-
-    if (!pricing || !providerPayload) {
-      return respondError(res, 400, 'Unable to prepare purchase');
-    }
-
-    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
-
-    const client = await pool.connect();
-    let txRow = null;
-    let transactionStarted = false;
-
-    try {
-      await client.query('BEGIN');
-      transactionStarted = true;
-
-      const walletResult = await client.query(
-        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
-        [userId]
-      );
-
-      const wallet = walletResult.rows[0];
-      if (!wallet) {
-        await client.query('ROLLBACK');
-        return respondError(res, 404, 'Wallet not found');
-      }
-
-      const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < Number(purchaseAmount)) {
-        await client.query('ROLLBACK');
-        return respondError(res, 400, 'Insufficient wallet balance');
-      }
-
-      await client.query(
-        `UPDATE wallets
-         SET balance = balance - $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
-
-      const inserted = await client.query(
-        `INSERT INTO transactions
-         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
-         VALUES
-         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
-         RETURNING *`,
-        [
-          uid('tx_'),
-          userId,
-          'purchase',
-          normalizedServiceType,
-          purchaseAmount,
-          uid('ref_'),
-          description,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing
-          })
-        ]
-      );
-
-      txRow = inserted.rows[0];
-
-      await client.query('COMMIT');
-      transactionStarted = false;
-    } catch (err) {
-      if (transactionStarted) {
-        try { await client.query('ROLLBACK'); } catch (_) {}
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    const providerResponse = await callProvider(
-      normalizedServiceType,
-      'buy',
-      providerPayload,
-      {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId,
-        selectedPlan,
-        planId: selectedPlan?.id,
-        planName: selectedPlan?.name,
-        extra: body.extra || {}
-      }
-    );
-
-    const success = providerRequestLooksSuccessful(providerResponse);
-
-    if (!success) {
-      await pool.query(
-        `UPDATE wallets
-         SET balance = balance + $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
-
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'failed',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} failed`,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            providerPayload,
-            selectedPlan,
-            pricing,
-            providerResponse
-          })
-        ]
-      );
-
-      return respondError(
-        res,
-        400,
-        providerResponse?.response_description || 'Purchase failed'
-      );
-    }
-
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'success',
-           meta = $2
-       WHERE id = $1`,
-      [
-        txRow.id,
-        JSON.stringify({
-          serviceType: normalizedServiceType,
-          serviceName,
-          providerPayload,
-          selectedPlan,
-          pricing,
-          providerResponse
-        })
-      ]
-    );
-
-    await addNotification(
-      userId,
-      `${serviceName} purchased`,
-      `${description} was successful`,
-      {
-        transactionId: txRow.id,
-        serviceType: normalizedServiceType,
-        pricing,
-        providerResponse
-      },
-      true
-    );
-
-    return respondOk(res, {
-      transaction: {
-        ...txRow,
-        status: 'success'
-      },
-      pricing,
-      providerResponse
-    }, `${serviceName} purchased successfully`);
-  } catch (err) {
-    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
-    console.error('ERROR MESSAGE:', err?.message);
-    console.error('ERROR STACK:', err?.stack);
-    console.error('ERROR RESPONSE DATA:', err?.response?.data);
-
-    return respondError(
-      res,
-      500,
-      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
-    );
-  }
-}
 function requireAuth(req, res, next) {
   try {
     const token = authHeader(req);
@@ -1156,7 +840,323 @@ function buildProviderPayload({
     ...extra
   });
 }
+async function processServicePayment(req, res, serviceType, serviceName) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
 
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return respondError(res, 401, 'Unauthorized');
+    }
+
+    console.log('REQ.USER IN PROCESS:', req.user);
+    console.log('REQ.BODY IN PROCESS:', req.body);
+
+    let pricing;
+    let selectedPlan = null;
+    let providerPayload = null;
+    let description = `${serviceName} purchase`;
+
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      '';
+
+    const destination =
+      normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    if (normalizedServiceType === 'airtime') {
+      const amount = toNumber(body.amount, 0);
+
+      if (amount <= 0 || !destination) {
+        return respondError(res, 400, 'amount and phone are required');
+      }
+
+      pricing = await applyMarkup('airtime', amount);
+
+      providerPayload = buildProviderPayload({
+        serviceType: 'airtime',
+        amount,
+        phone: destination,
+        network: body.network,
+        extra: body.extra || {}
+      });
+    } else {
+      const variationCode = String(
+        body.variation_code ||
+        body.planId ||
+        body.plan_id ||
+        body.planCode ||
+        body.code ||
+        ''
+      ).trim();
+
+      if (!variationCode) {
+        return respondError(res, 400, 'variation_code is required');
+      }
+
+      if (
+        !destination &&
+        !body.phone &&
+        !body.smartcard_number &&
+        !body.meter_number &&
+        !body.customer_id
+      ) {
+        return respondError(res, 400, 'Customer number is required');
+      }
+
+      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
+        network: body.network,
+        serviceID: body.serviceID || body.serviceId
+      });
+
+      if (normalizedServiceType === 'data' && !serviceID) {
+        return respondError(res, 400, 'Invalid network');
+      }
+
+      const planAmount = Number(body.plan_amount || body.amount || 0);
+
+      if (Number.isFinite(planAmount) && planAmount > 0) {
+        selectedPlan = {
+          id: variationCode,
+          name: body.plan_name || `${serviceName} Plan`,
+          rawPrice: planAmount,
+          meta: {}
+        };
+      } else {
+        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
+          network: body.network || undefined,
+          provider: body.provider || undefined,
+          serviceID
+        })).map(normalizeProviderPlan);
+
+        selectedPlan = providerPlans.find(plan => {
+          const planId = String(plan.id || '').trim().toLowerCase();
+          const metaVariation = String(
+            plan.meta?.variation_code ||
+            plan.meta?.variationCode ||
+            plan.meta?.code ||
+            ''
+          ).trim().toLowerCase();
+
+          return (
+            planId === variationCode.toLowerCase() ||
+            metaVariation === variationCode.toLowerCase()
+          );
+        });
+
+        if (!selectedPlan) {
+          return respondError(res, 404, 'Selected plan not found');
+        }
+      }
+
+      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+
+      providerPayload = buildProviderPayload({
+        serviceType: normalizedServiceType,
+        amount: selectedPlan.rawPrice,
+        phone: body.phone || destination || undefined,
+        meterNumber: body.meter_number || destination || undefined,
+        smartCardNumber: body.smartcard_number || destination || undefined,
+        accountNumber: body.accountNumber || destination || undefined,
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        network: body.network,
+        selectedPlan,
+        extra: {
+          ...(body.extra || {}),
+          serviceID,
+          variation_code: variationCode
+        }
+      });
+
+      description = `${serviceName} - ${selectedPlan.name}`;
+    }
+
+    if (!pricing || !providerPayload) {
+      return respondError(res, 400, 'Unable to prepare purchase');
+    }
+
+    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
+
+    const client = await pool.connect();
+    let txRow = null;
+    let transactionStarted = false;
+
+    try {
+      await client.query('BEGIN');
+      transactionStarted = true;
+
+      const walletResult = await client.query(
+        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query('ROLLBACK');
+        return respondError(res, 404, 'Wallet not found');
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < Number(purchaseAmount)) {
+        await client.query('ROLLBACK');
+        return respondError(res, 400, 'Insufficient wallet balance');
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
+         RETURNING *`,
+        [
+          uid('tx_'),
+          userId,
+          'purchase',
+          normalizedServiceType,
+          purchaseAmount,
+          uid('ref_'),
+          description,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            providerPayload,
+            selectedPlan,
+            pricing
+          })
+        ]
+      );
+
+      txRow = inserted.rows[0];
+
+      await client.query('COMMIT');
+      transactionStarted = false;
+    } catch (err) {
+      if (transactionStarted) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const providerResponse = await callProvider(
+      normalizedServiceType,
+      'buy',
+      providerPayload,
+      {
+        network: body.network,
+        serviceID: body.serviceID || body.serviceId,
+        selectedPlan,
+        planId: selectedPlan?.id,
+        planName: selectedPlan?.name,
+        extra: body.extra || {}
+      }
+    );
+
+    const success = providerRequestLooksSuccessful(providerResponse);
+
+    if (!success) {
+      await pool.query(
+        `UPDATE wallets
+         SET balance = balance + $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'failed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} failed`,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            providerPayload,
+            selectedPlan,
+            pricing,
+            providerResponse
+          })
+        ]
+      );
+
+      return respondError(
+        res,
+        400,
+        providerResponse?.response_description || 'Purchase failed'
+      );
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2
+       WHERE id = $1`,
+      [
+        txRow.id,
+        JSON.stringify({
+          serviceType: normalizedServiceType,
+          serviceName,
+          providerPayload,
+          selectedPlan,
+          pricing,
+          providerResponse
+        })
+      ]
+    );
+
+    await addNotification(
+      userId,
+      `${serviceName} purchased`,
+      `${description} was successful`,
+      {
+        transactionId: txRow.id,
+        serviceType: normalizedServiceType,
+        pricing,
+        providerResponse
+      },
+      true
+    );
+
+    return respondOk(res, {
+      transaction: {
+        ...txRow,
+        status: 'success'
+      },
+      pricing,
+      providerResponse
+    }, `${serviceName} purchased successfully`);
+  } catch (err) {
+    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('ERROR STACK:', err?.stack);
+    console.error('ERROR RESPONSE DATA:', err?.response?.data);
+
+    return respondError(
+      res,
+      500,
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
+    );
+  }
+}
 async function requeryVtpassTransaction(requestId) {
   if (!VTPASS_BASE_URL) {
     throw new Error('VTPASS_BASE_URL is missing');
