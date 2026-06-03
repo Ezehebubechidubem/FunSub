@@ -1944,7 +1944,7 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
       serviceID: req.query.serviceID || req.query.serviceId || undefined
     });
 
-    const normalized = extractArrayFromProviderResponse(providerPlans).map(normalizeProviderPlan);
+    const normalized = providerPlans.map(normalizeProviderPlan);
 
     const withPricing = [];
     for (const plan of normalized) {
