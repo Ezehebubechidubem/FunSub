@@ -1219,7 +1219,7 @@ app.get('/api/debug/auth', requireDebugAccess, (req, res) => {
   }, 'Debug auth data');
 });
 
-app.get('/api/test-auth', requireAuth, (req, res) => {
+app.get('/api/test-auth', (req, res) => {
   res.json({
     success: true,
     user: req.user
