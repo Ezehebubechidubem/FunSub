@@ -921,7 +921,18 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         provider: body.provider || undefined,
         serviceID
       })).map(normalizeProviderPlan);
+      console.log("========== DEBUG ==========");
+console.log("REQUESTED:", variationCode);
+console.log("SERVICE ID:", serviceID);
+console.log("PROVIDER PLANS COUNT:", providerPlans.length);
 
+providerPlans.forEach(p => {
+  console.log("PLAN:", {
+    id: p.id,
+    variationCode: p.variationCode,
+    name: p.name
+  });
+});
       selectedPlan = findMatchingPlan(providerPlans, variationCode);
 
       if (!selectedPlan) {
