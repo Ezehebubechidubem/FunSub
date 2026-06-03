@@ -231,28 +231,51 @@ async function addTransaction({
 
 function requireAuth(req, res, next) {
   try {
-    const token = authHeader(req);
+    console.log('================ AUTH DEBUG ================');
 
-    console.log("TOKEN:", token);
+    const authHeader = req.headers.authorization;
 
-    if (!token) {
-      console.log("NO TOKEN FOUND");
-      return respondError(res, 401, "Unauthorized");
+    console.log('AUTH HEADER:', authHeader);
+
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authorization header missing'
+      });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authorization format'
+      });
+    }
 
-    console.log("DECODED:", decoded);
+    const token = authHeader.split(' ')[1];
+
+    console.log('TOKEN:', token);
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    console.log('DECODED USER:', decoded);
 
     req.user = decoded;
+
+    console.log('AUTH SUCCESS');
+    console.log('============================================');
 
     next();
 
   } catch (err) {
 
-    console.log("AUTH ERROR:", err.message);
+    console.log('AUTH FAILED');
+    console.log('ERROR MESSAGE:', err.message);
+    console.log('============================================');
 
-    return respondError(res, 401, "Unauthorized");
+    return res.status(401).json({
+      success: false,
+      message: err.message || 'Unauthorized'
+    });
   }
 }
 
