@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const axios = require('axios');
 const path = require('path');
+const mockProvider = require('./vtu_pass_mock');
 const fs = require('fs');
 const crypto = require('crypto');
 
@@ -44,7 +45,6 @@ const SERVICE_MARKUP_DEFAULTS = {
 };
 
 const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
-const MOCK_PROVIDER_BASE_URL = String(process.env.MOCK_PROVIDER_BASE_URL || '').replace(/\/$/, '');
 const USING_MOCK_PROVIDER = SERVICE_PROVIDER === 'mock';
 const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
 const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
@@ -748,18 +748,19 @@ async function fetchProviderPlans(serviceType, params = {}) {
     throw new Error(`Missing serviceID for ${normalizedServiceType}`);
   }
 
-  const baseUrl = USING_MOCK_PROVIDER ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
-  const variationsPath = USING_MOCK_PROVIDER ? '/api/service-variations' : VTPASS_VARIATIONS_PATH;
-
-  if (!baseUrl) {
-    throw new Error('Provider base URL is missing');
+  if (USING_MOCK_PROVIDER) {
+    return mockProvider.getPlans(normalizedServiceType, serviceID);
   }
 
-  if (!variationsPath) {
-    throw new Error('Provider variations path is missing');
+  if (!VTPASS_BASE_URL) {
+    throw new Error('VTPASS_BASE_URL is missing');
   }
 
-  const response = await axios.get(`${baseUrl}${variationsPath}`, {
+  if (!VTPASS_VARIATIONS_PATH) {
+    throw new Error('VTPASS_VARIATIONS_PATH is missing');
+  }
+
+  const response = await axios.get(`${VTPASS_BASE_URL}${VTPASS_VARIATIONS_PATH}`, {
     params: { serviceID },
     headers: providerHeaders('get'),
     timeout: PROVIDER_TIMEOUT_MS
@@ -1053,7 +1054,26 @@ pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
       client.release();
     }
 
-    const providerResponse = await callProvider(
+    const providerResponse = USING_MOCK_PROVIDER
+  ? (String(body.force_fail).toLowerCase() === 'true'
+      ? mockProvider.buyFail({
+          request_id: body.request_id,
+          serviceID: providerPayload.serviceID,
+          phone: providerPayload.phone,
+          amount: providerPayload.amount,
+          serviceType: normalizedServiceType,
+          email: body.email
+        })
+      : mockProvider.buySuccess({
+          request_id: body.request_id,
+          serviceID: providerPayload.serviceID,
+          phone: providerPayload.phone,
+          amount: providerPayload.amount,
+          variation_code: providerPayload.variation_code,
+          serviceType: normalizedServiceType,
+          email: body.email
+        }))
+  : await callProvider(
       normalizedServiceType,
       'buy',
       providerPayload,
@@ -1931,48 +1951,19 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
-    let providerPlans = [];
-    let network = req.query.network || undefined;
-
-    if (serviceType === 'data') {
-      network = String(req.query.network || 'mtn').trim().toLowerCase();
-
-      const serviceMap = {
-        mtn: 'mtn-data',
-        glo: 'glo-data',
-        airtel: 'airtel-data',
-        '9mobile': 'etisalat-data'
-      };
-
-      const serviceID = serviceMap[network];
-
-      if (!serviceID) {
-        return respondError(res, 400, 'Invalid network');
-      }
-
-      providerPlans = await fetchProviderPlans(serviceType, {
-        network,
-        provider: req.query.provider || undefined,
-        serviceID
-      });
-    } else if (serviceType === 'airtime' && !USING_MOCK_PROVIDER && !VTPASS_VARIATIONS_PATH) {
-      return respondOk(res, { serviceType, plans: [] }, 'Airtime does not require plans');
-    } else {
-      providerPlans = await fetchProviderPlans(serviceType, {
-        network: req.query.network || undefined,
-        provider: req.query.provider || undefined,
-        serviceID: req.query.serviceID || req.query.serviceId || undefined
-      });
-    }
+    const providerPlans = await fetchProviderPlans(serviceType, {
+      network: req.query.network || undefined,
+      provider: req.query.provider || undefined,
+      serviceID: req.query.serviceID || req.query.serviceId || undefined
+    });
 
     const normalized = providerPlans.map(normalizeProviderPlan);
 
-    const plans = [];
-    for (const item of normalized) {
-      const pricing = await applyMarkup(serviceType, item.rawPrice);
-
-      plans.push({
-        ...item,
+    const withPricing = [];
+    for (const plan of normalized) {
+      const pricing = await applyMarkup(serviceType, plan.rawPrice);
+      withPricing.push({
+        ...plan,
         pricing: {
           basePrice: pricing.basePrice,
           markupPercent: pricing.markupPercent,
@@ -1984,8 +1975,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
     return respondOk(res, {
       serviceType,
-      network: serviceType === 'data' ? network : undefined,
-      plans
+      plans: withPricing
     }, 'Plans loaded');
   } catch (err) {
     console.error('LOAD PLANS ERROR:', err);
