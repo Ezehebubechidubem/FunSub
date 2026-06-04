@@ -954,7 +954,7 @@ pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
       description = `${serviceName} - ${selectedPlan.name}`;
     }
-
+    }
     if (!pricing || !providerPayload) {
       return respondError(res, 400, 'Unable to prepare purchase');
     }
