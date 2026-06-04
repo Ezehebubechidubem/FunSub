@@ -1891,7 +1891,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1908,9 +1908,12 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
+    let providerPlans = [];
+    let network = req.query.network || undefined;
+
     // Special handling for DATA plans
     if (serviceType === 'data') {
-      const network = String(req.query.network || 'mtn').trim().toLowerCase();
+      network = String(req.query.network || 'mtn').trim().toLowerCase();
 
       const serviceMap = {
         mtn: 'mtn-data',
@@ -1925,67 +1928,32 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
         return respondError(res, 400, 'Invalid network');
       }
 
-      const providerPlans = await fetchProviderPlans(serviceType, {
-  network: req.query.network || undefined,
-  provider: req.query.provider || undefined,
-  serviceID: req.query.serviceID || req.query.serviceId || undefined
-});
-
-const normalized = providerPlans.map(normalizeProviderPlan);
-
-      const variations =
-        response.data?.content?.variations ||
-        response.data?.content?.varations ||
-        response.data?.variations ||
-        response.data?.varations ||
-        [];
-
-      const plans = [];
-
-      for (const item of variations) {
-        const rawPrice = Number(item.variation_amount || 0);
-        const pricing = await applyMarkup('data', rawPrice);
-
-        plans.push({
-          id: item.variation_code || null,
-          name: item.name || 'Data Plan',
-          rawPrice,
-          pricing: {
-            basePrice: pricing.basePrice,
-            markupPercent: pricing.markupPercent,
-            markupFee: pricing.markupFee,
-            finalPrice: pricing.finalPrice
-          }
-        });
-      }
-
-      return respondOk(res, {
-        serviceType,
+      providerPlans = await fetchProviderPlans(serviceType, {
         network,
-        plans
-      }, 'Plans loaded');
-    }
-
-    if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH) {
+        provider: req.query.provider || undefined,
+        serviceID
+      });
+    } else if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH && !USING_MOCK_PROVIDER) {
       return respondOk(res, {
         serviceType,
         plans: []
       }, 'Airtime does not require plans');
+    } else {
+      providerPlans = await fetchProviderPlans(serviceType, {
+        network: req.query.network || undefined,
+        provider: req.query.provider || undefined,
+        serviceID: req.query.serviceID || req.query.serviceId || undefined
+      });
     }
-
-    const providerPlans = await fetchProviderPlans(serviceType, {
-      network: req.query.network || undefined,
-      provider: req.query.provider || undefined,
-      serviceID: req.query.serviceID || req.query.serviceId || undefined
-    });
 
     const normalized = providerPlans.map(normalizeProviderPlan);
 
-    const withPricing = [];
-    for (const plan of normalized) {
-      const pricing = await applyMarkup(serviceType, plan.rawPrice);
-      withPricing.push({
-        ...plan,
+    const plans = [];
+    for (const item of normalized) {
+      const pricing = await applyMarkup(serviceType, item.rawPrice);
+
+      plans.push({
+        ...item,
         pricing: {
           basePrice: pricing.basePrice,
           markupPercent: pricing.markupPercent,
@@ -1997,7 +1965,8 @@ const normalized = providerPlans.map(normalizeProviderPlan);
 
     return respondOk(res, {
       serviceType,
-      plans: withPricing
+      network: serviceType === 'data' ? network : undefined,
+      plans
     }, 'Plans loaded');
   } catch (err) {
     console.error(err.response?.data || err.message || err);
