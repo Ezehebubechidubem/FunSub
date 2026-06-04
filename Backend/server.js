@@ -1906,7 +1906,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
+app.get('/api/services/:serviceType/plans', async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
