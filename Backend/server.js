@@ -52,7 +52,7 @@ const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
 const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
 const VTPASS_SECRET_KEY = process.env.VTPASS_SECRET_KEY || '';
 const PROVIDER_TIMEOUT_MS = envNumber(process.env.PROVIDER_TIMEOUT_MS, 30000);
-
+const MOCK_PROVIDER_BASE_URL = String(process.env.MOCK_PROVIDER_BASE_URL || '').replace(/\/$/, '');
 const PROVIDER_ENDPOINTS = {
   airtime: {
     plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '',
@@ -677,21 +677,23 @@ function resolveVtpassVariationCode(serviceType, { selectedPlan, planId, planNam
 async function callProvider(serviceType, action, payload = {}, params = {}) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
-  if (!VTPASS_BASE_URL) {
-    throw new Error('VTPASS_BASE_URL is missing');
+  const usingMock = SERVICE_PROVIDER === 'mock';
+
+  const baseUrl = usingMock ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
+  const variationsPath = usingMock ? '/api/service-variations' : VTPASS_VARIATIONS_PATH;
+  const payPath = usingMock ? '/api/pay' : VTPASS_PAY_PATH;
+
+  if (!baseUrl) {
+    throw new Error('Provider base URL is missing');
   }
 
   if (action === 'plans') {
-    if (!VTPASS_VARIATIONS_PATH) {
-      throw new Error('VTPASS_VARIATIONS_PATH is missing');
-    }
-
     const serviceID = params.serviceID || resolveVtpassServiceId(normalizedServiceType, params);
     if (!serviceID) {
       throw new Error(`Missing serviceID for ${normalizedServiceType}`);
     }
 
-    const response = await axios.get(`${VTPASS_BASE_URL}${VTPASS_VARIATIONS_PATH}`, {
+    const response = await axios.get(`${baseUrl}${variationsPath}`, {
       params: { serviceID },
       headers: providerHeaders('get'),
       timeout: PROVIDER_TIMEOUT_MS
@@ -701,12 +703,8 @@ async function callProvider(serviceType, action, payload = {}, params = {}) {
   }
 
   if (action === 'buy') {
-    if (!VTPASS_PAY_PATH) {
-      throw new Error('VTPASS_PAY_PATH is missing');
-    }
-
     const response = await axios.post(
-      `${VTPASS_BASE_URL}${VTPASS_PAY_PATH}`,
+      `${baseUrl}${payPath}`,
       compactObject(payload),
       {
         headers: providerHeaders('post'),
@@ -910,32 +908,31 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         };
       } else {
         const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-          network: body.network || undefined,
-          provider: body.provider || undefined,
-          serviceID
-        })).map(normalizeProviderPlan);
+  network: body.network || undefined,
+  provider: body.provider || undefined,
+  serviceID
+})).map(normalizeProviderPlan);
 
-        selectedPlan = providerPlans.find(plan => {
-          const planId = String(plan.id || '').trim().toLowerCase();
-          const metaVariation = String(
-            plan.meta?.variation_code ||
-            plan.meta?.variationCode ||
-            plan.meta?.code ||
-            ''
-          ).trim().toLowerCase();
+selectedPlan = providerPlans.find(plan => {
+  const planId = String(plan.id || '').trim().toLowerCase();
+  const metaVariation = String(
+    plan.meta?.variation_code ||
+    plan.meta?.variationCode ||
+    plan.meta?.code ||
+    ''
+  ).trim().toLowerCase();
 
-          return (
-            planId === variationCode.toLowerCase() ||
-            metaVariation === variationCode.toLowerCase()
-          );
-        });
+  return (
+    planId === variationCode.toLowerCase() ||
+    metaVariation === variationCode.toLowerCase()
+  );
+});
 
-        if (!selectedPlan) {
-          return respondError(res, 404, 'Selected plan not found');
-        }
-      }
+if (!selectedPlan) {
+  return respondError(res, 404, 'Selected plan not found');
+}
 
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
       providerPayload = buildProviderPayload({
         serviceType: normalizedServiceType,
@@ -1137,15 +1134,19 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   }
 }
 async function requeryVtpassTransaction(requestId) {
-  if (!VTPASS_BASE_URL) {
-    throw new Error('VTPASS_BASE_URL is missing');
+  const usingMock = SERVICE_PROVIDER === 'mock';
+  const baseUrl = usingMock ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
+  const requeryPath = usingMock ? '/api/requery' : VTPASS_REQUERY_PATH;
+
+  if (!baseUrl) {
+    throw new Error('Provider base URL is missing');
   }
-  if (!VTPASS_REQUERY_PATH) {
-    throw new Error('VTPASS_REQUERY_PATH is missing');
+  if (!requeryPath) {
+    throw new Error('Provider requery path is missing');
   }
 
   const response = await axios.post(
-    `${VTPASS_BASE_URL}${VTPASS_REQUERY_PATH}`,
+    `${baseUrl}${requeryPath}`,
     { request_id: requestId },
     {
       headers: providerHeaders('post'),
@@ -1924,17 +1925,13 @@ app.get('/api/services/:serviceType/plans',requireAuth, async (req, res) => {
         return respondError(res, 400, 'Invalid network');
       }
 
-      const response = await axios.get(
-        `https://vtpass.com/api/service-variations?serviceID=${serviceID}`,
-        {
-          headers: {
-            'api-key': VTPASS_API_KEY,
-            'secret-key': VTPASS_SECRET_KEY,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      const providerPlans = await fetchProviderPlans(serviceType, {
+  network: req.query.network || undefined,
+  provider: req.query.provider || undefined,
+  serviceID: req.query.serviceID || req.query.serviceId || undefined
+});
+
+const normalized = providerPlans.map(normalizeProviderPlan);
 
       const variations =
         response.data?.content?.variations ||
