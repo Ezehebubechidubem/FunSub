@@ -43,6 +43,7 @@ const SERVICE_MARKUP_DEFAULTS = {
   exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
 };
 
+const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
 const MOCK_PROVIDER_BASE_URL = String(process.env.MOCK_PROVIDER_BASE_URL || '').replace(/\/$/, '');
 const USING_MOCK_PROVIDER = SERVICE_PROVIDER === 'mock';
 const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
@@ -743,6 +744,10 @@ async function fetchProviderPlans(serviceType, params = {}) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const serviceID = resolveVtpassServiceId(normalizedServiceType, params);
 
+  if (!serviceID) {
+    throw new Error(`Missing serviceID for ${normalizedServiceType}`);
+  }
+
   const baseUrl = USING_MOCK_PROVIDER ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
   const variationsPath = USING_MOCK_PROVIDER ? '/api/service-variations' : VTPASS_VARIATIONS_PATH;
 
@@ -754,17 +759,20 @@ async function fetchProviderPlans(serviceType, params = {}) {
     throw new Error('Provider variations path is missing');
   }
 
-  if (!serviceID) {
-    throw new Error(`Missing serviceID for ${normalizedServiceType}`);
-  }
-
   const response = await axios.get(`${baseUrl}${variationsPath}`, {
     params: { serviceID },
     headers: providerHeaders('get'),
     timeout: PROVIDER_TIMEOUT_MS
   });
 
-  return extractArrayFromProviderResponse(response.data);
+  const rawVariations = extractArrayFromProviderResponse(response.data);
+
+  return rawVariations.map((item) => ({
+    id: item.variation_code || item.id || item.code || uid('plan_'),
+    name: item.name || item.variation_name || 'Plan',
+    rawPrice: Number(item.variation_amount ?? item.price ?? item.amount ?? 0),
+    meta: item
+  }));
 }
 
 function buildProviderPayload({
@@ -1906,7 +1914,7 @@ app.get('/api/services', requireAuth, async (req, res) => {
 
 /* BILLS / SERVICES */
 
-app.get('/api/services/:serviceType/plans', async (req, res) => {
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
@@ -1948,10 +1956,7 @@ app.get('/api/services/:serviceType/plans', async (req, res) => {
         serviceID
       });
     } else if (serviceType === 'airtime' && !USING_MOCK_PROVIDER && !VTPASS_VARIATIONS_PATH) {
-      return respondOk(res, {
-        serviceType,
-        plans: []
-      }, 'Airtime does not require plans');
+      return respondOk(res, { serviceType, plans: [] }, 'Airtime does not require plans');
     } else {
       providerPlans = await fetchProviderPlans(serviceType, {
         network: req.query.network || undefined,
