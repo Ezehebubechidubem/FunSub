@@ -28,7 +28,7 @@ const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY || '';
 const FLW_BASE_URL = process.env.FLW_BASE_URL || '';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
-const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
+
 
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 2);
 const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
