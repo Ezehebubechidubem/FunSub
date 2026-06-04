@@ -43,7 +43,8 @@ const SERVICE_MARKUP_DEFAULTS = {
   exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
 };
 
-const VTPASS_BASE_URL = String(process.env.VTPASS_BASE_URL || '').replace(/\/$/, '');
+const MOCK_PROVIDER_BASE_URL = String(process.env.MOCK_PROVIDER_BASE_URL || '').replace(/\/$/, '');
+const USING_MOCK_PROVIDER = SERVICE_PROVIDER === 'mock';
 const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
 const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
 const VTPASS_REQUERY_PATH = String(process.env.VTPASS_REQUERY_PATH || '');
@@ -742,14 +743,28 @@ async function fetchProviderPlans(serviceType, params = {}) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const serviceID = resolveVtpassServiceId(normalizedServiceType, params);
 
-  const response = await callProvider(
-    normalizedServiceType,
-    'plans',
-    {},
-    { ...params, serviceID }
-  );
+  const baseUrl = USING_MOCK_PROVIDER ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
+  const variationsPath = USING_MOCK_PROVIDER ? '/api/service-variations' : VTPASS_VARIATIONS_PATH;
 
-  return extractArrayFromProviderResponse(response);
+  if (!baseUrl) {
+    throw new Error('Provider base URL is missing');
+  }
+
+  if (!variationsPath) {
+    throw new Error('Provider variations path is missing');
+  }
+
+  if (!serviceID) {
+    throw new Error(`Missing serviceID for ${normalizedServiceType}`);
+  }
+
+  const response = await axios.get(`${baseUrl}${variationsPath}`, {
+    params: { serviceID },
+    headers: providerHeaders('get'),
+    timeout: PROVIDER_TIMEOUT_MS
+  });
+
+  return extractArrayFromProviderResponse(response.data);
 }
 
 function buildProviderPayload({
@@ -1911,7 +1926,6 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
     let providerPlans = [];
     let network = req.query.network || undefined;
 
-    // Special handling for DATA plans
     if (serviceType === 'data') {
       network = String(req.query.network || 'mtn').trim().toLowerCase();
 
@@ -1933,7 +1947,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
         provider: req.query.provider || undefined,
         serviceID
       });
-    } else if (serviceType === 'airtime' && !VTPASS_VARIATIONS_PATH && !USING_MOCK_PROVIDER) {
+    } else if (serviceType === 'airtime' && !USING_MOCK_PROVIDER && !VTPASS_VARIATIONS_PATH) {
       return respondOk(res, {
         serviceType,
         plans: []
@@ -1969,7 +1983,11 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       plans
     }, 'Plans loaded');
   } catch (err) {
-    console.error(err.response?.data || err.message || err);
+    console.error('LOAD PLANS ERROR:', err);
+    console.error('MESSAGE:', err?.message);
+    console.error('STACK:', err?.stack);
+    console.error('RESPONSE DATA:', err?.response?.data);
+
     return respondError(res, 500, 'Unable to load plans');
   }
 });
