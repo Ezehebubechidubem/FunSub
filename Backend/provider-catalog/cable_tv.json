@@ -1,0 +1,5 @@
+[
+  { "variation_code": "dstv-compact", "name": "DSTV Compact", "variation_amount": 12000 },
+  { "variation_code": "dstv-premium", "name": "DSTV Premium", "variation_amount": 24500 },
+  { "variation_code": "gotv-max", "name": "GOtv Max", "variation_amount": 8500 }
+]
