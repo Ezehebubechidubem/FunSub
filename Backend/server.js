@@ -53,7 +53,7 @@ const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
 const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
 const VTPASS_SECRET_KEY = process.env.VTPASS_SECRET_KEY || '';
 const PROVIDER_TIMEOUT_MS = envNumber(process.env.PROVIDER_TIMEOUT_MS, 30000);
-const MOCK_PROVIDER_BASE_URL = String(process.env.MOCK_PROVIDER_BASE_URL || '').replace(/\/$/, '');
+
 const PROVIDER_ENDPOINTS = {
   airtime: {
     plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '',
