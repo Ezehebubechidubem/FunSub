@@ -1,0 +1,7 @@
+module.exports = [
+  { variation_code: "dstv-padi", name: "DSTV Padi", variation_amount: 4400 },
+  { variation_code: "dstv-yanga", name: "DSTV Yanga", variation_amount: 5650 },
+  { variation_code: "dstv-compact", name: "DSTV Compact", variation_amount: 12000 },
+  { variation_code: "dstv-compact-plus", name: "DSTV Compact Plus", variation_amount: 18900 },
+  { variation_code: "dstv-premium", name: "DSTV Premium", variation_amount: 24500 }
+];
