@@ -1,4 +1,4 @@
 module.exports = [
-  { variation_code: "ekedc-prepaid", name: "EKEDC Prepaid", variation_amount: 1000 },
-  { variation_code: "ekedc-postpaid", name: "EKEDC Postpaid", variation_amount: 2000 }
+  { variation_code: "ekedc-prepaid", name: "EKEDC Prepaid", variation_amount: 5000 },
+  { variation_code: "ekedc-postpaid", name: "EKEDC Postpaid", variation_amount: 7000 }
 ];
