@@ -1029,12 +1029,17 @@ pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
         return respondError(res, 400, 'Insufficient wallet balance');
       }
 
-      await client.query(
-        `UPDATE wallets
-         SET balance = balance - $2, updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
+      const debitResult = await client.query(
+  `UPDATE wallets
+   SET balance = balance - $2, updated_at = NOW()
+   WHERE user_id = $1
+   RETURNING balance`,
+  [userId, purchaseAmount]
+);
+
+console.log('DEBIT RESULT:', debitResult.rows[0]);
+console.log('PURCHASE AMOUNT:', purchaseAmount);
+console.log('USER ID:', userId);
 
       const inserted = await client.query(
         `INSERT INTO transactions
