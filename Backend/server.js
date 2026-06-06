@@ -494,50 +494,42 @@ async function flutterwaveVerify(transactionId) {
 }
 
 async function ensurePricingRule(serviceType) {
-  const normalized = normalizeServiceType(serviceType);
+const normalized = normalizeServiceType(serviceType);
 
-  const found = await query(
-    `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
-    [normalized]
-  );
+const found = await query(
+SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1,
+[normalized]
+);
 
-  if (found.rows[0]) return found.rows[0];
+if (found.rows[0]) return found.rows[0];
 
-  const created = await query(
-    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, true, NOW(), NOW())
-     RETURNING *`,
-    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
-  );
+const created = await query(
+INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)   VALUES ($1, $2, $3, true, NOW(), NOW())   RETURNING *,
+[uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
+);
 
-  return created.rows[0];
+return created.rows[0];
 }
 
 async function getMarkupPercent(serviceType) {
-  const normalized = normalizeServiceType(serviceType);
-
-  const envMap = {
-    airtime: process.env.AIRTIME_MARKUP_PERCENT,
-    data: process.env.DATA_MARKUP_PERCENT,
-    cable_tv: process.env.CABLE_TV_MARKUP_PERCENT,
-    electricity: process.env.ELECTRICITY_MARKUP_PERCENT,
-    betting: process.env.BETTING_MARKUP_PERCENT,
-    recharge_pin: process.env.RECHARGE_PIN_MARKUP_PERCENT,
-    data_pin: process.env.DATA_PIN_MARKUP_PERCENT,
-    exam_pin: process.env.EXAM_PIN_MARKUP_PERCENT
-  };
-
-  const rawEnv = envMap[normalized];
-  const envValue = Number(rawEnv);
-
-  if (rawEnv !== undefined && rawEnv !== null && String(rawEnv).trim() !== '' && Number.isFinite(envValue)) {
-    return envValue;
-  }
-
-  const rule = await ensurePricingRule(normalized);
-  return Number(rule.markup_percent ?? getDefaultMarkupPercent(normalized));
+const rule = await ensurePricingRule(serviceType);
+return Number(rule.markup_percent ?? getDefaultMarkupPercent(serviceType));
 }
 
+async function applyMarkup(serviceType, baseAmount) {
+const markupPercent = await getMarkupPercent(serviceType);
+const base = Number(baseAmount);
+const fee = (base * markupPercent) / 100;
+const finalPrice = base + fee;
+
+return {
+serviceType,
+basePrice: Number(base.toFixed(2)),
+markupPercent: Number(markupPercent.toFixed(2)),
+markupFee: Number(fee.toFixed(2)),
+finalPrice: Number(finalPrice.toFixed(2))
+};
+}
 async function applyMarkup(serviceType, baseAmount) {
   const markupPercent = await getMarkupPercent(serviceType);
   const base = Number(baseAmount);
