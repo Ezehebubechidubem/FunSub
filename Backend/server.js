@@ -515,6 +515,7 @@ async function ensurePricingRule(serviceType) {
 
 async function getMarkupPercent(serviceType) {
   const normalized = normalizeServiceType(serviceType);
+
   const envMap = {
     airtime: process.env.AIRTIME_MARKUP_PERCENT,
     data: process.env.DATA_MARKUP_PERCENT,
@@ -526,14 +527,17 @@ async function getMarkupPercent(serviceType) {
     exam_pin: process.env.EXAM_PIN_MARKUP_PERCENT
   };
 
-  const envValue = envNumber(envMap[normalized], NaN);
-  if (Number.isFinite(envValue)) {
+  const rawEnv = envMap[normalized];
+  const envValue = Number(rawEnv);
+
+  if (rawEnv !== undefined && rawEnv !== null && String(rawEnv).trim() !== '' && Number.isFinite(envValue)) {
     return envValue;
   }
 
   const rule = await ensurePricingRule(normalized);
   return Number(rule.markup_percent ?? getDefaultMarkupPercent(normalized));
 }
+
 async function applyMarkup(serviceType, baseAmount) {
   const markupPercent = await getMarkupPercent(serviceType);
   const base = Number(baseAmount);
