@@ -534,7 +534,20 @@ async function getMarkupPercent(serviceType) {
   const rule = await ensurePricingRule(normalized);
   return Number(rule.markup_percent ?? getDefaultMarkupPercent(normalized));
 }
+async function applyMarkup(serviceType, baseAmount) {
+  const markupPercent = await getMarkupPercent(serviceType);
+  const base = Number(baseAmount);
+  const fee = (base * markupPercent) / 100;
+  const finalPrice = base + fee;
 
+  return {
+    serviceType,
+    basePrice: Number(base.toFixed(2)),
+    markupPercent: Number(markupPercent.toFixed(2)),
+    markupFee: Number(fee.toFixed(2)),
+    finalPrice: Number(finalPrice.toFixed(2))
+  };
+}
 function providerHeaders(kind = 'get') {
   const headers = {
     'Content-Type': 'application/json'
