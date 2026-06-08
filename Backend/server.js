@@ -34,6 +34,14 @@ const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
 const FLW_CUSTOMER_URL = String(
   process.env.FLW_CUSTOMER_URL || `${FLW_BASE_URL}/customers`
 ).trim();
+const SUCCESS_STATUSES = new Set([
+  'successful',
+  'success',
+  'completed',
+  'complete',
+  'paid',
+  'ok'
+]);
 
 const FLW_VA_URL = String(
   process.env.FLW_VA_URL || `${FLW_BASE_URL}/virtual-account-numbers`
@@ -168,7 +176,28 @@ function respondOk(res, data = {}, message = 'OK') {
 function respondError(res, status, message) {
   return res.status(status).json({ success: false, message });
 }
+function normalizeStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
+function isSuccessStatus(value) {
+  return SUCCESS_STATUSES.has(normalizeStatus(value));
+}
+
+async function verifyFlutterwaveByReference(reference) {
+  const url = 'https://api.flutterwave.com/v3/transactions/verify_by_reference';
+
+  const response = await axios.get(url, {
+    params: { tx_ref: reference },
+    headers: {
+      Authorization: `Bearer ${process.env.FLW_SECRET_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    timeout: 30000
+  });
+
+  return response.data;
+}
 async function query(text, params = []) {
   return pool.query(text, params);
 }
@@ -1889,7 +1918,9 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
   try {
     const reference = String(req.params.reference || '').trim();
-    if (!reference) return respondError(res, 400, 'reference is required');
+    if (!reference) {
+      return respondError(res, 400, 'reference is required');
+    }
 
     const intentResult = await query(
       `SELECT * FROM payment_intents
@@ -1907,15 +1938,23 @@ app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
 
     const wallet = await ensureWallet(req.user.id);
 
-    return respondOk(res, {
-      intent: intentResult.rows[0] || null,
-      transaction: transactionResult.rows[0] || null,
-      wallet: {
-        id: wallet.id,
-        balance: Number(wallet.balance).toFixed(2),
-        currency: wallet.currency
-      }
-    }, 'Funding status loaded');
+    const intent = intentResult.rows[0] || null;
+    const transaction = transactionResult.rows[0] || null;
+
+    return respondOk(
+      res,
+      {
+        reference,
+        intent,
+        transaction,
+        wallet: {
+          id: wallet.id,
+          balance: Number(wallet.balance).toFixed(2),
+          currency: wallet.currency
+        }
+      },
+      'Funding status loaded'
+    );
   } catch (err) {
     console.error(err);
     return respondError(res, 500, 'Unable to load funding status');
@@ -1929,69 +1968,136 @@ app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
 
 app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
   try {
-    const transactionId = req.params.transactionId;
-    const data = await flutterwaveVerify(transactionId);
-
-    if (!data) return respondError(res, 400, 'Unable to verify payment');
-
-    const status = String(data.status || '').toLowerCase();
-    const amount = toNumber(data.amount, 0);
-    const txRef = data.tx_ref;
-
-    if (status !== 'successful') {
-      await query(`UPDATE payment_intents SET status = 'failed' WHERE tx_ref = $1`, [txRef]);
-      return respondError(res, 400, 'Payment not successful');
+    const transactionId = String(req.params.transactionId || '').trim();
+    if (!transactionId) {
+      return respondError(res, 400, 'transactionId is required');
     }
 
-    const intent = await query(
-      `SELECT * FROM payment_intents WHERE tx_ref = $1 AND user_id = $2 LIMIT 1`,
+    const data = await flutterwaveVerify(transactionId);
+    if (!data) return respondError(res, 400, 'Unable to verify payment');
+
+    const providerStatus = normalizeStatus(data.status || data.tx_status || '');
+    const amount = toNumber(data.amount, 0);
+    const txRef = String(data.tx_ref || data.reference || '').trim();
+
+    if (!txRef) {
+      return respondError(res, 400, 'Missing transaction reference');
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1 AND user_id = $2
+       LIMIT 1`,
       [txRef, req.user.id]
     );
 
-    if (!intent.rows[0]) return respondError(res, 404, 'Payment intent not found');
+    const intent = intentResult.rows[0];
+    if (!intent) return respondError(res, 404, 'Payment intent not found');
 
-    if (intent.rows[0].status === 'successful') {
-      return respondOk(res, { alreadyProcessed: true }, 'Payment already processed');
+    const existingTransactionResult = await query(
+      `SELECT * FROM transactions
+       WHERE reference = $1 AND user_id = $2
+       LIMIT 1`,
+      [txRef, req.user.id]
+    );
+
+    const existingTransaction = existingTransactionResult.rows[0] || null;
+
+    if (isSuccessStatus(intent.status) || (existingTransaction && isSuccessStatus(existingTransaction.status))) {
+      const wallet = await ensureWallet(req.user.id);
+
+      return respondOk(res, {
+        alreadyProcessed: true,
+        wallet: {
+          balance: Number(wallet.balance).toFixed(2),
+          currency: wallet.currency
+        }
+      }, 'Payment already processed');
+    }
+
+    if (!isSuccessStatus(providerStatus)) {
+      await query(
+        `UPDATE payment_intents
+         SET status = $1, verified_at = NOW()
+         WHERE tx_ref = $2 AND user_id = $3`,
+        [providerStatus || 'failed', txRef, req.user.id]
+      );
+
+      if (existingTransaction) {
+        await query(
+          `UPDATE transactions
+           SET status = $1, updated_at = NOW()
+           WHERE reference = $2 AND user_id = $3`,
+          [providerStatus || 'failed', txRef, req.user.id]
+        );
+      }
+
+      return respondError(res, 400, 'Payment not successful');
     }
 
     const fee = applyWalletFundingFee(amount);
+    const creditAmount = Number(fee.netAmount);
+
+    if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+      return respondError(res, 400, 'Invalid credited amount');
+    }
 
     await query(
       `UPDATE wallets
        SET balance = balance + $2, updated_at = NOW()
        WHERE user_id = $1`,
-      [req.user.id, Number(fee.netAmount).toFixed(2)]
+      [req.user.id, creditAmount]
     );
 
     await query(
       `UPDATE payment_intents
        SET status = 'successful', verified_at = NOW()
-       WHERE tx_ref = $1`,
-      [txRef]
+       WHERE tx_ref = $1 AND user_id = $2`,
+      [txRef, req.user.id]
     );
 
-    const tx = await addTransaction({
-      userId: req.user.id,
-      type: 'funding',
-      category: 'wallet',
-      amount: Number(fee.netAmount).toFixed(2),
-      status: 'success',
-      reference: txRef,
-      description: 'Wallet funded successfully',
-      meta: {
-        transaction_id: transactionId,
-        provider: 'flutterwave',
-        grossAmount: fee.grossAmount,
-        feePercent: fee.feePercent,
-        feeAmount: fee.feeAmount,
-        creditedAmount: fee.netAmount
-      }
-    });
+    let tx = existingTransaction;
+
+    if (tx) {
+      await query(
+        `UPDATE transactions
+         SET status = 'success',
+             amount = $1,
+             updated_at = NOW()
+         WHERE reference = $2 AND user_id = $3`,
+        [creditAmount, txRef, req.user.id]
+      );
+
+      tx = {
+        ...tx,
+        status: 'success',
+        amount: creditAmount
+      };
+    } else {
+      tx = await addTransaction({
+        userId: req.user.id,
+        type: 'funding',
+        category: 'wallet',
+        amount: creditAmount,
+        status: 'success',
+        reference: txRef,
+        description: 'Wallet funded successfully',
+        meta: {
+          transaction_id: transactionId,
+          provider: 'flutterwave',
+          grossAmount: fee.grossAmount,
+          feePercent: fee.feePercent,
+          feeAmount: fee.feeAmount,
+          creditedAmount: fee.netAmount,
+          providerStatus
+        }
+      });
+    }
 
     await addNotification(
       req.user.id,
       'Wallet funded',
-      `₦${Number(fee.netAmount).toFixed(2)} has been added to your wallet`,
+      `₦${creditAmount.toFixed(2)} has been added to your wallet`,
       { tx_id: tx.id, txRef, fee },
       true
     );
@@ -2003,7 +2109,8 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
         balance: Number(wallet.balance).toFixed(2),
         currency: wallet.currency
       },
-      fee
+      fee,
+      transaction: tx
     }, 'Wallet funded successfully');
   } catch (err) {
     console.error(err.response?.data || err.message || err);
