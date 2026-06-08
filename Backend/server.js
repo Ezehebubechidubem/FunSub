@@ -1886,7 +1886,7 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 /**
  * Optional: frontend can poll this route to know whether the transfer has been matched.
  */
-app.post('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
+app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
   try {
     const reference = String(req.params.reference || '').trim();
     if (!reference) return respondError(res, 400, 'reference is required');
