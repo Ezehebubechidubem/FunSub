@@ -465,16 +465,26 @@ function splitFullName(fullName = '') {
   return { first, last };
 }
 
-function isValidFlutterwaveWebhook(rawBody, signature) {
+function isValidFlutterwaveWebhook(req) {
   if (!FLW_WEBHOOK_HASH) return true;
 
-  const hash = crypto
+  const header =
+    String(req.headers['flutterwave-signature'] || '').trim() ||
+    String(req.headers['verif-hash'] || '').trim() ||
+    String(req.headers['x-flw-secret-hash'] || '').trim();
+
+  if (!header) return false;
+  if (header === FLW_WEBHOOK_HASH) return true;
+  if (!req.rawBody) return false;
+
+  const computed = crypto
     .createHmac('sha256', FLW_WEBHOOK_HASH)
-    .update(rawBody || '')
+    .update(req.rawBody)
     .digest('base64');
 
-  return hash === signature;
+  return computed === header;
 }
+
 
 async function flutterwaveCreateCustomer(user) {
   if (!user?.email) {
@@ -514,59 +524,27 @@ async function flutterwaveCreateCustomer(user) {
   return customerRes.data?.data || customerRes.data;
 }
 
-async function flutterwaveCreateVirtualAccount({
-  amount,
-  user,
-  customerId,
-  reference
-}) {
-  const accountType = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static'
-    ? 'static'
-    : 'dynamic';
-
+async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
   const { first, last } = splitFullName(
     user.full_name || user.fullName || user.name || 'User'
   );
 
-  const vaPayload = FLW_VA_URL.includes('/virtual-account-numbers')
-    ? {
-        email: user.email,
-        currency: 'NGN',
-        amount: accountType === 'static' ? 0 : Number(amount),
-        firstname: first,
-        lastname: last,
-        tx_ref: reference,
-        is_permanent: accountType === 'static',
-        narration: user.full_name || user.fullName || user.name || 'Wallet funding',
-        phonenumber: user.phone ? String(user.phone) : undefined,
-        ...(accountType === 'static' && process.env.FLW_BVN
-          ? { bvn: process.env.FLW_BVN }
-          : {})
-      }
-    : {
-        reference,
-        customer_id: customerId,
-        amount: accountType === 'static' ? 0 : Number(amount),
-        currency: 'NGN',
-        account_type: accountType,
-        narration: user.full_name || user.fullName || user.name || 'Wallet funding',
-        meta: {
-          user_id: user.id,
-          purpose: 'wallet_funding',
-          amount: Number(amount)
-        },
-        ...(accountType === 'static' && process.env.FLW_BVN
-          ? { bvn: process.env.FLW_BVN }
-          : {}),
-        ...(accountType === 'dynamic'
-          ? { expiry: Number(FLW_VA_EXPIRY || 3600) }
-          : {})
-      };
+  const isStatic = FLW_ACCOUNT_TYPE === 'static';
+
+  const vaPayload = {
+    email: user.email,
+    amount: isStatic ? 0 : Number(amount),
+    tx_ref: reference,
+    firstname: first,
+    lastname: last,
+    phonenumber: user.phone ? String(user.phone) : undefined,
+    narration: user.full_name || user.fullName || user.name || 'Wallet funding',
+    expiry: isStatic ? undefined : FLW_VA_EXPIRY,
+    is_permanent: isStatic
+  };
 
   const cleanedPayload = Object.fromEntries(
-    Object.entries(vaPayload).filter(([, value]) =>
-      value !== undefined && value !== null && value !== ''
-    )
+    Object.entries(vaPayload).filter(([, value]) => value !== undefined && value !== null && value !== '')
   );
 
   const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
@@ -1659,12 +1637,8 @@ app.get('/api/wallet/balance', requireAuth, async (req, res) => {
 
 app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
   try {
-    const { amount } = req.body || {};
-    const amt = toNumber(amount, 0);
-
-    if (amt < 100) {
-      return respondError(res, 400, 'Minimum funding amount is 100');
-    }
+    const amt = toNumber(req.body?.amount, 0);
+    if (amt < 100) return respondError(res, 400, 'Minimum funding amount is 100');
 
     const userResult = await query(
       `SELECT id, full_name, email, phone
@@ -1677,18 +1651,11 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     const user = userResult.rows[0];
     if (!user) return respondError(res, 404, 'User not found');
 
-    const customer = await flutterwaveCreateCustomer(user);
-    const customerId = customer?.id || customer?.customer_id || customer?.customerId;
-
-    if (!customerId) {
-      return respondError(res, 500, 'Unable to create Flutterwave customer');
-    }
-
     const reference = flutterwaveTxRef('fund');
+
     const virtualAccount = await flutterwaveCreateVirtualAccount({
       amount: amt,
       user,
-      customerId,
       reference
     });
 
@@ -1702,9 +1669,9 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       virtualAccount?.data?.bank_name ||
       null;
 
-    const displayName =
-      virtualAccount?.note ||
-      virtualAccount?.narration ||
+    const accountName =
+      virtualAccount?.account_name ||
+      virtualAccount?.data?.account_name ||
       user.full_name ||
       user.email ||
       'Wallet funding';
@@ -1725,7 +1692,6 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
         Number(amt).toFixed(2),
         JSON.stringify({
           purpose: 'wallet_funding',
-          customerId,
           virtualAccount,
           accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
         })
@@ -1742,7 +1708,6 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       description: 'Wallet funding initiated',
       meta: {
         provider: 'flutterwave',
-        customerId,
         accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
       }
     });
@@ -1752,9 +1717,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       amount: Number(amt).toFixed(2),
       account_number: accountNumber,
       bank_name: bankName,
-      account_name: displayName,
+      account_name: accountName,
       expiry_date: expiryDate,
-      customer_id: customerId,
       account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
     }, 'Funding details generated');
   } catch (err) {
@@ -2164,12 +2128,7 @@ app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServi
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
   try {
-    const signature =
-      req.headers['flutterwave-signature'] ||
-      req.headers['verif-hash'] ||
-      req.headers['x-flw-secret-hash'];
-
-    if (!isValidFlutterwaveWebhook(req.rawBody, signature)) {
+    if (!isValidFlutterwaveWebhook(req)) {
       return respondError(res, 401, 'Invalid webhook signature');
     }
 
@@ -2191,30 +2150,16 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     const status = String(data.status || body.status || '').toLowerCase();
     const amount = toNumber(data.amount ?? body.amount, 0);
 
-    const userMetaId =
-      data?.meta?.user_id ||
-      body?.meta_data?.user_id ||
-      body?.meta_data?.userId ||
-      body?.meta_data?.userID ||
-      null;
-
     if (!txRef) {
       return respondOk(res, { received: true }, 'Webhook received');
     }
 
-    const intentResult = userMetaId
-      ? await query(
-          `SELECT * FROM payment_intents
-           WHERE tx_ref = $1 AND user_id = $2
-           LIMIT 1`,
-          [txRef, userMetaId]
-        )
-      : await query(
-          `SELECT * FROM payment_intents
-           WHERE tx_ref = $1
-           LIMIT 1`,
-          [txRef]
-        );
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1
+       LIMIT 1`,
+      [txRef]
+    );
 
     const intent = intentResult.rows[0];
     if (!intent) {
@@ -2232,7 +2177,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
          WHERE tx_ref = $1`,
         [txRef]
       );
-
       return respondOk(res, { received: true }, 'Webhook received');
     }
 
@@ -2244,7 +2188,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
          WHERE tx_ref = $1`,
         [txRef]
       );
-
       return respondOk(res, { received: true }, 'Webhook received');
     }
 
@@ -2282,7 +2225,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       reference: txRef,
       description: 'Wallet funded successfully',
       meta: {
-        transaction_id: data.id || body.data?.transaction_id || null,
         provider: 'flutterwave',
         grossAmount: fee.grossAmount,
         feePercent: fee.feePercent,
