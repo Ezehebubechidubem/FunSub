@@ -31,9 +31,8 @@ const FLW_ACCOUNT_TYPE = String(process.env.FLW_ACCOUNT_TYPE || 'dynamic').toLow
 const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
 
 // These are configurable in case Flutterwave changes the route you are using.
-const FLW_CUSTOMER_PATH = process.env.FLW_CUSTOMER_PATH || '/customers';
-const FLW_VA_PATH = process.env.FLW_VA_PATH || '/virtual-account-numbers';
-
+const FLW_CUSTOMER_URL = process.env.FLW_CUSTOMER_URL; // set this to the exact customer endpoint from your Flutterwave environment
+const FLW_VA_URL = process.env.FLW_VA_URL || 'https://api.flutterwave.com/v3/virtual-account-numbers';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 
@@ -139,7 +138,15 @@ const toNumber = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
+const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
+  headers: flutterwaveHeaders(),
+  timeout: 30000
+});
 
+const vaRes = await axios.post(FLW_VA_URL, vaPayload, {
+  headers: flutterwaveHeaders(),
+  timeout: 30000
+});
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
