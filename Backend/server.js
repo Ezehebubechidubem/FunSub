@@ -31,8 +31,13 @@ const FLW_ACCOUNT_TYPE = String(process.env.FLW_ACCOUNT_TYPE || 'dynamic').toLow
 const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
 
 // These are configurable in case Flutterwave changes the route you are using.
-const FLW_CUSTOMER_URL = process.env.FLW_CUSTOMER_URL; // set this to the exact customer endpoint from your Flutterwave environment
-const FLW_VA_URL = process.env.FLW_VA_URL || 'https://api.flutterwave.com/v3/virtual-account-numbers';
+const FLW_CUSTOMER_URL = String(
+  process.env.FLW_CUSTOMER_URL || `${FLW_BASE_URL}/customers`
+).trim();
+
+const FLW_VA_URL = String(
+  process.env.FLW_VA_URL || `${FLW_BASE_URL}/virtual-account-numbers`
+).trim();
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 
@@ -179,6 +184,12 @@ function applyWalletFundingFee(grossAmount) {
     feeAmount: Number(feeAmount.toFixed(2)),
     netAmount: Number(netAmount.toFixed(2))
   };
+}
+function ensureHttpUrl(value, name) {
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(`${name} is invalid: ${value}`);
+  }
+  return value;
 }
 
 async function ensureWallet(userId) {
