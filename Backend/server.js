@@ -468,19 +468,15 @@ function splitFullName(fullName = '') {
 function isValidFlutterwaveWebhook(req) {
   if (!process.env.FLW_WEBHOOK_HASH) return true;
 
-  const header =
-    String(req.headers['flutterwave-signature'] || '').trim() ||
-    String(req.headers['verif-hash'] || '').trim() ||
-    String(req.headers['x-flw-secret-hash'] || '').trim();
-
-  if (!header || !req.rawBody) return false;
+  const signature = String(req.headers['flutterwave-signature'] || '').trim();
+  if (!signature || !req.rawBody) return false;
 
   const computed = crypto
     .createHmac('sha256', process.env.FLW_WEBHOOK_HASH)
     .update(req.rawBody)
     .digest('base64');
 
-  return header === computed || header === process.env.FLW_WEBHOOK_HASH;
+  return computed === signature || signature === process.env.FLW_WEBHOOK_HASH;
 }
 
 
@@ -520,6 +516,25 @@ async function flutterwaveCreateCustomer(user) {
   });
 
   return customerRes.data?.data || customerRes.data;
+}
+async function pollFundingStatus(reference, amount) {
+  stopPolling();
+  fundingPollTimer = setInterval(async () => {
+    const res = await fetch(`${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('funsub_token') || ''}` }
+    });
+
+    const data = await res.json().catch(() => ({}));
+    const intentStatus = String(data?.intent?.status || '').toLowerCase();
+    const txStatus = String(data?.transaction?.status || '').toLowerCase();
+
+    if (intentStatus === 'successful' || txStatus === 'success') {
+      stopPolling();
+      showToast('Success', `₦${Number(amount).toLocaleString('en-NG')} funded successfully`);
+      setStatus(`₦${Number(amount).toLocaleString('en-NG')} funded successfully`, 'success');
+      setTimeout(() => window.location.href = 'dashboard.html', 1800);
+    }
+  }, 3000);
 }
 async function processFundingSuccess({ reference, amount, flutterwaveData = {}, rawWebhook = null }) {
   const client = await pool.connect();
@@ -2268,8 +2283,13 @@ app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServi
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
   try {
+    console.log('FLW WEBHOOK HIT');
+    console.log('HEADERS:', req.headers);
+    console.log('BODY:', req.body);
+
     if (!isValidFlutterwaveWebhook(req)) {
-      return respondError(res, 401, 'Invalid webhook signature');
+      console.log('INVALID FLW SIGNATURE');
+      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
     }
 
     const body = req.body || {};
@@ -2283,7 +2303,7 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       String(body['event.type'] || '').toUpperCase() === 'BANK_TRANSFER_TRANSACTION';
 
     if (!isRelevant) {
-      return respondOk(res, { received: true }, 'Webhook received');
+      return res.status(200).json({ received: true });
     }
 
     const reference =
@@ -2297,7 +2317,26 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     const amount = Number(data.amount ?? body.amount ?? 0);
 
     if (!reference) {
-      return respondOk(res, { received: true }, 'Webhook received');
+      console.log('NO REFERENCE IN WEBHOOK');
+      return res.status(200).json({ received: true });
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1
+       LIMIT 1`,
+      [reference]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) {
+      console.log('NO PAYMENT INTENT FOUND FOR', reference);
+      return res.status(200).json({ received: true });
+    }
+
+    if (String(intent.status).toLowerCase() === 'successful') {
+      console.log('ALREADY PROCESSED', reference);
+      return res.status(200).json({ received: true });
     }
 
     if (status && status !== 'successful' && status !== 'completed') {
@@ -2308,31 +2347,115 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
          WHERE tx_ref = $1`,
         [
           reference,
+          JSON.stringify({ webhook: body, reason: 'flutterwave_not_successful' })
+        ]
+      );
+
+      return res.status(200).json({ received: true });
+    }
+
+    const expectedAmount = Number(intent.amount || 0);
+    if (expectedAmount && amount && expectedAmount !== amount) {
+      await query(
+        `UPDATE payment_intents
+         SET status = 'failed',
+             meta = $2
+         WHERE tx_ref = $1`,
+        [
+          reference,
           JSON.stringify({
             webhook: body,
-            reason: 'flutterwave_not_successful'
+            reason: 'amount_mismatch',
+            expectedAmount,
+            paidAmount: amount
           })
         ]
       );
 
-      return respondOk(res, { received: true }, 'Webhook received');
+      return res.status(200).json({ received: true });
     }
 
-    const result = await processFundingSuccess({
+    const fee =
+      typeof applyWalletFundingFee === 'function'
+        ? applyWalletFundingFee(amount || expectedAmount)
+        : {
+            grossAmount: amount || expectedAmount,
+            feePercent: 0,
+            feeAmount: 0,
+            netAmount: amount || expectedAmount
+          };
+
+    const creditedAmount = Number(fee.netAmount || 0);
+
+    await query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [intent.user_id, creditedAmount]
+    );
+
+    await query(
+      `UPDATE payment_intents
+       SET status = 'successful',
+           verified_at = NOW(),
+           meta = $2
+       WHERE tx_ref = $1`,
+      [
+        reference,
+        JSON.stringify({
+          webhook: body,
+          creditedAmount,
+          fee
+        })
+      ]
+    );
+
+    await query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2
+       WHERE reference = $1
+         AND user_id = $3`,
+      [
+        reference,
+        JSON.stringify({
+          webhook: body,
+          creditedAmount,
+          fee
+        }),
+        intent.user_id
+      ]
+    );
+
+    const tx = await addTransaction({
+      userId: intent.user_id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(creditedAmount).toFixed(2),
+      status: 'success',
       reference,
-      amount,
-      flutterwaveData: data,
-      rawWebhook: body
+      description: 'Wallet funded successfully',
+      meta: {
+        provider: 'flutterwave',
+        creditedAmount,
+        fee
+      }
     });
 
-    return respondOk(res, {
-      received: true,
-      processed: !!result?.ok,
-      alreadyProcessed: !!result?.alreadyProcessed
-    }, 'Webhook received');
+    await addNotification(
+      intent.user_id,
+      'Wallet funded',
+      `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
+      { tx_id: tx.id, reference, creditedAmount },
+      true
+    );
+
+    console.log('WEBHOOK PROCESSED SUCCESSFULLY FOR', reference);
+    return res.status(200).json({ received: true, processed: true });
   } catch (err) {
-    console.error(err.response?.data || err.message || err);
-    return respondError(res, 500, 'Webhook error');
+    console.error('WEBHOOK ERROR:', err?.response?.data || err?.message || err);
+    return res.status(500).json({ success: false, message: 'Webhook error' });
   }
 });
 /* ADMIN */
