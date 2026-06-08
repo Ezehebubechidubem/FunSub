@@ -2287,6 +2287,10 @@ app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServi
 
 /* WEBHOOK */
 
+app.get('/api/webhooks/flutterwave', (req, res) => {
+  return res.status(200).send('Flutterwave webhook endpoint is live');
+});
+
 app.post('/api/webhooks/flutterwave', async (req, res) => {
   try {
     console.log('FLW WEBHOOK HIT');
@@ -2297,9 +2301,7 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       console.log('INVALID FLW SIGNATURE');
       return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
     }
-console.log('FLW WEBHOOK HIT');
-console.log('HEADERS:', req.headers);
-console.log('BODY:', req.body);
+
     const body = req.body || {};
     const event = String(body.event || '').toLowerCase();
     const data = body.data || {};
