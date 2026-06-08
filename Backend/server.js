@@ -138,15 +138,7 @@ const toNumber = (v, fallback = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
-const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
-  headers: flutterwaveHeaders(),
-  timeout: 30000
-});
 
-const vaRes = await axios.post(FLW_VA_URL, vaPayload, {
-  headers: flutterwaveHeaders(),
-  timeout: 30000
-});
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
@@ -493,11 +485,14 @@ async function flutterwaveCreateCustomer(user) {
     payload.phone = { number: String(user.phone) };
   }
 
-  const response = await axios.post(`${FLW_BASE_URL}${FLW_CUSTOMER_PATH}`, payload, {
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
     headers: flutterwaveHeaders(),
     timeout: 30000
   });
-
+const vaRes = await axios.post(FLW_VA_URL, vaPayload, {  
+  headers: flutterwaveHeaders(),  
+  timeout: 30000  
+});  
   return response.data?.data || response.data;
 }
 
@@ -535,10 +530,14 @@ async function flutterwaveCreateVirtualAccount({ amount, user, customerId, refer
     if (process.env.FLW_NIN) payload.nin = process.env.FLW_NIN;
   }
 
-  const response = await axios.post(`${FLW_BASE_URL}${FLW_VA_PATH}`, payload, {
+  const vaRes = await axios.post(FLW_VA_URL, vaPayload, {
     headers: flutterwaveHeaders(),
     timeout: 30000
   });
+const vaRes = await axios.post(FLW_VA_URL, vaPayload, {  
+  headers: flutterwaveHeaders(),  
+  timeout: 30000  
+});  
 
   return response.data?.data || response.data;
 }
