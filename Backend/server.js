@@ -117,12 +117,12 @@ for (const dir of [UPLOAD_ROOT, AVATAR_DIR, KYC_DIR]) {
 
 app.use(helmet());
 app.use(cors({ origin: FRONTEND_URL === '*' ? true : FRONTEND_URL, credentials: true }));
-app.use(express.json({ limit: '15mb' }));
+
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(UPLOAD_ROOT));
 
 app.use(express.json({
-  limit: '2mb',
+  limit: '15mb',
   verify: (req, _res, buf) => {
     req.rawBody = buf.toString('utf8');
   }
