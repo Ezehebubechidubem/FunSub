@@ -470,78 +470,101 @@ async function flutterwaveCreateCustomer(user) {
     throw new Error('User email is required to create Flutterwave customer');
   }
 
-  const { first, last } = splitFullName(user.full_name || user.fullName || user.name || 'User');
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
 
-  const payload = {
+  const customerPayload = {
     email: user.email,
-    name: { first, last },
+    name: {
+      first,
+      last
+    },
+    phone: user.phone
+      ? { number: String(user.phone) }
+      : undefined,
     meta: {
       user_id: user.id,
       purpose: 'wallet_funding'
     }
   };
 
-  if (user.phone) {
-    payload.phone = { number: String(user.phone) };
-  }
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(customerPayload).filter(([, value]) =>
+      value !== undefined && value !== null && value !== ''
+    )
+  );
 
-  const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, cleanedPayload, {
     headers: flutterwaveHeaders(),
     timeout: 30000
   });
-const vaRes = await axios.post(FLW_VA_URL, vaPayload, {  
-  headers: flutterwaveHeaders(),  
-  timeout: 30000  
-});  
-  return response.data?.data || response.data;
+
+  return customerRes.data?.data || customerRes.data;
 }
 
-async function flutterwaveCreateVirtualAccount({ amount, user, customerId, reference }) {
-  if (!customerId) {
-    throw new Error('Flutterwave customer_id is required');
-  }
+async function flutterwaveCreateVirtualAccount({
+  amount,
+  user,
+  customerId,
+  reference
+}) {
+  const accountType = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static'
+    ? 'static'
+    : 'dynamic';
 
-  const accountType = FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic';
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
 
-  if (accountType === 'static' && !process.env.FLW_BVN && !process.env.FLW_NIN) {
-    throw new Error('Static virtual accounts require FLW_BVN or FLW_NIN');
-  }
+  const vaPayload = FLW_VA_URL.includes('/virtual-account-numbers')
+    ? {
+        email: user.email,
+        currency: 'NGN',
+        amount: accountType === 'static' ? 0 : Number(amount),
+        firstname: first,
+        lastname: last,
+        tx_ref: reference,
+        is_permanent: accountType === 'static',
+        narration: user.full_name || user.fullName || user.name || 'Wallet funding',
+        phonenumber: user.phone ? String(user.phone) : undefined,
+        ...(accountType === 'static' && process.env.FLW_BVN
+          ? { bvn: process.env.FLW_BVN }
+          : {})
+      }
+    : {
+        reference,
+        customer_id: customerId,
+        amount: accountType === 'static' ? 0 : Number(amount),
+        currency: 'NGN',
+        account_type: accountType,
+        narration: user.full_name || user.fullName || user.name || 'Wallet funding',
+        meta: {
+          user_id: user.id,
+          purpose: 'wallet_funding',
+          amount: Number(amount)
+        },
+        ...(accountType === 'static' && process.env.FLW_BVN
+          ? { bvn: process.env.FLW_BVN }
+          : {}),
+        ...(accountType === 'dynamic'
+          ? { expiry: Number(FLW_VA_EXPIRY || 3600) }
+          : {})
+      };
 
-  const payload = {
-    reference,
-    customer_id: customerId,
-    amount: accountType === 'static' ? 0 : Number(amount),
-    currency: 'NGN',
-    account_type: accountType,
-    narration: user.full_name || user.fullName || user.name || 'Wallet funding',
-    meta: {
-      user_id: user.id,
-      purpose: 'wallet_funding',
-      amount: Number(amount)
-    }
-  };
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(vaPayload).filter(([, value]) =>
+      value !== undefined && value !== null && value !== ''
+    )
+  );
 
-  if (accountType === 'dynamic') {
-    payload.expiry = FLW_VA_EXPIRY; // docs show temporary accounts can expire; default is about 1 hour
-  }
-
-  if (accountType === 'static') {
-    if (process.env.FLW_BVN) payload.bvn = process.env.FLW_BVN;
-    if (process.env.FLW_NIN) payload.nin = process.env.FLW_NIN;
-  }
-
-  const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
+  const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
     headers: flutterwaveHeaders(),
     timeout: 30000
   });
-const vaRes = await axios.post(FLW_VA_URL, vaPayload, {  
-  headers: flutterwaveHeaders(),  
-  timeout: 30000  
-});  
 
-  return response.data?.data || response.data;
+  return vaRes.data?.data || vaRes.data;
 }
-
 function applyFundingFeeIfAny(amount) {
   if (typeof applyWalletFundingFee === 'function') {
     return applyWalletFundingFee(amount);
