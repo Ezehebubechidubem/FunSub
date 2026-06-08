@@ -369,10 +369,12 @@
       place-items:center;
       box-shadow:0 12px 24px rgba(200,162,74,.22);
     }
-a{
-  text-decoration:none;
-  color:#5f5f5f;
-}
+
+    a{
+      text-decoration:none;
+      color:#5f5f5f;
+    }
+
     .badge span{
       transform:rotate(-45deg);
       font-size:34px;
@@ -585,7 +587,7 @@ a{
 </head>
 <body>
   <div class="app">
-   <div class="topbar">
+    <div class="topbar">
       <div class="user-wrap">
         <div class="avatar">
           <a href="profile.html"><svg viewBox="0 0 24 24">
@@ -594,9 +596,9 @@ a{
           </svg></a>
         </div>
         <div class="greeting">
-          <div class="small">Hi chidubem!</div>
-          <div class="big">Fast and reliable transactions</div>
-        </div></a>
+          <div class="small" id="greetingSmall">Hi chidubem!</div>
+          <div class="big" id="greetingBig">Fast and reliable transactions</div>
+        </div>
       </div>
 
       <div class="bell clickable" id="bellBtn" title="Notifications">
@@ -613,12 +615,11 @@ a{
           <span>Available Balance</span>
           <span style="font-size:18px;">👁️</span>
         </div>
-        <div class="balance-value">₦1500.57</div>
+        <div class="balance-value" id="balanceValue">₦1500.57</div>
       </div>
       <button class="fund-btn clickable" id="fundBtn">Fund Wallet</button>
     </div>
 
-    <!-- Quick Actions -->
     <div class="section quick-actions">
       <div class="section-title">Quick Actions</div>
       <div class="action-grid">
@@ -666,7 +667,6 @@ a{
       </div>
     </div>
 
-    <!-- Services below quick actions -->
     <div class="section">
       <div class="section-title">Services</div>
       <div class="services-grid">
@@ -786,36 +786,22 @@ a{
         <div class="see-all">See All &gt;</div>
       </div>
 
-      <div class="txn">
-        <div class="txn-left">
-          <div class="txn-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M4 12h16"></path>
-              <path d="M10 6l-6 6 6 6"></path>
-            </svg>
+      <div id="transactionsList">
+        <div class="txn">
+          <div class="txn-left">
+            <div class="txn-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 12h16"></path>
+                <path d="M10 6l-6 6 6 6"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="txn-title">Loading transactions...</div>
+              <div class="txn-sub">Please wait</div>
+            </div>
           </div>
-          <div>
-            <div class="txn-title">Wallet Funding</div>
-            <div class="txn-sub">Today · 12:46 PM</div>
-          </div>
+          <div class="txn-amount">—</div>
         </div>
-        <div class="txn-amount">₦2,000</div>
-      </div>
-
-      <div class="txn">
-        <div class="txn-left">
-          <div class="txn-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M5 12h14"></path>
-              <path d="M14 6l6 6-6 6"></path>
-            </svg>
-          </div>
-          <div>
-            <div class="txn-title">Airtime Purchase</div>
-            <div class="txn-sub">Today · 10:05 AM</div>
-          </div>
-        </div>
-        <div class="txn-amount">-₦500</div>
       </div>
     </div>
   </div>
@@ -823,7 +809,7 @@ a{
   <nav class="bottom-nav">
     <div class="nav-item active">
       <div class="nav-icon">
-       <a href="dashboard.html"> <svg viewBox="0 0 24 24">
+        <a href="dashboard.html"><svg viewBox="0 0 24 24">
           <path d="M3 11l9-8 9 8"></path>
           <path d="M5 10v10h14V10"></path>
         </svg></a>
@@ -831,12 +817,9 @@ a{
       Home
     </div>
 
-
-
-
-  <div class="nav-item">
+    <div class="nav-item">
       <div class="nav-icon">
-           <svg viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24">
           <path d="M6 3h12v18H6z"></path>
           <path d="M9 7h6"></path>
           <path d="M9 11h6"></path>
@@ -844,6 +827,7 @@ a{
       </div>
       Pricing
     </div>
+
     <div class="nav-item">
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
@@ -855,9 +839,10 @@ a{
       History
     </div>
 
-   <div class="nav-item">
+   
+    <div class="nav-item">
       <div class="nav-icon">
-        <a href="profile.html"> <svg viewBox="0 0 24 24">
+        <a href="profile.html"><svg viewBox="0 0 24 24">
           <path d="M20 21a8 8 0 1 0-16 0"></path>
           <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
         </svg></a>
@@ -867,59 +852,228 @@ a{
   </nav>
 
   <script>
-    const toast = (text) => {
-      let t = document.getElementById("toast");
-      if (!t) {
-        t = document.createElement("div");
-        t.id = "toast";
-        t.style.position = "fixed";
-        t.style.left = "50%";
-        t.style.bottom = "88px";
-        t.style.transform = "translateX(-50%)";
-        t.style.background = "rgba(17,17,17,.96)";
-        t.style.color = "#fff";
-        t.style.padding = "12px 16px";
-        t.style.border = "1px solid rgba(200,162,74,.35)";
-        t.style.borderRadius = "14px";
-        t.style.boxShadow = "0 16px 30px rgba(0,0,0,.20)";
-        t.style.zIndex = "999";
-        t.style.fontSize = "14px";
-        t.style.maxWidth = "90vw";
-        t.style.textAlign = "center";
-        t.style.transition = "opacity .2s ease";
-        document.body.appendChild(t);
+    const API_ROOT = "https://funsub.onrender.com";
+
+    const balanceValueEl = document.getElementById("balanceValue");
+    const greetingSmallEl = document.getElementById("greetingSmall");
+    const greetingBigEl = document.getElementById("greetingBig");
+    const transactionsListEl = document.getElementById("transactionsList");
+    const bellBtn = document.getElementById("bellBtn");
+    const fundBtn = document.getElementById("fundBtn");
+
+    const getToken = () => localStorage.getItem("funsub_token") || "";
+
+    function formatMoney(value) {
+      const num = Number(value || 0);
+      return `₦${num.toLocaleString("en-NG", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+    }
+
+    function safeText(v, fallback = "") {
+      const s = String(v ?? "").trim();
+      return s || fallback;
+    }
+
+    function shortName(fullName) {
+      const name = safeText(fullName, "");
+      if (!name) return "chidubem";
+      return name.split(/\s+/)[0] || name;
+    }
+
+    function formatDate(value) {
+      try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "";
+        return d.toLocaleString("en-NG", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+      } catch {
+        return "";
       }
-      t.textContent = text;
-      t.style.opacity = "1";
-      clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => {
-        t.style.opacity = "0";
-      }, 1800);
-    };
+    }
 
-    document.getElementById("fundBtn").addEventListener("click", () => {
-      toast("Fund Wallet tapped");
-    });
+    function isCreditTransaction(tx) {
+      const category = String(tx?.category || "").toLowerCase();
+      const type = String(tx?.type || "").toLowerCase();
+      return category === "wallet" || type.includes("fund");
+    }
 
-    document.getElementById("bellBtn").addEventListener("click", () => {
-      toast("Notifications");
-    });
+    function getTxnTitle(tx) {
+      return safeText(tx?.description || tx?.type || tx?.category || "Transaction", "Transaction");
+    }
 
-    document.querySelectorAll("[data-action], [data-service]").forEach((el) => {
-      el.addEventListener("click", () => {
-        const label = el.getAttribute("data-action") || el.getAttribute("data-service");
-        toast(label + " tapped");
+    function getTxnSubtitle(tx) {
+      const parts = [];
+      const date = formatDate(tx?.created_at);
+      if (date) parts.push(date);
+      const category = safeText(tx?.category || "");
+      if (category) parts.push(category);
+      const status = safeText(tx?.status || "");
+      if (status) parts.push(status);
+      return parts.join(" · ");
+    }
+
+    function getTxnAmountText(tx) {
+      const amount = formatMoney(tx?.amount || 0);
+      return isCreditTransaction(tx) ? `+${amount}` : `-${amount}`;
+    }
+
+    function renderTransactions(transactions = []) {
+      if (!Array.isArray(transactions) || transactions.length === 0) {
+        transactionsListEl.innerHTML = `
+          <div class="txn">
+            <div class="txn-left">
+              <div class="txn-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 12h16"></path>
+                  <path d="M10 6l-6 6 6 6"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="txn-title">No recent transactions</div>
+                <div class="txn-sub">Your latest activity will appear here</div>
+              </div>
+            </div>
+            <div class="txn-amount">—</div>
+          </div>
+        `;
+        return;
+      }
+
+      transactionsListEl.innerHTML = transactions.slice(0, 5).map((tx) => `
+        <div class="txn">
+          <div class="txn-left">
+            <div class="txn-icon">
+              <svg viewBox="0 0 24 24">
+                ${isCreditTransaction(tx)
+                  ? '<path d="M20 12H4"></path><path d="M14 6l6 6-6 6"></path>'
+                  : '<path d="M4 12h16"></path><path d="M10 6l-6 6 6 6"></path>'}
+              </svg>
+            </div>
+            <div>
+              <div class="txn-title">${getTxnTitle(tx)}</div>
+              <div class="txn-sub">${getTxnSubtitle(tx)}</div>
+            </div>
+          </div>
+          <div class="txn-amount">${getTxnAmountText(tx)}</div>
+        </div>
+      `).join("");
+    }
+
+    function updateGreeting(user) {
+      const displayName = shortName(user?.full_name || user?.fullName || user?.name || user?.username || "");
+      greetingSmallEl.textContent = `Hi ${displayName}!`;
+      greetingBigEl.textContent = "Fast and reliable transactions";
+    }
+
+    function updateBalance(wallet) {
+      const balance = wallet?.balance ?? 0;
+      balanceValueEl.textContent = formatMoney(balance);
+    }
+
+    function updateNotifications(notifications = [], unreadCount = 0) {
+      window.__notifications = Array.isArray(notifications) ? notifications : [];
+      bellBtn.title = unreadCount > 0
+        ? `Notifications (${unreadCount} unread)`
+        : "Notifications";
+    }
+
+    async function fetchJson(url) {
+      const token = getToken();
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-    });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { rawResponse: text };
+      }
+      return { res, data };
+    }
 
-    document.querySelectorAll(".nav-item").forEach((item) => {
-      item.addEventListener("click", () => {
-        document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
-        item.classList.add("active");
+    async function loadDashboardData() {
+      const token = getToken();
+
+      if (!token) {
+        greetingSmallEl.textContent = "Hi chidubem!";
+        updateBalance({ balance: 1500.57 });
+        renderTransactions([]);
+        updateNotifications([], 0);
+        return;
+      }
+
+      try {
+        const [meResult, walletResult, txnResult, notificationsResult, unreadResult] = await Promise.all([
+          fetchJson(`${API_ROOT}/api/auth/me`),
+          fetchJson(`${API_ROOT}/api/wallet/balance`),
+          fetchJson(`${API_ROOT}/api/wallet/transactions?limit=5`),
+          fetchJson(`${API_ROOT}/api/notifications`),
+          fetchJson(`${API_ROOT}/api/notifications/unread-count`)
+        ]);
+
+        if (meResult.res.ok) {
+          updateGreeting(meResult.data?.user || {});
+          if (meResult.data?.wallet && !walletResult.res.ok) {
+            updateBalance(meResult.data.wallet);
+          }
+        }
+
+        if (walletResult.res.ok) {
+          updateBalance(walletResult.data?.wallet || {});
+        }
+
+        if (txnResult.res.ok) {
+          renderTransactions(txnResult.data?.transactions || []);
+        } else {
+          renderTransactions([]);
+        }
+
+        const notifications = notificationsResult.res.ok ? (notificationsResult.data?.notifications || []) : [];
+        const unreadCount = unreadResult.res.ok
+          ? Number(unreadResult.data?.count || 0)
+          : notifications.filter(n => !n.is_read).length;
+
+        updateNotifications(notifications, unreadCount);
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      }
+    }
+
+    function wireClicks() {
+      document.getElementById("fundBtn").addEventListener("click", () => {
+        console.log("Fund Wallet tapped");
       });
+
+      document.getElementById("bellBtn").addEventListener("click", () => {
+        console.log("Notifications tapped", window.__notifications || []);
+      });
+
+      document.querySelectorAll("[data-action], [data-service]").forEach((el) => {
+        el.addEventListener("click", () => {
+          const label = el.getAttribute("data-action") || el.getAttribute("data-service");
+          console.log(label + " tapped");
+        });
+      });
+
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
+          item.classList.add("active");
+        });
+      });
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      wireClicks();
+      await loadDashboardData();
     });
   </script>
 </body>
 </html>
-
-  
