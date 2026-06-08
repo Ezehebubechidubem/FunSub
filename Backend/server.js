@@ -530,7 +530,7 @@ async function flutterwaveCreateVirtualAccount({ amount, user, customerId, refer
     if (process.env.FLW_NIN) payload.nin = process.env.FLW_NIN;
   }
 
-  const vaRes = await axios.post(FLW_VA_URL, vaPayload, {
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, customerPayload, {
     headers: flutterwaveHeaders(),
     timeout: 30000
   });
