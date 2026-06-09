@@ -1816,8 +1816,12 @@ app.get('/api/wallet/balance', requireAuth, async (req, res) => {
 
 app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
   try {
-    const amt = toNumber(req.body?.amount, 0);
-    if (amt < 100) return respondError(res, 400, 'Minimum funding amount is 100');
+    const { amount } = req.body || {};
+    const amt = toNumber(amount, 0);
+
+    if (amt < 100) {
+      return respondError(res, 400, 'Minimum funding amount is 100');
+    }
 
     const userResult = await query(
       `SELECT id, full_name, email, phone
@@ -1828,7 +1832,9 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     );
 
     const user = userResult.rows[0];
-    if (!user) return respondError(res, 404, 'User not found');
+    if (!user) {
+      return respondError(res, 404, 'User not found');
+    }
 
     const reference = flutterwaveTxRef('fund');
 
@@ -1860,6 +1866,12 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       virtualAccount?.data?.expiry_date ||
       null;
 
+    const intentMeta = {
+      purpose: 'wallet_funding',
+      accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+      virtualAccount
+    };
+
     await query(
       `INSERT INTO payment_intents
        (id, user_id, tx_ref, amount, currency, provider, status, meta, created_at)
@@ -1869,11 +1881,7 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
         user.id,
         reference,
         Number(amt).toFixed(2),
-        JSON.stringify({
-          purpose: 'wallet_funding',
-          virtualAccount,
-          accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
-        })
+        JSON.stringify(intentMeta)
       ]
     );
 
@@ -1887,7 +1895,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       description: 'Wallet funding initiated',
       meta: {
         provider: 'flutterwave',
-        accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
+        accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+        virtualAccount
       }
     });
 
@@ -1901,7 +1910,7 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
     }, 'Funding details generated');
   } catch (err) {
-    console.error(err.response?.data || err.message || err);
+    console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
     return respondError(res, 500, err?.message || 'Unable to initiate funding');
   }
 });
@@ -2466,6 +2475,7 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
 
     if (status && status !== 'successful' && status !== 'completed') {
       console.log('PAYMENT NOT SUCCESSFUL YET');
+
       await query(
         `UPDATE payment_intents
          SET status = 'failed',
@@ -2473,7 +2483,10 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
          WHERE tx_ref = $1`,
         [
           reference,
-          JSON.stringify({ webhook: body, reason: 'flutterwave_not_successful' })
+          JSON.stringify({
+            webhook: body,
+            reason: 'flutterwave_not_successful'
+          })
         ]
       );
 
@@ -2483,6 +2496,7 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     const expectedAmount = Number(intent.amount || 0);
     if (expectedAmount && amount && expectedAmount !== amount) {
       console.log('AMOUNT MISMATCH');
+
       await query(
         `UPDATE payment_intents
          SET status = 'failed',
@@ -2540,12 +2554,14 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       ]
     );
 
-    await query(
+    const txUpdate = await query(
       `UPDATE transactions
        SET status = 'success',
-           meta = $2
+           meta = $2,
+           updated_at = NOW()
        WHERE reference = $1
-         AND user_id = $3`,
+         AND user_id = $3
+       RETURNING *`,
       [
         reference,
         JSON.stringify({
@@ -2557,20 +2573,11 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       ]
     );
 
-    const tx = await addTransaction({
-      userId: intent.user_id,
-      type: 'funding',
-      category: 'wallet',
-      amount: Number(creditedAmount).toFixed(2),
-      status: 'success',
-      reference,
-      description: 'Wallet funded successfully',
-      meta: {
-        provider: 'flutterwave',
-        creditedAmount,
-        fee
-      }
-    });
+    const tx = txUpdate.rows[0];
+    if (!tx) {
+      console.log('NO EXISTING TRANSACTION FOUND TO UPDATE FOR', reference);
+      return res.status(200).json({ received: true });
+    }
 
     await addNotification(
       intent.user_id,
