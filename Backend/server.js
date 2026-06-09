@@ -1259,31 +1259,32 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         };
       } else {
         const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-  network: body.network || undefined,
-  provider: body.provider || undefined,
-  serviceID
-})).map(normalizeProviderPlan);
+          network: body.network || undefined,
+          provider: body.provider || undefined,
+          serviceID
+        })).map(normalizeProviderPlan);
 
-selectedPlan = providerPlans.find(plan => {
-  const planId = String(plan.id || '').trim().toLowerCase();
-  const metaVariation = String(
-    plan.meta?.variation_code ||
-    plan.meta?.variationCode ||
-    plan.meta?.code ||
-    ''
-  ).trim().toLowerCase();
+        selectedPlan = providerPlans.find(plan => {
+          const planId = String(plan.id || '').trim().toLowerCase();
+          const metaVariation = String(
+            plan.meta?.variation_code ||
+            plan.meta?.variationCode ||
+            plan.meta?.code ||
+            ''
+          ).trim().toLowerCase();
 
-  return (
-    planId === variationCode.toLowerCase() ||
-    metaVariation === variationCode.toLowerCase()
-  );
-});
+          return (
+            planId === variationCode.toLowerCase() ||
+            metaVariation === variationCode.toLowerCase()
+          );
+        });
 
-if (!selectedPlan) {
-  return respondError(res, 404, 'Selected plan not found');
-}
+        if (!selectedPlan) {
+          return respondError(res, 404, 'Selected plan not found');
+        }
+      }
 
-pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
       providerPayload = buildProviderPayload({
         serviceType: normalizedServiceType,
@@ -1305,7 +1306,7 @@ pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
 
       description = `${serviceName} - ${selectedPlan.name}`;
     }
-    }
+
     if (!pricing || !providerPayload) {
       return respondError(res, 400, 'Unable to prepare purchase');
     }
@@ -1338,16 +1339,16 @@ pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
       }
 
       const debitResult = await client.query(
-  `UPDATE wallets
-   SET balance = balance - $2, updated_at = NOW()
-   WHERE user_id = $1
-   RETURNING balance`,
-  [userId, purchaseAmount]
-);
+        `UPDATE wallets
+         SET balance = balance - $2, updated_at = NOW()
+         WHERE user_id = $1
+         RETURNING balance`,
+        [userId, purchaseAmount]
+      );
 
-console.log('DEBIT RESULT:', debitResult.rows[0]);
-console.log('PURCHASE AMOUNT:', purchaseAmount);
-console.log('USER ID:', userId);
+      console.log('DEBIT RESULT:', debitResult.rows[0]);
+      console.log('PURCHASE AMOUNT:', purchaseAmount);
+      console.log('USER ID:', userId);
 
       const inserted = await client.query(
         `INSERT INTO transactions
@@ -1379,7 +1380,9 @@ console.log('USER ID:', userId);
       transactionStarted = false;
     } catch (err) {
       if (transactionStarted) {
-        try { await client.query('ROLLBACK'); } catch (_) {}
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
       }
       throw err;
     } finally {
@@ -1387,37 +1390,37 @@ console.log('USER ID:', userId);
     }
 
     const providerResponse = USING_MOCK_PROVIDER
-  ? (String(body.force_fail).toLowerCase() === 'true'
-      ? mockProvider.buyFail({
-          request_id: body.request_id,
-          serviceID: providerPayload.serviceID,
-          phone: providerPayload.phone,
-          amount: providerPayload.amount,
-          serviceType: normalizedServiceType,
-          email: body.email
-        })
-      : mockProvider.buySuccess({
-          request_id: body.request_id,
-          serviceID: providerPayload.serviceID,
-          phone: providerPayload.phone,
-          amount: providerPayload.amount,
-          variation_code: providerPayload.variation_code,
-          serviceType: normalizedServiceType,
-          email: body.email
-        }))
-  : await callProvider(
-      normalizedServiceType,
-      'buy',
-      providerPayload,
-      {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId,
-        selectedPlan,
-        planId: selectedPlan?.id,
-        planName: selectedPlan?.name,
-        extra: body.extra || {}
-      }
-    );
+      ? (String(body.force_fail).toLowerCase() === 'true'
+          ? mockProvider.buyFail({
+              request_id: body.request_id,
+              serviceID: providerPayload.serviceID,
+              phone: providerPayload.phone,
+              amount: providerPayload.amount,
+              serviceType: normalizedServiceType,
+              email: body.email
+            })
+          : mockProvider.buySuccess({
+              request_id: body.request_id,
+              serviceID: providerPayload.serviceID,
+              phone: providerPayload.phone,
+              amount: providerPayload.amount,
+              variation_code: providerPayload.variation_code,
+              serviceType: normalizedServiceType,
+              email: body.email
+            }))
+      : await callProvider(
+          normalizedServiceType,
+          'buy',
+          providerPayload,
+          {
+            network: body.network,
+            serviceID: body.serviceID || body.serviceId,
+            selectedPlan,
+            planId: selectedPlan?.id,
+            planName: selectedPlan?.name,
+            extra: body.extra || {}
+          }
+        );
 
     const success = providerRequestLooksSuccessful(providerResponse);
 
