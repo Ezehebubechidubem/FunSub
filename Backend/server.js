@@ -503,17 +503,11 @@ function splitFullName(fullName = '') {
 function isValidFlutterwaveWebhook(req) {
   if (!process.env.FLW_WEBHOOK_HASH) return true;
 
-  const signature = String(req.headers['flutterwave-signature'] || '').trim();
-  if (!signature || !req.rawBody) return false;
+  const got =
+    String(req.headers['verif-hash'] || req.headers['x-flw-secret-hash'] || '').trim();
 
-  const computed = crypto
-    .createHmac('sha256', process.env.FLW_WEBHOOK_HASH)
-    .update(req.rawBody)
-    .digest('base64');
-
-  return computed === signature || signature === process.env.FLW_WEBHOOK_HASH;
+  return got && got === process.env.FLW_WEBHOOK_HASH;
 }
-
 
 async function flutterwaveCreateCustomer(user) {
   if (!user?.email) {
