@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fund Wallet</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --text:#111111;
+      --muted:#5f5f5f;
+      --gold:#c8a24a;
+      --gold-dark:#a9822e;
+      --gold-soft:#f7edcf;
+      --line:#ececec;
+      --shadow:0 14px 30px rgba(0,0,0,.08);
+      --shadow-soft:0 10px 20px rgba(200,162,74,.12);
+      --overlay:rgba(11,15,22,.72);
+      --success:#1fb46c;
+      --danger:#dc2626;
+      --info:#173dad;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+
+    .page{
+      min-height:100vh;
+      max-width:430px;
+      margin:0 auto;
+      padding:18px 16px 96px;
+      position:relative;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:18px;
+    }
+
+    .back{
+      width:38px;
+      height:38px;
+      display:grid;
+      place-items:center;
+      border-radius:12px;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow);
+      text-decoration:none;
+      color:var(--text);
+      background:#fff;
+      font-size:20px;
+      line-height:1;
+    }
+
+    .title-wrap{
+      flex:1;
+      text-align:center;
+      margin-right:38px;
+    }
+
+    h1{
+      margin:0;
+      font-size:24px;
+      line-height:1.1;
+      font-weight:800;
+      letter-spacing:-0.02em;
+    }
+
+    .subtitle{
+      margin:6px 0 0;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      padding:18px;
+      margin-bottom:14px;
+    }
+
+    .field-group{margin-bottom:14px}
+    label{
+      display:block;
+      margin-bottom:8px;
+      font-size:14px;
+      font-weight:700;
+      color:#111;
+    }
+
+    input{
+      width:100%;
+      height:54px;
+      border:1px solid #dfe3ea;
+      border-radius:14px;
+      padding:0 14px;
+      font-size:16px;
+      outline:none;
+      background:#fff;
+      color:#111;
+    }
+
+    input:focus{border-color:var(--gold)}
+    input::placeholder{color:#9ca3af}
+
+    .btn{
+      border:none;
+      border-radius:14px;
+      background:linear-gradient(180deg, var(--gold), var(--gold-dark));
+      color:#fff;
+      padding:14px 16px;
+      min-height:48px;
+      font-weight:800;
+      cursor:pointer;
+      transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+      box-shadow:0 10px 22px rgba(200,162,74,.18);
+    }
+
+    .btn:hover{
+      opacity:.98;
+      box-shadow:var(--shadow-soft);
+    }
+
+    .btn:active{
+      transform:scale(.98);
+    }
+
+    .btn.secondary{
+      background:#fff;
+      color:#111;
+      border:1px solid var(--line);
+      box-shadow:none;
+    }
+
+    .btn.secondary:hover{
+      background:var(--gold-soft);
+    }
+
+    .btn-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:14px;
+    }
+
+    .status{
+      margin-top:12px;
+      font-size:13px;
+      font-weight:700;
+      min-height:20px;
+      color:var(--info);
+    }
+
+    .status.success{color:var(--success)}
+    .status.error{color:var(--danger)}
+    .status.info{color:var(--info)}
+
+    .details-grid{
+      display:grid;
+      gap:12px;
+    }
+
+    .detail-box{
+      border:1px dashed #e6d29b;
+      border-radius:18px;
+      padding:14px;
+      background:#fffdf8;
+    }
+
+    .detail-label{
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:6px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+
+    .detail-value{
+      font-size:16px;
+      font-weight:800;
+      color:#111;
+      word-break:break-word;
+    }
+
+    .copy-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    .copy-btn{
+      border:none;
+      background:#111;
+      color:#fff;
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:12px;
+      font-weight:800;
+      cursor:pointer;
+    }
+
+    .muted-note{
+      margin-top:10px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
+    .countdown-box{
+      border:1px solid #f1dfab;
+      background:linear-gradient(135deg, #fff 0%, #fff9ea 100%);
+      border-radius:18px;
+      padding:14px;
+    }
+
+    .countdown-value{
+      font-size:22px;
+      font-weight:900;
+      color:#111;
+      letter-spacing:.2px;
+    }
+
+    .loader-overlay{
+      position:fixed;
+      inset:0;
+      background:var(--overlay);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9998;
+      backdrop-filter:blur(2px);
+    }
+
+    .loader-overlay.show{
+      display:flex;
+    }
+
+    .spinner{
+      width:56px;
+      height:56px;
+      border-radius:50%;
+      border:6px solid rgba(255,255,255,.18);
+      border-top-color:#ffffff;
+      animation:spin .8s linear infinite;
+    }
+
+    @keyframes spin{
+      to{transform:rotate(360deg)}
+    }
+
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:28px;
+      transform:translateX(-50%) translateY(30px);
+      opacity:0;
+      visibility:hidden;
+      min-width:280px;
+      max-width:90vw;
+      background:rgba(18,21,32,.96);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:18px;
+      padding:16px 18px;
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      z-index:10000;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      transition:opacity .45s ease, transform .45s ease, visibility .45s ease;
+    }
+
+    .toast.show{
+      opacity:1;
+      visibility:visible;
+      transform:translateX(-50%) translateY(0);
+    }
+
+    .toast-icon{
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      background:rgba(31,180,108,.16);
+      display:grid;
+      place-items:center;
+      flex:0 0 34px;
+    }
+
+    .toast-icon svg{
+      width:20px;
+      height:20px;
+      stroke:#1fb46c;
+      fill:none;
+      stroke-width:2.5;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .toast-text{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+
+    .toast-text strong{
+      font-size:16px;
+      color:#fff;
+    }
+
+    .toast-text span{
+      font-size:14px;
+      color:#cfd5df;
+    }
+
+    .section-title{
+      margin:0 0 10px;
+      font-size:16px;
+      font-weight:800;
+    }
+
+    @media (max-width:380px){
+      h1{font-size:22px}
+      .btn{padding:13px 14px}
+    }
+  </style>
+</head>
+<body>
+  <div class="loader-overlay" id="loader">
+    <div class="spinner" aria-label="Loading"></div>
+  </div>
+
+  <div class="toast" id="toast">
+    <div class="toast-icon">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5"></path>
+      </svg>
+    </div>
+    <div class="toast-text">
+      <strong id="toastTitle">Success</strong>
+      <span id="toastMessage">Done</span>
+    </div>
+  </div>
+
+  <main class="page">
+    <div class="topbar">
+      <a href="dashboard.html" class="back" aria-label="Back">←</a>
+      <div class="title-wrap">
+        <h1>Fund Wallet</h1>
+        <p class="subtitle">Stay inside the app and fund your balance safely.</p>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="field-group">
+        <label for="amountInput">Amount</label>
+        <input id="amountInput" type="number" min="100" step="1" placeholder="5000" />
+        <div class="muted-note">Enter the amount you want to fund. Tap Generate Account to create your payment details.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" type="button" id="generateBtn">Generate Account</button>
+        <button class="btn secondary" type="button" id="clearBtn">Clear</button>
+      </div>
+
+<div class="status info" id="fundStatus"></div>
+    </section>
+
+    <section class="card" id="detailsCard" style="display:none;">
+      <div class="section-title">Payment Details</div>
+      <div class="details-grid">
+        <div class="detail-box">
+          <div class="detail-label">Amount</div>
+          <div class="detail-value" id="detailAmount">₦0.00</div>
+        </div>
+
+        <div class="detail-box">
+          <div class="detail-label">Bank Name</div>
+          <div class="detail-value" id="detailBank">—</div>
+        </div>
+
+        <div class="detail-box">
+          <div class="detail-label">Account Name</div>
+          <div class="detail-value" id="detailAccountName">—</div>
+        </div>
+
+        <div class="detail-box">
+          <div class="detail-label">Account Number</div>
+          <div class="detail-value" id="detailAccountNumber">—</div>
+          <div class="copy-row">
+            <span class="muted-note" id="detailReferenceNote">Reference: —</span>
+            <button class="copy-btn" type="button" id="copyAccountBtn">Copy</button>
+          </div>
+        </div>
+
+        <div class="detail-box">
+          <div class="detail-label">Countdown</div>
+          <div class="countdown-box">
+            <div class="countdown-value" id="countdownValue">--:--:--</div>
+            <div class="muted-note" id="countdownNote">Waiting for payment</div>
+          </div>
+        </div>
+
+        <div class="detail-box" id="verifyBox" style="display:none;">
+          <div class="detail-label">Payment Status</div>
+          <div class="detail-value" id="verifyText">Waiting for payment confirmation...</div>
+          <div class="muted-note">After paying from your bank app, this page will keep checking your payment automatically.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-title">How it works</div>
+      <div class="muted-note" style="font-size:13px; color:#333;">
+        1. Enter the amount.<br />
+        2. Generate the account details.<br />
+        3. Transfer from your bank app.<br />
+        4. Wait for payment confirmation.<br />
+        5. Your wallet updates automatically after verification.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_ROOT = 'https://funsub.onrender.com';
+    const tokenKey = 'funsub_token';
+    const userKey = 'funsub_user';
+
+    const loader = document.getElementById('loader');
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toastTitle');
+    const toastMessage = document.getElementById('toastMessage');
+
+    const amountInput = document.getElementById('amountInput');
+    const generateBtn = document.getElementById('generateBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const detailsCard = document.getElementById('detailsCard');
+    const detailAmount = document.getElementById('detailAmount');
+    const detailBank = document.getElementById('detailBank');
+    const detailAccountName = document.getElementById('detailAccountName');
+    const detailAccountNumber = document.getElementById('detailAccountNumber');
+    const detailReferenceNote = document.getElementById('detailReferenceNote');
+    const copyAccountBtn = document.getElementById('copyAccountBtn');
+    const fundStatus = document.getElementById('fundStatus');
+    const verifyBox = document.getElementById('verifyBox');
+    const verifyText = document.getElementById('verifyText');
+    const countdownValue = document.getElementById('countdownValue');
+    const countdownNote = document.getElementById('countdownNote');
+
+    let currentFundingSession = null;
+    let fundingPollTimer = null;
+    let countdownTimer = null;
+    let countdownEndsAt = null;
+
+    function getToken() {
+      return localStorage.getItem(tokenKey) || '';
+    }
+
+    function getUser() {
+      try {
+        return JSON.parse(localStorage.getItem(userKey) || 'null');
+      } catch {
+        return null;
+      }
+    }
+
+    function showLoader() {
+      loader.classList.add('show');
+    }
+
+    function hideLoader() {
+      loader.classList.remove('show');
+    }
+
+    function showToast(title, message) {
+      toastTitle.textContent = title;
+      toastMessage.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+
+    function setStatus(message, type = 'info') {
+      fundStatus.className = `status ${type}`;
+      fundStatus.textContent = message;
+    }
+
+    function formatMoney(value) {
+      const num = Number(value || 0);
+      return `₦${num.toLocaleString('en-NG', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+    }
+
+    function safe(v, fallback = '—') {
+      const s = String(v ?? '').trim();
+      return s || fallback;
+    }
+
+    async function copyText(text, label = 'Copied') {
+      try {
+        await navigator.clipboard.writeText(String(text || ''));
+        showToast('Success', `${label} to clipboard`);
+      } catch {
+        showToast('Error', 'Unable to copy');
+      }
+    }
+
+    function renderFundingDetails(details = {}) {
+      const hasAny = Boolean(
+        details.account_number ||
+        details.account_name ||
+        details.bank_name ||
+        details.reference ||
+        details.expires_at
+      );
+
+      if (!hasAny) {
+        detailsCard.style.display = 'none';
+        return;
+      }
+
+      detailsCard.style.display = 'block';
+      detailAmount.textContent = formatMoney(details.amount || 0);
+      detailBank.textContent = safe(details.bank_name || details.bank || details.provider_bank);
+      detailAccountName.textContent = safe(details.account_name || details.accountName || details.customer_name);
+      detailAccountNumber.textContent = safe(details.account_number || details.accountNumber || details.virtual_account_number);
+      detailReferenceNote.textContent = `Reference: ${safe(details.reference || details.tx_ref || details.txRef)}`;
+
+      verifyBox.style.display = 'block';
+      verifyText.textContent = 'Waiting for payment confirmation...';
+
+      if (details.expires_at) {
+        countdownEndsAt = new Date(details.expires_at).getTime();
+      } else {
+        countdownEndsAt = Date.now() + (60 * 60 * 1000);
+      }
+
+      startCountdown();
+    }
+
+    function stopCountdown() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+
+    function startCountdown() {
+      stopCountdown();
+
+      const updateCountdown = () => {
+        if (!countdownEndsAt) {
+          countdownValue.textContent = '--:--:--';
+          countdownNote.textContent = 'Waiting for payment';
+          return;
+        }
+
+        const remaining = Math.max(0, countdownEndsAt - Date.now());
+
+        const totalSeconds = Math.floor(remaining / 1000);
+        const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+        const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+
+        countdownValue.textContent = `${hours}:${minutes}:${seconds}`;
+
+        if (remaining <= 0) {
+          countdownNote.textContent = 'This account has expired';
+          stopPolling();
+          stopCountdown();
+        } else {
+          countdownNote.textContent = 'Account valid and waiting for payment';
+        }
+      };
+
+      updateCountdown();
+      countdownTimer = setInterval(updateCountdown, 1000);
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = getToken();
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { rawResponse: text };
+      }
+
+      return { res, data };
+    }
+
+    function stopPolling() {
+      if (fundingPollTimer) clearInterval(fundingPollTimer);
+      fundingPollTimer = null;
+    }
+
+    async function pollFundingStatus(reference, amount) {
+      stopPolling();
+
+      const token = getToken();
+      if (!token || !reference) return;
+
+      fundingPollTimer = setInterval(async () => {
+        try {
+          const { res, data } = await apiFetch(
+            `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`
+          );
+
+          if (!res.ok) return;
+
+          const intentStatus = String(data?.intent?.status || '').toLowerCase();
+          const txStatus = String(data?.transaction?.status || '').toLowerCase();
+
+          if (intentStatus === 'successful' || txStatus === 'success') {
+            stopPolling();
+            stopCountdown();
+
+            const fundedAmount = Number(data?.transaction?.amount || amount || 0);
+            const amountText = Number.isFinite(fundedAmount)
+              ? `₦${fundedAmount.toLocaleString('en-NG')}`
+              : 'Your wallet';
+
+            verifyText.textContent = `${amountText} funded successfully`;
+            setStatus(`${amountText} funded successfully`, 'success');
+            showToast('Success', `${amountText} funded successfully`);
+
+            setTimeout(() => {
+              window.location.href = 'dashboard.html';
+            }, 1800);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }, 3000);
+    }
+
+    async function initiateFunding() {
+      const amount = Number(amountInput.value || 0);
+      if (!Number.isFinite(amount) || amount < 100) {
+        setStatus('Minimum funding amount is 100', 'error');
+        return;
+      }
+
+      showLoader();
+      setStatus('Creating funding details...', 'info');
+
+      try {
+        const { res, data } = await apiFetch(`${API_ROOT}/api/wallet/fund/initiate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ amount })
+        });
+
+        if (!res.ok) {
+          setStatus(data?.message || 'Unable to initiate funding', 'error');
+          showToast('Error', data?.message || 'Unable to initiate funding');
+          hideLoader();
+          return;
+        }
+
+        currentFundingSession = {
+          amount,
+          reference: data?.reference || data?.tx_ref || data?.txRef || null,
+          bank_name: data?.bank_name || data?.bankName || null,
+          account_name: data?.account_name || data?.accountName || null,
+          account_number: data?.account_number || data?.accountNumber || null,
+          expiry_date: data?.expiry_date || data?.expires_at || null
+        };
+
+        renderFundingDetails(currentFundingSession);
+        setStatus('Funding details ready. Pay from your bank app and wait for confirmation.', 'success');
+        showToast('Success', 'Funding session created');
+        hideLoader();
+
+        if (currentFundingSession.reference) {
+          pollFundingStatus(currentFundingSession.reference, amount);
+        }
+      } catch (err) {
+        console.error(err);
+        hideLoader();
+        setStatus('Unable to initiate funding', 'error');
+        showToast('Error', 'Unable to initiate funding');
+      }
+    }
+
+    function clearFundingUI() {
+      currentFundingSession = null;
+      amountInput.value = '';
+      detailsCard.style.display = 'none';
+      verifyBox.style.display = 'none';
+      countdownValue.textContent = '--:--:--';
+      countdownNote.textContent = 'Waiting for payment';
+      countdownEndsAt = null;
+      stopCountdown();
+      stopPolling();
+      setStatus('Ready', 'info');
+      showToast('Cleared', 'Funding details cleared');
+    }
+
+    copyAccountBtn.addEventListener('click', () => {
+      if (!currentFundingSession) return;
+      const value = currentFundingSession.account_number || currentFundingSession.reference || '';
+      copyText(value, currentFundingSession.account_number ? 'Account number copied' : 'Reference copied');
+    });
+
+    generateBtn.addEventListener('click', initiateFunding);
+    clearBtn.addEventListener('click', clearFundingUI);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const token = getToken();
+      if (!token) {
+        setStatus('Please log in first', 'error');
+        showToast('Error', 'Please log in first');
+        return;
+      }
+
+      setStatus('Ready', 'info');
+      const user = getUser();
+      if (user?.full_name || user?.name || user?.username) {
+        // No visible greeting here, but user is available for future extension.
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      stopPolling();
+      stopCountdown();
+    });
+  </script>
+</body>
+</html>
