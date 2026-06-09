@@ -2408,7 +2408,8 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       console.log('INVALID FLW SIGNATURE');
       return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
     }
-
+console.log("Expected Hash:", process.env.FLW_WEBHOOK_HASH);
+console.log("Received Hash:", req.headers['verif-hash']);
     const body = req.body || {};
     const event = String(body.event || '').toLowerCase();
     const data = body.data || {};
