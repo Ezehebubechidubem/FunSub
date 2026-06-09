@@ -708,7 +708,7 @@ async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
     user.full_name || user.fullName || user.name || 'User'
   );
 
-  const isStatic = FLW_ACCOUNT_TYPE === 'static';
+  const isStatic = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static';
 
   const vaPayload = {
     email: user.email,
@@ -718,13 +718,21 @@ async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
     lastname: last,
     phonenumber: user.phone ? String(user.phone) : undefined,
     narration: user.full_name || user.fullName || user.name || 'Wallet funding',
-    expiry: isStatic ? undefined : FLW_VA_EXPIRY,
-    is_permanent: isStatic
+    expiry: isStatic ? undefined : Number(FLW_VA_EXPIRY || 3600),
+    is_permanent: isStatic,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding',
+      reference
+    }
   };
 
   const cleanedPayload = Object.fromEntries(
     Object.entries(vaPayload).filter(([, value]) => value !== undefined && value !== null && value !== '')
   );
+
+  console.log('FLW_VA_URL:', FLW_VA_URL);
+  console.log('VA PAYLOAD:', cleanedPayload);
 
   const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
     headers: flutterwaveHeaders(),
@@ -732,18 +740,6 @@ async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
   });
 
   return vaRes.data?.data || vaRes.data;
-}
-function applyFundingFeeIfAny(amount) {
-  if (typeof applyWalletFundingFee === 'function') {
-    return applyWalletFundingFee(amount);
-  }
-
-  return {
-    grossAmount: Number(amount),
-    feePercent: 0,
-    feeAmount: 0,
-    netAmount: Number(amount)
-  };
 }
 
 
