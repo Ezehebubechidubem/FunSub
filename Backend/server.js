@@ -2400,16 +2400,21 @@ app.get('/api/webhooks/flutterwave', (req, res) => {
 
 app.post('/api/webhooks/flutterwave', async (req, res) => {
   try {
-    console.log('FLW WEBHOOK HIT');
-    console.log('HEADERS:', req.headers);
-    console.log('BODY:', req.body);
+    console.log('========== FLW WEBHOOK HIT ==========');
+    console.log('Expected Hash:', process.env.FLW_WEBHOOK_HASH);
+    console.log('Received Hash:', req.headers['verif-hash']);
+    console.log('Received x-flw-secret-hash:', req.headers['x-flw-secret-hash']);
+    console.log('Headers:', req.headers);
+    console.log('Raw Body:', req.rawBody);
+    console.log('Parsed Body:', req.body);
 
     if (!isValidFlutterwaveWebhook(req)) {
       console.log('INVALID FLW SIGNATURE');
       return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
     }
-console.log("Expected Hash:", process.env.FLW_WEBHOOK_HASH);
-console.log("Received Hash:", req.headers['verif-hash']);
+
+    console.log('SIGNATURE VERIFIED');
+
     const body = req.body || {};
     const event = String(body.event || '').toLowerCase();
     const data = body.data || {};
@@ -2421,6 +2426,7 @@ console.log("Received Hash:", req.headers['verif-hash']);
       String(body['event.type'] || '').toUpperCase() === 'BANK_TRANSFER_TRANSACTION';
 
     if (!isRelevant) {
+      console.log('NOT A RELEVANT EVENT:', event);
       return res.status(200).json({ received: true });
     }
 
@@ -2433,6 +2439,11 @@ console.log("Received Hash:", req.headers['verif-hash']);
 
     const status = String(data.status || body.status || '').toLowerCase();
     const amount = Number(data.amount ?? body.amount ?? 0);
+
+    console.log('EVENT:', event);
+    console.log('REFERENCE:', reference);
+    console.log('STATUS:', status);
+    console.log('AMOUNT:', amount);
 
     if (!reference) {
       console.log('NO REFERENCE IN WEBHOOK');
@@ -2452,12 +2463,15 @@ console.log("Received Hash:", req.headers['verif-hash']);
       return res.status(200).json({ received: true });
     }
 
+    console.log('FOUND INTENT:', intent);
+
     if (String(intent.status).toLowerCase() === 'successful') {
       console.log('ALREADY PROCESSED', reference);
       return res.status(200).json({ received: true });
     }
 
     if (status && status !== 'successful' && status !== 'completed') {
+      console.log('PAYMENT NOT SUCCESSFUL YET');
       await query(
         `UPDATE payment_intents
          SET status = 'failed',
@@ -2474,6 +2488,7 @@ console.log("Received Hash:", req.headers['verif-hash']);
 
     const expectedAmount = Number(intent.amount || 0);
     if (expectedAmount && amount && expectedAmount !== amount) {
+      console.log('AMOUNT MISMATCH');
       await query(
         `UPDATE payment_intents
          SET status = 'failed',
@@ -2504,6 +2519,8 @@ console.log("Received Hash:", req.headers['verif-hash']);
           };
 
     const creditedAmount = Number(fee.netAmount || 0);
+
+    console.log('CREDITED AMOUNT:', creditedAmount);
 
     await query(
       `UPDATE wallets
