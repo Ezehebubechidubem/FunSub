@@ -288,29 +288,29 @@ function requireAuth(req, res, next) {
   try {
     console.log('================ AUTH DEBUG ================');
 
-    const authHeader = req.headers.authorization;
+    const authHeaderValue = req.headers.authorization;
 
-    console.log('AUTH HEADER:', authHeader);
+    console.log('AUTH HEADER:', authHeaderValue);
 
-    if (!authHeader) {
+    if (!authHeaderValue) {
       return res.status(401).json({
         success: false,
         message: 'Authorization header missing'
       });
     }
 
-    if (!authHeader.startsWith('Bearer ')) {
+    if (!authHeaderValue.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
         message: 'Invalid authorization format'
       });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeaderValue.split(' ')[1];
 
     console.log('TOKEN:', token);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     console.log('DECODED USER:', decoded);
 
@@ -320,9 +320,7 @@ function requireAuth(req, res, next) {
     console.log('============================================');
 
     next();
-
   } catch (err) {
-
     console.log('AUTH FAILED');
     console.log('ERROR MESSAGE:', err.message);
     console.log('============================================');
@@ -614,15 +612,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       return { ok: false, reason: 'Amount mismatch' };
     }
 
-    const fee = typeof applyWalletFundingFee === 'function'
-      ? applyWalletFundingFee(paidAmount || expectedAmount)
-      : {
-          grossAmount: paidAmount || expectedAmount,
-          feePercent: 0,
-          feeAmount: 0,
-          netAmount: paidAmount || expectedAmount
-        };
-
+    const fee = applyWalletFundingFee(paidAmount || expectedAmount);
     const creditedAmount = Number(fee.netAmount || 0);
 
     await client.query(
@@ -668,36 +658,23 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       ]
     );
 
-    const tx = await addTransaction({
-      userId: intent.user_id,
-      type: 'funding',
-      category: 'wallet',
-      amount: Number(creditedAmount).toFixed(2),
-      status: 'success',
-      reference,
-      description: 'Wallet funded successfully',
-      meta: {
-        provider: 'flutterwave',
-        grossAmount: fee.grossAmount,
-        feePercent: fee.feePercent,
-        feeAmount: fee.feeAmount,
-        creditedAmount,
-        flutterwaveData
-      }
-    });
-
     await addNotification(
       intent.user_id,
       'Wallet funded',
       `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
-      { tx_id: tx.id, reference, creditedAmount },
+      {
+        reference,
+        creditedAmount
+      },
       true
     );
 
     await client.query('COMMIT');
     return { ok: true, creditedAmount };
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
     throw err;
   } finally {
     client.release();
@@ -1390,7 +1367,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     }
 
     const providerResponse = USING_MOCK_PROVIDER
-      ? (String(body.force_fail).toLowerCase() === 'true'
+      ? await (String(body.force_fail).toLowerCase() === 'true'
           ? mockProvider.buyFail({
               request_id: body.request_id,
               serviceID: providerPayload.serviceID,
