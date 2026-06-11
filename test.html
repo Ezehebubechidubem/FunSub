@@ -169,7 +169,7 @@ h1{
             type="tel"
             id="phone"
             maxlength="11"
-            pattern="0[0-9]{10}"
+
             placeholder="08012345678"
         >
 
@@ -346,15 +346,6 @@ function getToken() {
 /* ==========================================
    NETWORK SERVICE IDS
 ========================================== */
-document.getElementById("phone")
-.addEventListener("input", function () {
-
-    this.value =
-    this.value
-    .replace(/\D/g, "") // remove non-numbers
-    .slice(0, 11);      // limit to 11 digits
-
-});
 
 function getServiceID(network) {
 
@@ -393,8 +384,32 @@ document
     });
 
 });
+document.getElementById("phone")
+.addEventListener("input", function () {
 
+    this.value =
+    this.value
+    .replace(/\D/g, "") // remove non-numbers
+    .slice(0, 11);      // limit to 11 digits
 
+});
+const phoneInput = document.getElementById("phone");
+
+phoneInput.addEventListener("input", function () {
+
+    // Remove anything that's not a number
+    let value = this.value.replace(/\D/g, "");
+
+    // If first digit isn't 0, clear it
+    if (value.length > 0 && value.charAt(0) !== "0") {
+        value = "";
+    }
+
+    // Limit to 11 digits
+    value = value.slice(0, 11);
+
+    this.value = value;
+});
 /* ==========================================
    LOAD PLANS
 ========================================== */
