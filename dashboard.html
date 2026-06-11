@@ -635,16 +635,19 @@
           <div class="action-label">Airtime</div>
         </div>
 
-        <div class="action-item clickable" data-action="Data">
-          <div class="action-icon">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 3c4.4 0 8 1.8 8 4s-3.6 4-8 4-8-1.8-8-4 3.6-4 8-4Z"></path>
-              <path d="M4 7v5c0 2.2 3.6 4 8 4s8-1.8 8-4V7"></path>
-              <path d="M4 12v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5"></path>
-            </svg>
-          </div>
-          <div class="action-label">Data</div>
-        </div>
+    <div class="action-item clickable" data-action="Data">
+
+  <div class="action-icon">
+    <svg viewBox="0 0 24 24">
+      <path d="M12 3c4.4 0 8 1.8 8 4s-3.6 4-8 4-8-1.8-8-4 3.6-4 8-4Z"></path>
+      <path d="M4 7v5c0 2.2 3.6 4 8 4s8-1.8 8-4V7"></path>
+      <path d="M4 12v5c0 2.2 3.6 4 8 4s8-1.8 8-4v-5"></path>
+    </svg>
+  </div>
+
+  <div class="action-label">Data</div>
+
+</div>
 
         <div class="action-item clickable" data-action="Cable TV">
           <div class="action-icon">
@@ -862,7 +865,10 @@
     const transactionsListEl = document.getElementById("transactionsList");
     const bellBtn = document.getElementById("bellBtn");
     const fundBtn = document.getElementById("fundBtn");
-
+document.querySelector('[data-action="Data"]')
+.addEventListener('click', () => {
+    window.location.href = 'test.html';
+});
     const getToken = () => localStorage.getItem("funsub_token") || "";
 
     function formatMoney(value) {
