@@ -329,8 +329,6 @@
         <option value="">Loading plans...</option>
       </select>
 
-      <div id="plans" class="plans-grid"></div>
-
       <button id="buyBtn" class="buy-btn">
         Buy Data
       </button>
@@ -393,7 +391,6 @@
     const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
     const BUY_URL = "https://funsub.onrender.com/api/services/data";
     let currentNetwork = "mtn";
-    let currentPlans = [];
     let currentPlan = null;
     let lastReceipt = null;
 
@@ -435,12 +432,13 @@
       return map[String(network || "").trim().toLowerCase()] || "";
     }
 
-    function formatNaira(value) {
+    function formatWholeNaira(value) {
       const num = Number(value);
       if (Number.isNaN(num)) return "N/A";
-      return "₦" + num.toLocaleString("en-NG", {
+      const whole = Math.floor(num / 100) * 100;
+      return "₦" + whole.toLocaleString("en-NG", {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 2
+        maximumFractionDigits: 0
       });
     }
 
@@ -535,7 +533,6 @@
 
       planSelect.innerHTML = "<option value=\"\">Loading plans...</option>";
       currentPlan = null;
-      currentPlans = [];
 
       try {
         const serviceID = getServiceID(network);
@@ -553,7 +550,6 @@
         console.log("PLANS RESPONSE:", data);
 
         const plans = Array.isArray(data?.plans) ? data.plans : [];
-        currentPlans = plans;
 
         if (!plans.length) {
           planSelect.innerHTML = "<option value=\"\">No plans found</option>";
@@ -565,7 +561,7 @@
         plans.forEach(plan => {
           const option = document.createElement("option");
           option.value = plan.id;
-          option.textContent = `${plan.name} - ${formatNaira(plan.pricing?.finalPrice || plan.rawPrice)}`;
+          option.textContent = `${plan.name} - ${formatWholeNaira(plan.pricing?.finalPrice || plan.rawPrice)}`;
           option.dataset.planName = plan.name || "";
           option.dataset.rawPrice = plan.rawPrice || "";
           planSelect.appendChild(option);
@@ -601,6 +597,7 @@
 
       const phone = document.getElementById("phone").value.trim();
       const selectedPlan = document.getElementById("planSelect").selectedOptions[0];
+      const networkMeta = getNetworkMeta(currentNetwork);
 
       if (!/^0\d{10}$/.test(phone)) {
         alert("Phone number must start with 0 and contain exactly 11 digits");
@@ -616,7 +613,6 @@
       const plan_name = selectedPlan.dataset.planName || "";
       const plan_amount = selectedPlan.dataset.rawPrice || "";
       const serviceID = getServiceID(currentNetwork);
-      const networkMeta = getNetworkMeta(currentNetwork);
 
       showProcessingModal();
 
@@ -657,7 +653,7 @@
           document.getElementById("receiptNetworkName").innerText = networkMeta.name;
 
           document.getElementById("receiptReference").innerText = data.transaction.reference || "";
-          document.getElementById("receiptAmount").innerText = formatNaira(data.transaction.amount || plan_amount);
+          document.getElementById("receiptAmount").innerText = formatWholeNaira(data.transaction.amount || plan_amount);
           document.getElementById("receiptDescription").innerText = data.transaction.description || plan_name || "Data Purchase";
           document.getElementById("receiptPhone").innerText = tx.unique_element || phone;
           document.getElementById("receiptStatus").innerText = tx.status || "success";
@@ -666,7 +662,7 @@
           lastReceipt = {
             networkName: networkMeta.name,
             reference: data.transaction.reference || "",
-            amount: formatNaira(data.transaction.amount || plan_amount),
+            amount: formatWholeNaira(data.transaction.amount || plan_amount),
             description: data.transaction.description || plan_name || "Data Purchase",
             phone: tx.unique_element || phone,
             status: tx.status || "success",
@@ -684,7 +680,7 @@
           lastReceipt = {
             networkName: networkMeta.name,
             reference: data.transaction?.reference || "",
-            amount: formatNaira(plan_amount),
+            amount: formatWholeNaira(plan_amount),
             description: plan_name || "Data Purchase",
             phone,
             status: "pending",
@@ -697,7 +693,7 @@
         lastReceipt = {
           networkName: networkMeta.name,
           reference: data.transaction?.reference || "",
-          amount: formatNaira(plan_amount),
+          amount: formatWholeNaira(plan_amount),
           description: plan_name || "Data Purchase",
           phone,
           status: "failed",
@@ -709,7 +705,7 @@
         lastReceipt = {
           networkName: networkMeta.name,
           reference: "",
-          amount: formatNaira(plan_amount),
+          amount: formatWholeNaira(plan_amount),
           description: plan_name || "Data Purchase",
           phone,
           status: "failed",
