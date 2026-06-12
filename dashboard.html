@@ -1082,6 +1082,9 @@ document.querySelector('[data-action="Data"]')
       wireClicks();
       await loadDashboardData();
     });
+setInterval(() => {
+  window.location.reload();
+}, 60000);
   </script>
 </body>
 </html>
