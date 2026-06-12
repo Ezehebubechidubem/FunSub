@@ -6,868 +6,726 @@
   <title>Buy Data</title>
 
   <style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:Arial,sans-serif;
-}
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    }
 
-body{
-    background:#ffffff;
-    padding:20px;
-}
+    body{
+      background:#ffffff;
+      padding:20px;
+      color:#111;
+    }
 
-.container{
-    max-width:500px;
-    margin:auto;
-}
+    h1{
+      color:#000;
+      display:flex;
+      justify-content:center;
+      margin-bottom:40px;
+      font-size:28px;
+      font-weight:700;
+    }
 
-.form-box{
-    background:#fff;
-}
+    .container{
+      max-width:500px;
+      margin:auto;
+    }
 
-label{
-    display:block;
-    margin-top:20px;
-    margin-bottom:8px;
-    font-weight:700;
-}
+    .form-box{
+      background:#fff;
+    }
 
-input,
-select{
-    width:100%;
-    height:55px;
-    border:1px solid #ddd;
-    border-radius:14px;
-    padding:0 15px;
-    font-size:15px;
-}
+    label{
+      display:block;
+      margin-top:20px;
+      margin-bottom:8px;
+      font-weight:700;
+      font-size:15px;
+    }
 
-.network-grid{
-    display:grid;
-    grid-template-columns:repeat(2,1fr);
-    gap:15px;
-    margin-top:10px;
-}
+    input,
+    select{
+      width:100%;
+      height:55px;
+      border:1px solid #ddd;
+      border-radius:14px;
+      padding:0 15px;
+      font-size:15px;
+      outline:none;
+      background:#fff;
+    }
 
-.network-card{
-    border:2px solid #eee;
-    border-radius:18px;
-    padding:18px;
-    cursor:pointer;
-    background:white;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-}
+    input:focus,
+    select:focus{
+      border-color:#D4AF37;
+    }
 
-.network-card img{
-    width:40px;
-    height:40px;
-}
+    .network-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:15px;
+      margin-top:10px;
+    }
 
-.network-card.active{
-    border-color:#D4AF37;
-    background:#FFF9E6;
-}
+    .network-card{
+      border:2px solid #eee;
+      border-radius:18px;
+      padding:18px;
+      cursor:pointer;
+      background:white;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:90px;
+      transition:.2s ease;
+    }
 
-.buy-btn{
-    width:100%;
-    height:55px;
-    border:none;
-    border-radius:15px;
-    margin-top:25px;
-    background:#D4AF37;
-    color:white;
-    font-size:16px;
-    font-weight:700;
-    cursor:pointer;
-}
+    .network-card:hover{
+      transform:translateY(-1px);
+    }
 
+    .network-card img{
+      width:46px;
+      height:46px;
+      object-fit:contain;
+    }
 
+    .network-card.active{
+      border-color:#D4AF37;
+      background:#FFF9E6;
+    }
 
-/* MODAL */
+    .buy-btn{
+      width:100%;
+      height:55px;
+      border:none;
+      border-radius:15px;
+      margin-top:25px;
+      background:#D4AF37;
+      color:white;
+      font-size:16px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.2s ease;
+    }
 
-.transaction-modal{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.65);
-    display:none;
-    justify-content:center;
-    align-items:center;
-    z-index:9999;
-}
+    .buy-btn:hover{
+      opacity:.95;
+    }
 
-.transaction-card{
-    width:95%;
-    max-width:430px;
-    background:white;
-    border-radius:25px;
-    padding:25px;
-}
+    .buy-btn:disabled{
+      opacity:.7;
+      cursor:not-allowed;
+    }
 
-.transaction-icon{
-    width:90px;
-    height:90px;
-    border-radius:50%;
-    margin:auto;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:45px;
-    background:#FFF8E1;
-}
+    .transaction-modal{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      display:none;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+      padding:16px;
+    }
 
-.transaction-card h2{
-    text-align:center;
-    margin-top:15px;
-}
+    .transaction-card{
+      width:95%;
+      max-width:430px;
+      background:white;
+      border-radius:25px;
+      padding:25px;
+      box-shadow:0 15px 40px rgba(0,0,0,.2);
+      animation:pop .2s ease;
+    }
 
-.transaction-card p{
-    text-align:center;
-    color:#666;
-    margin-top:10px;
-}
+    @keyframes pop{
+      from{
+        transform:scale(.92);
+        opacity:.4;
+      }
+      to{
+        transform:scale(1);
+        opacity:1;
+      }
+    }
 
-.receipt-row{
-    display:flex;
-    justify-content:space-between;
-    padding:12px 0;
-    border-bottom:1px solid #eee;
-}
+    .transaction-icon{
+      width:90px;
+      height:90px;
+      border-radius:50%;
+      margin:auto;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:45px;
+      background:#FFF8E1;
+    }
 
-.close-btn{
-    width:100%;
-    height:50px;
-    margin-top:20px;
-    border:none;
-    border-radius:12px;
-    background:#D4AF37;
-    color:white;
-    font-weight:700;
-}
-h1{
-    color:black;
-    display: flex;
-    justify-content:center;
-    margin-bottom:100px;
-}
+    .transaction-card h2{
+      text-align:center;
+      margin-top:15px;
+      font-size:22px;
+    }
+
+    .transaction-card p{
+      text-align:center;
+      color:#666;
+      margin-top:10px;
+      font-size:14px;
+      line-height:1.5;
+    }
+
+    .receipt-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 0;
+      border-bottom:1px solid #eee;
+      font-size:14px;
+    }
+
+    .receipt-row span:last-child{
+      text-align:right;
+      word-break:break-word;
+      font-weight:600;
+    }
+
+    .close-btn,
+    .share-btn{
+      width:100%;
+      height:50px;
+      border:none;
+      border-radius:12px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:15px;
+    }
+
+    .close-btn{
+      margin-top:14px;
+      background:#D4AF37;
+      color:white;
+    }
+
+    .share-btn{
+      margin-top:10px;
+      background:#111827;
+      color:white;
+    }
+
+    .pending{
+      background:#FFF8E1;
+      color:#8a6d00;
+    }
+
+    .success{
+      background:#ECFDF3;
+      color:#0f7a3b;
+    }
+
+    .failed{
+      background:#FEE4E2;
+      color:#b42318;
+    }
+
+    #receiptNetworkBox{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      justify-content:flex-end;
+    }
+
+    #receiptNetworkLogo{
+      width:22px;
+      height:22px;
+      object-fit:contain;
+    }
+
+    .plans-grid{
+      margin-top:20px;
+    }
+
+    .plan-option-box{
+      background:#fff;
+      border:1px solid #eee;
+      border-radius:14px;
+      padding:12px 14px;
+      margin-bottom:12px;
+      cursor:pointer;
+      transition:.2s ease;
+    }
+
+    .plan-option-box:hover{
+      border-color:#D4AF37;
+      background:#FFF9E6;
+    }
+
+    .plan-option-box.active{
+      border-color:#D4AF37;
+      background:#FFF9E6;
+    }
+
+    .plan-title{
+      font-weight:700;
+      font-size:15px;
+      margin-bottom:6px;
+    }
+
+    .plan-price{
+      color:#0f7a3b;
+      font-weight:700;
+      font-size:14px;
+    }
+
+    @media (max-width:420px){
+      .network-card img{
+        width:40px;
+        height:40px;
+      }
+    }
   </style>
 </head>
 
 <body>
-<!-- HEADER -->
-<h1>Buy Data</h1>
-<div class="container">
 
+  <h1>Buy Data</h1>
+
+  <div class="container">
     <div class="form-box">
 
-        <label>Phone Number</label>
+      <label>Phone Number</label>
+      <input
+        type="tel"
+        id="phone"
+        maxlength="11"
+        placeholder="08012345678"
+      >
 
-        <input
-            type="tel"
-            id="phone"
-            maxlength="11"
-            minlegth="11"
+      <label>Choose Network</label>
 
-            placeholder="08012345678"
-        >
-
-        <label>Choose Network</label>
-
-        <div class="network-grid">
-
-            <div class="network-card active"
-                 data-network="mtn">
-
-                <img
-                    src="https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg"
-                    alt="MTN"
-                >
-
-            </div>
-
-            <div class="network-card"
-                 data-network="glo">
-
-                <img
-                    src="https://i.postimg.cc/B64Y96DS/glo.png"
-                    alt="GLO"
-                >
-
-            </div>
-
-            <div class="network-card"
-                 data-network="airtel">
-
-                <img
-                    src="https://i.postimg.cc/FKZbSxf8/airtel.png"
-                    alt="Airtel"
-                >
-
-            </div>
-
-            <div class="network-card"
-                 data-network="9mobile">
-
-                <img
-                    src="https://i.postimg.cc/hhWQ6Jz3/9mobile.png"
-                    alt="9mobile"
-                >
-
-            </div>
-
+      <div class="network-grid">
+        <div class="network-card active" data-network="mtn">
+          <img src="https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg" alt="MTN">
         </div>
 
-        <label>Select Plan</label>
+        <div class="network-card" data-network="glo">
+          <img src="https://i.postimg.cc/B64Y96DS/glo.png" alt="GLO">
+        </div>
 
-        <select id="planSelect">
+        <div class="network-card" data-network="airtel">
+          <img src="https://i.postimg.cc/FKZbSxf8/airtel.png" alt="Airtel">
+        </div>
 
-            <option>
-                Loading Plans...
-            </option>
+        <div class="network-card" data-network="9mobile">
+          <img src="https://i.postimg.cc/hhWQ6Jz3/9mobile.png" alt="9mobile">
+        </div>
+      </div>
 
-        </select>
+      <label>Select Plan</label>
+      <select id="planSelect">
+        <option value="">Loading plans...</option>
+      </select>
 
-        <button
-            id="buyBtn"
-            class="buy-btn">
+      <div id="plans" class="plans-grid"></div>
 
-            Buy Data
-
-        </button>
-
+      <button id="buyBtn" class="buy-btn">
+        Buy Data
+      </button>
     </div>
+  </div>
 
-</div>
-
-
-
-<!-- TRANSACTION MODAL -->
-
-<div
-    id="transactionModal"
-    class="transaction-modal">
-
+  <div id="transactionModal" class="transaction-modal">
     <div class="transaction-card">
+      <div id="transactionIcon" class="transaction-icon">⏳</div>
 
-        <div
-            id="transactionIcon"
-            class="transaction-icon">
+      <h2 id="transactionTitle">Processing Transaction</h2>
+      <p id="transactionMessage">Please wait...</p>
 
-            ⏳
-
+      <div id="receiptSection" style="display:none; margin-top:18px;">
+        <div class="receipt-row">
+          <span>Network</span>
+          <span id="receiptNetworkBox">
+            <img id="receiptNetworkLogo" src="" alt="Network">
+            <span id="receiptNetworkName"></span>
+          </span>
         </div>
 
-        <h2 id="transactionTitle">
-
-            Processing Transaction
-
-        </h2>
-
-        <p id="transactionMessage">
-
-            Please wait...
-
-        </p>
-
-        <div
-            id="receiptSection"
-            style="display:none;">
-
-            <div class="receipt-row">
-                <span>Reference</span>
-                <span id="receiptReference"></span>
-            </div>
-<div class="receipt-row">
-    <span>Amount</span>
-    <span id="receiptAmount"></span>
-</div>
-            <div class="receipt-row">
-                <span>Description</span>
-                <span id="receiptDescription"></span>
-            </div>
-
-            <div class="receipt-row">
-                <span>Phone</span>
-                <span id="receiptPhone"></span>
-            </div>
-
-            <div class="receipt-row">
-                <span>Status</span>
-                <span id="receiptStatus"></span>
-            </div>
-
-            <div class="receipt-row">
-                <span>Date</span>
-                <span id="receiptDate"></span>
-            </div>
-
+        <div class="receipt-row">
+          <span>Reference</span>
+          <span id="receiptReference"></span>
         </div>
 
-        <button
-            onclick="closeModal()"
-            class="close-btn">
+        <div class="receipt-row">
+          <span>Amount</span>
+          <span id="receiptAmount"></span>
+        </div>
 
-            Close
+        <div class="receipt-row">
+          <span>Description</span>
+          <span id="receiptDescription"></span>
+        </div>
 
-        </button>
+        <div class="receipt-row">
+          <span>Phone</span>
+          <span id="receiptPhone"></span>
+        </div>
 
+        <div class="receipt-row">
+          <span>Status</span>
+          <span id="receiptStatus"></span>
+        </div>
+
+        <div class="receipt-row">
+          <span>Date</span>
+          <span id="receiptDate"></span>
+        </div>
+      </div>
+
+      <button onclick="closeModal()" class="close-btn">Close</button>
+      <button onclick="shareReceipt()" class="share-btn">Share</button>
     </div>
+  </div>
 
-</div>
   <script>
-    /* ===========================
-   API ENDPOINTS
-=========================== */
+    const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
+    const BUY_URL = "https://funsub.onrender.com/api/services/data";
+    let currentNetwork = "mtn";
+    let currentPlans = [];
+    let currentPlan = null;
+    let lastReceipt = null;
 
-/* ==========================================
-   FUNSUB DATA PURCHASE JS
-========================================== */
+    function getToken() {
+      return localStorage.getItem("funsub_token") || "";
+    }
 
-const BASE_URL =
-"https://funsub.onrender.com/api/services/data/plans";
+    function getNetworkMeta(network) {
+      const n = String(network || "").trim().toLowerCase();
+      const map = {
+        mtn: {
+          name: "MTN",
+          logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg"
+        },
+        glo: {
+          name: "GLO",
+          logo: "https://i.postimg.cc/B64Y96DS/glo.png"
+        },
+        airtel: {
+          name: "Airtel",
+          logo: "https://i.postimg.cc/FKZbSxf8/airtel.png"
+        },
+        "9mobile": {
+          name: "9mobile",
+          logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png"
+        }
+      };
 
-const BUY_URL =
-"https://funsub.onrender.com/api/services/data";
+      return map[n] || { name: n.toUpperCase(), logo: "" };
+    }
 
-let currentNetwork = "mtn";
-
-
-/* ==========================================
-   TOKEN
-========================================== */
-
-function getToken() {
-    return localStorage.getItem("funsub_token") || "";
-}
-
-
-/* ==========================================
-   NETWORK SERVICE IDS
-========================================== */
-
-function getServiceID(network) {
-
-    const map = {
+    function getServiceID(network) {
+      const map = {
         mtn: "mtn-data",
         glo: "glo-data",
         airtel: "airtel-data",
         "9mobile": "etisalat-data"
-    };
+      };
+      return map[String(network || "").trim().toLowerCase()] || "";
+    }
 
-    return map[network] || "";
-}
+    function formatNaira(value) {
+      const num = Number(value);
+      if (Number.isNaN(num)) return "N/A";
+      return "₦" + num.toLocaleString("en-NG", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      });
+    }
 
+    function buildReceiptText() {
+      if (!lastReceipt) return "";
 
-/* ==========================================
-   NETWORK SELECTION
-========================================== */
+      const r = lastReceipt;
+      return [
+        "FunSub Data Receipt",
+        `Network: ${r.networkName || ""}`,
+        `Reference: ${r.reference || ""}`,
+        `Amount: ${r.amount || ""}`,
+        `Description: ${r.description || ""}`,
+        `Phone: ${r.phone || ""}`,
+        `Status: ${r.status || ""}`,
+        `Date: ${r.date || ""}`
+      ].join("\n");
+    }
 
-document
-.querySelectorAll(".network-card")
-.forEach(card => {
+    async function shareReceipt() {
+      const text = buildReceiptText();
+      if (!text) return;
 
-    card.addEventListener("click", () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "Data Receipt",
+            text
+          });
+          return;
+        } catch (e) {
+          console.log(e);
+        }
+      }
 
-        document
-        .querySelectorAll(".network-card")
-        .forEach(c => c.classList.remove("active"));
+      alert("Sharing is not supported on this browser.");
+    }
 
+    document.querySelectorAll(".network-card").forEach(card => {
+      card.addEventListener("click", () => {
+        document.querySelectorAll(".network-card").forEach(c => c.classList.remove("active"));
         card.classList.add("active");
-
-        currentNetwork =
-        card.dataset.network;
-
+        currentNetwork = card.dataset.network;
         loadPlans(currentNetwork);
-
+      });
     });
 
-});
-document.getElementById("phone")
-.addEventListener("input", function () {
-
-    this.value =
-    this.value
-    .replace(/\D/g, "") // remove non-numbers
-    .slice(0, 11);      // limit to 11 digits
-
-});
-const phoneInput = document.getElementById("phone");
-
-phoneInput.addEventListener("input", function () {
-
-    // Remove anything that's not a number
-    let value = this.value.replace(/\D/g, "");
-
-    // If first digit isn't 0, clear it
-    if (value.length > 0 && value.charAt(0) !== "0") {
+    const phoneInput = document.getElementById("phone");
+    phoneInput.addEventListener("input", function () {
+      let value = this.value.replace(/\D/g, "");
+      if (value.length > 0 && value.charAt(0) !== "0") {
         value = "";
+      }
+      value = value.slice(0, 11);
+      this.value = value;
+    });
+
+    function showProcessingModal() {
+      document.getElementById("transactionModal").style.display = "flex";
+      document.getElementById("receiptSection").style.display = "none";
+      document.getElementById("transactionIcon").className = "transaction-icon";
+      document.getElementById("transactionIcon").innerHTML = "⏳";
+      document.getElementById("transactionTitle").innerText = "Processing Transaction";
+      document.getElementById("transactionMessage").innerText = "Please wait...";
     }
 
-    // Limit to 11 digits
-    value = value.slice(0, 11);
+    function showPendingModal(message) {
+      document.getElementById("transactionModal").style.display = "flex";
+      document.getElementById("receiptSection").style.display = "none";
+      document.getElementById("transactionIcon").className = "transaction-icon pending";
+      document.getElementById("transactionIcon").innerHTML = "🟡";
+      document.getElementById("transactionTitle").innerText = "Transaction Pending";
+      document.getElementById("transactionMessage").innerText = message || "Your transaction is pending.";
+    }
 
-    this.value = value;
-});
-/* ==========================================
-   LOAD PLANS
-========================================== */
+    function showFailedModal(message) {
+      document.getElementById("transactionModal").style.display = "flex";
+      document.getElementById("receiptSection").style.display = "none";
+      document.getElementById("transactionIcon").className = "transaction-icon failed";
+      document.getElementById("transactionIcon").innerHTML = "❌";
+      document.getElementById("transactionTitle").innerText = "Transaction Failed";
+      document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
+    }
 
-async function loadPlans(network) {
+    function closeModal() {
+      document.getElementById("transactionModal").style.display = "none";
+    }
 
-    const token = getToken();
+    async function loadPlans(network) {
+      const token = getToken();
+      const planSelect = document.getElementById("planSelect");
 
-    const planSelect =
-    document.getElementById("planSelect");
+      planSelect.innerHTML = "<option value=\"\">Loading plans...</option>";
+      currentPlan = null;
+      currentPlans = [];
 
-    planSelect.innerHTML =
-    "<option>Loading Plans...</option>";
+      try {
+        const serviceID = getServiceID(network);
 
-    try {
-
-        const serviceID =
-        getServiceID(network);
-
-        const response =
-        await fetch(
-            `${BASE_URL}?network=${network}&serviceID=${serviceID}`,
-            {
-                headers: {
-                    Authorization:
-                    `Bearer ${token}`
-                }
+        const response = await fetch(
+          `${BASE_URL}?network=${encodeURIComponent(network)}&serviceID=${encodeURIComponent(serviceID)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
             }
+          }
         );
 
-        const data =
-        await response.json();
+        const data = await response.json();
+        console.log("PLANS RESPONSE:", data);
 
-        console.log(
-            "PLANS RESPONSE:",
-            data
-        );
-
-        planSelect.innerHTML = "";
-
-        const plans =
-        data.plans || [];
+        const plans = Array.isArray(data?.plans) ? data.plans : [];
+        currentPlans = plans;
 
         if (!plans.length) {
-
-            planSelect.innerHTML =
-            "<option>No Plans Found</option>";
-
-            return;
+          planSelect.innerHTML = "<option value=\"\">No plans found</option>";
+          return;
         }
+
+        planSelect.innerHTML = "<option value=\"\">Select a plan</option>";
 
         plans.forEach(plan => {
-
-            const option =
-            document.createElement("option");
-
-            option.value =
-            plan.id;
-
-            option.textContent =
-            `${plan.name} - ₦${Number(
-                plan.pricing?.finalPrice ||
-                plan.rawPrice
-            ).toLocaleString()}`;
-
-            option.dataset.planName =
-            plan.name;
-
-            option.dataset.rawPrice =
-            plan.rawPrice;
-
-            planSelect.appendChild(
-                option
-            );
-
+          const option = document.createElement("option");
+          option.value = plan.id;
+          option.textContent = `${plan.name} - ${formatNaira(plan.pricing?.finalPrice || plan.rawPrice)}`;
+          option.dataset.planName = plan.name || "";
+          option.dataset.rawPrice = plan.rawPrice || "";
+          planSelect.appendChild(option);
         });
 
-    }
-
-    catch (error) {
-
+      } catch (error) {
         console.error(error);
-
-        planSelect.innerHTML =
-        "<option>Error Loading Plans</option>";
-
+        planSelect.innerHTML = "<option value=\"\">Error loading plans</option>";
+      }
     }
 
-}
-
-
-/* ==========================================
-   MODAL HELPERS
-========================================== */
-
-function showProcessingModal() {
-
-    document
-    .getElementById(
-        "transactionModal"
-    ).style.display = "flex";
-
-    document
-    .getElementById(
-        "receiptSection"
-    ).style.display = "none";
-
-    document
-    .getElementById(
-        "transactionIcon"
-    ).innerHTML = "⏳";
-
-    document
-    .getElementById(
-        "transactionTitle"
-    ).innerText =
-    "Processing Transaction";
-
-    document
-    .getElementById(
-        "transactionMessage"
-    ).innerText =
-    "Please wait...";
-}
-
-
-function closeModal() {
-
-    document
-    .getElementById(
-        "transactionModal"
-    ).style.display = "none";
-
-}
-
-
-/* ==========================================
-   BUY DATA
-========================================== */
-
-async function buyData() {
-
-    const token =
-    getToken();
-
-    if (!token) {
-
-        alert(
-            "Please login first"
-        );
-
+    document.getElementById("planSelect").addEventListener("change", function () {
+      const selected = this.selectedOptions[0];
+      if (!selected || !selected.value) {
+        currentPlan = null;
         return;
-    }
+      }
 
-    const phone =
-    document
-    .getElementById("phone")
-    .value
-    .trim();
+      currentPlan = {
+        id: selected.value,
+        name: selected.dataset.planName || selected.textContent,
+        rawPrice: selected.dataset.rawPrice || ""
+      };
+    });
 
-    if (!phone) {
+    async function buyData() {
+      const token = getToken();
 
-        alert(
-            "Enter phone number"
-        );
-
+      if (!token) {
+        alert("Please login first");
         return;
-    }
+      }
 
-    const selectedPlan =
-    document
-    .getElementById(
-        "planSelect"
-    )
-    .selectedOptions[0];
+      const phone = document.getElementById("phone").value.trim();
+      const selectedPlan = document.getElementById("planSelect").selectedOptions[0];
 
-    if (!selectedPlan) {
-
-        alert(
-            "Select a plan"
-        );
-
+      if (!/^0\d{10}$/.test(phone)) {
+        alert("Phone number must start with 0 and contain exactly 11 digits");
         return;
-    }
+      }
 
-    const variation_code =
-    selectedPlan.value;
+      if (!selectedPlan || !selectedPlan.value) {
+        alert("Select a plan");
+        return;
+      }
 
-    const plan_name =
-    selectedPlan.dataset.planName;
+      const variation_code = selectedPlan.value;
+      const plan_name = selectedPlan.dataset.planName || "";
+      const plan_amount = selectedPlan.dataset.rawPrice || "";
+      const serviceID = getServiceID(currentNetwork);
+      const networkMeta = getNetworkMeta(currentNetwork);
 
-    const plan_amount =
-    selectedPlan.dataset.rawPrice;
+      showProcessingModal();
 
-    const serviceID =
-    getServiceID(
-        currentNetwork
-    );
+      const buyBtn = document.getElementById("buyBtn");
+      buyBtn.disabled = true;
+      buyBtn.innerText = "Processing...";
 
-    showProcessingModal();
+      try {
+        const response = await fetch(BUY_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            network: currentNetwork,
+            serviceID,
+            variation_code,
+            plan_amount,
+            plan_name,
+            phone
+          })
+        });
 
-    try {
+        const data = await response.json();
+        console.log("PURCHASE RESPONSE:", data);
 
-        const response =
-        await fetch(
-            BUY_URL,
-            {
-                method: "POST",
+        if (response.ok && data.transaction) {
+          const tx = data.providerResponse?.content?.transactions || {};
 
-                headers: {
-                    "Content-Type":
-                    "application/json",
+          document.getElementById("transactionIcon").className = "transaction-icon success";
+          document.getElementById("transactionIcon").innerHTML = "✅";
+          document.getElementById("transactionTitle").innerText = "Transaction Successful";
+          document.getElementById("transactionMessage").innerText = data.message || "Transaction successful";
 
-                    Authorization:
-                    `Bearer ${token}`
-                },
+          document.getElementById("receiptSection").style.display = "block";
+          document.getElementById("receiptNetworkLogo").src = networkMeta.logo;
+          document.getElementById("receiptNetworkName").innerText = networkMeta.name;
 
-                body: JSON.stringify({
+          document.getElementById("receiptReference").innerText = data.transaction.reference || "";
+          document.getElementById("receiptAmount").innerText = formatNaira(data.transaction.amount || plan_amount);
+          document.getElementById("receiptDescription").innerText = data.transaction.description || plan_name || "Data Purchase";
+          document.getElementById("receiptPhone").innerText = tx.unique_element || phone;
+          document.getElementById("receiptStatus").innerText = tx.status || "success";
+          document.getElementById("receiptDate").innerText = new Date(data.transaction.created_at || Date.now()).toLocaleString();
 
-                    network:
-                    currentNetwork,
+          lastReceipt = {
+            networkName: networkMeta.name,
+            reference: data.transaction.reference || "",
+            amount: formatNaira(data.transaction.amount || plan_amount),
+            description: data.transaction.description || plan_name || "Data Purchase",
+            phone: tx.unique_element || phone,
+            status: tx.status || "success",
+            date: new Date(data.transaction.created_at || Date.now()).toLocaleString()
+          };
 
-                    serviceID,
-
-                    variation_code,
-
-                    plan_amount,
-
-                    plan_name,
-
-                    phone
-
-                })
-
-            }
-        );
-
-        const data =
-        await response.json();
-
-        console.log(
-            "PURCHASE RESPONSE:",
-            data
-        );
-
-
-        /* ==========================
-           SUCCESS
-        ========================== */
-
-        if (
-            response.ok &&
-            data.transaction
-        ) {
-
-            const tx =
-            data.providerResponse
-            ?.content
-            ?.transactions || {};
-
-            document
-            .getElementById(
-                "transactionIcon"
-            )
-            .innerHTML = "✅";
-
-            document
-            .getElementById(
-                "transactionTitle"
-            )
-            .innerText =
-            "Transaction Successful";
-document
-.getElementById("receiptAmount")
-.innerText =
-"₦" +
-Number(
-    data.transaction.amount
-).toLocaleString();
-            document
-            .getElementById(
-                "transactionMessage"
-            )
-            .innerText =
-            data.message ||
-            "Transaction Successful";
-
-            document
-            .getElementById(
-                "receiptSection"
-            )
-            .style.display =
-            "block";
-
-            document
-            .getElementById(
-                "receiptReference"
-            )
-            .innerText =
-            data.transaction
-            .reference || "";
-
-            document
-            .getElementById(
-                "receiptDescription"
-            )
-            .innerText =
-            data.transaction
-            .description || "";
-
-            document
-            .getElementById(
-                "receiptPhone"
-            )
-            .innerText =
-            tx.unique_element ||
-            phone;
-
-            document
-            .getElementById(
-                "receiptStatus"
-            )
-            .innerText =
-            tx.status ||
-            "success";
-
-            document
-            .getElementById(
-                "receiptDate"
-            )
-            .innerText =
-            new Date(
-                data.transaction
-                .created_at
-            )
-            .toLocaleString();
-
-            return;
+          return;
         }
 
-
-        /* ==========================
-           PENDING
-        ========================== */
-
         if (
-            data.status ===
-            "pending"
+          String(data.status || "").toLowerCase() === "pending" ||
+          String(data.transaction?.status || "").toLowerCase() === "pending"
         ) {
-
-            document
-            .getElementById(
-                "transactionIcon"
-            )
-            .innerHTML = "🟡";
-
-            document
-            .getElementById(
-                "transactionTitle"
-            )
-            .innerText =
-            "Transaction Pending";
-
-            document
-            .getElementById(
-                "transactionMessage"
-            )
-            .innerText =
-            data.message ||
-            "Transaction Pending";
-
-            return;
+          showPendingModal(data.message || "Transaction pending");
+          lastReceipt = {
+            networkName: networkMeta.name,
+            reference: data.transaction?.reference || "",
+            amount: formatNaira(plan_amount),
+            description: plan_name || "Data Purchase",
+            phone,
+            status: "pending",
+            date: new Date().toLocaleString()
+          };
+          return;
         }
 
-
-        /* ==========================
-           FAILED
-        ========================== */
-
-        document
-        .getElementById(
-            "transactionIcon"
-        )
-        .innerHTML = "❌";
-
-        document
-        .getElementById(
-            "transactionTitle"
-        )
-        .innerText =
-        "Transaction Failed";
-
-        document
-        .getElementById(
-            "transactionMessage"
-        )
-        .innerText =
-        data.message ||
-        "Transaction Failed";
-
-    }
-
-    catch (error) {
-
+        showFailedModal(data.message || "Transaction failed");
+        lastReceipt = {
+          networkName: networkMeta.name,
+          reference: data.transaction?.reference || "",
+          amount: formatNaira(plan_amount),
+          description: plan_name || "Data Purchase",
+          phone,
+          status: "failed",
+          date: new Date().toLocaleString()
+        };
+      } catch (error) {
         console.error(error);
-
-        document
-        .getElementById(
-            "transactionIcon"
-        )
-        .innerHTML = "❌";
-
-        document
-        .getElementById(
-            "transactionTitle"
-        )
-        .innerText =
-        "Transaction Failed";
-
-        document
-        .getElementById(
-            "transactionMessage"
-        )
-        .innerText =
-        "Unable to complete transaction";
-
+        showFailedModal("Unable to complete transaction");
+        lastReceipt = {
+          networkName: networkMeta.name,
+          reference: "",
+          amount: formatNaira(plan_amount),
+          description: plan_name || "Data Purchase",
+          phone,
+          status: "failed",
+          date: new Date().toLocaleString()
+        };
+      } finally {
+        buyBtn.disabled = false;
+        buyBtn.innerText = "Buy Data";
+      }
     }
 
-}
+    document.getElementById("buyBtn").addEventListener("click", buyData);
 
-
-/* ==========================================
-   BUTTON CLICK
-========================================== */
-
-document
-.getElementById("buyBtn")
-.addEventListener(
-    "click",
-    buyData
-);
-
-
-/* ==========================================
-   INITIAL LOAD
-========================================== */
-
-window.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        loadPlans(
-            "mtn"
-        );
-
-    }
-);
+    window.addEventListener("DOMContentLoaded", () => {
+      loadPlans("mtn");
+    });
   </script>
 </body>
 </html>
