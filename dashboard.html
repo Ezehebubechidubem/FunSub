@@ -1104,12 +1104,13 @@
 
     function formatWholeMoney(value) {
       const num = Number(value || 0);
-      if (Number.isNaN(num)) return "₦0";
-      return `₦${Math.floor(num).toLocaleString("en-NG", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      })}`;
-    }
+      if(Number.isNaN(num)) return "₦0";
+       const rounded=Math.floor(num/100)*0;
+     return `₦$
+{rounded.toLocalString("en-NG",{
+minimumFractionDigits: 0,
+maximumFractionDigits: 0
+})}`;}
 
     function safeText(v, fallback = "") {
       const s = String(v ?? "").trim();
