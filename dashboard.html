@@ -973,6 +973,71 @@ document.querySelector('[data-action="Data"]')
       `).join("");
     }
 
+  async function refreshBalanceAndHistory() {
+    const token = localStorage.getItem("funsub_token") || "";
+    if (!token) return;
+
+    try {
+      const [balanceRes, txRes] = await Promise.all([
+        fetch("https://funsub.onrender.com/api/wallet/balance", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }),
+        fetch("https://funsub.onrender.com/api/wallet/transactions?limit=10", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+      ]);
+
+      const balanceData = await balanceRes.json().catch(() => ({}));
+      const txData = await txRes.json().catch(() => ({}));
+
+      if (balanceData?.wallet?.balance != null) {
+        const balanceEl = document.querySelector("#walletBalance, .balance-value, .wallet-balance");
+        if (balanceEl) {
+          balanceEl.textContent = `₦${Number(balanceData.wallet.balance).toLocaleString("en-NG", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}`;
+        }
+      }
+
+      if (Array.isArray(txData?.transactions)) {
+        const historyEl = document.getElementById("transactionHistory");
+        if (historyEl) {
+          historyEl.innerHTML = txData.transactions.map(tx => `
+            <div class="txn">
+              <div>
+                <strong>${tx.description || tx.category || "Transaction"}</strong><br>
+                <small>${new Date(tx.created_at).toLocaleString()}</small>
+              </div>
+              <div>${tx.status === "success" ? "✓" : tx.status === "pending" ? "…" : "✕"}</div>
+            </div>
+          `).join("");
+        }
+      }
+    } catch (err) {
+      console.error("Silent refresh failed:", err);
+    }
+  }
+
+  async function silentRefreshAfterAction() {
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    const tryRefresh = async () => {
+      attempts += 1;
+      await refreshBalanceAndHistory();
+
+      if (attempts < maxAttempts) {
+        setTimeout(tryRefresh, 1200);
+      }
+    };
+
+    tryRefresh();
+  }
     function updateGreeting(user) {
       const displayName = shortName(user?.full_name || user?.fullName || user?.name || user?.username || "");
       greetingSmallEl.textContent = `Hi ${displayName}!`;
@@ -1082,9 +1147,7 @@ document.querySelector('[data-action="Data"]')
       wireClicks();
       await loadDashboardData();
     });
-setInterval(() => {
-  window.location.reload();
-}, 3000);
+
   </script>
 </body>
 </html>
