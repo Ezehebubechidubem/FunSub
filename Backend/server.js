@@ -48,7 +48,7 @@ const FLW_VA_URL = String(
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 
-
+const PAYMENT_INTENT_TTL_MINUTES = 5;
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
 const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
 
@@ -448,28 +448,37 @@ const kycUpload = multer({
   limits: { fileSize: 12 * 1024 * 1024 }
 });
 
-async function initDb() 
-{
-await query(`
-ALTER TABLE payment_intents
-ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
-`);
+async function initDb() {
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+  `);
 
-await query(`
-CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_idempotency_key_unique
-ON payment_intents (idempotency_key)
-WHERE idempotency_key IS NOT NULL;
-`);
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+  `);
 
-await query(`
-ALTER TABLE payment_intents
-ADD COLUMN IF NOT EXISTS provider_tx_ref TEXT;
-`);
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS provider_tx_ref TEXT;
+  `);
 
-await query(`
-ALTER TABLE payment_intents
-ADD COLUMN IF NOT EXISTS webhook_hash TEXT;
-`);
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS webhook_hash TEXT;
+  `);
+
+  await query(`
+    DROP INDEX IF EXISTS payment_intents_idempotency_key_unique;
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_user_id_idempotency_key_unique
+    ON payment_intents (user_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+  `);
+}
 
 await query(`
 CREATE TABLE IF NOT EXISTS processed_webhook_events (
@@ -579,6 +588,17 @@ CREATE TABLE IF NOT EXISTS processed_webhook_events (
     );
   `);
 }
+setInterval(async () => {
+  try {
+    await query(`
+      DELETE FROM payment_intents
+      WHERE status = 'initiated'
+        AND (expires_at IS NULL OR expires_at <= NOW())
+    `);
+  } catch (err) {
+    console.error('PAYMENT INTENT CLEANUP ERROR:', err);
+  }
+}, 60 * 1000).unref?.();
 
 function flutterwaveHeaders() {
   if (!FLW_SECRET_KEY) {
@@ -1996,6 +2016,8 @@ app.get('/api/wallet/balance', requireAuth, async (req, res) => {
   }
 });
 
+
+
 app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
   const client = await pool.connect();
 
@@ -2016,6 +2038,17 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Minimum funding amount is 100');
     }
 
+    await client.query('BEGIN');
+
+    await client.query(
+      `DELETE FROM payment_intents
+       WHERE user_id = $1
+         AND idempotency_key = $2
+         AND status = 'initiated'
+         AND (expires_at IS NULL OR expires_at <= NOW())`,
+      [req.user.id, idempotencyKey]
+    );
+
     const userResult = await client.query(
       `SELECT id, full_name, email, phone
        FROM users
@@ -2025,11 +2058,16 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     );
 
     const user = userResult.rows[0];
-    if (!user) return respondError(res, 404, 'User not found');
+    if (!user) {
+      await client.query('ROLLBACK');
+      return respondError(res, 404, 'User not found');
+    }
 
     const existingIntent = await client.query(
-      `SELECT * FROM payment_intents
-       WHERE user_id = $1 AND idempotency_key = $2
+      `SELECT *
+       FROM payment_intents
+       WHERE user_id = $1
+         AND idempotency_key = $2
        LIMIT 1`,
       [req.user.id, idempotencyKey]
     );
@@ -2038,6 +2076,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       const intent = existingIntent.rows[0];
       const meta = intent.meta || {};
       const fee = meta.fee || {};
+
+      await client.query('COMMIT');
 
       return respondOk(res, {
         reference: intent.tx_ref,
@@ -2055,9 +2095,11 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     }
 
     const reference = flutterwaveTxRef('fund');
-    const fee = buildDepositBreakdown(requestedNetAmount);
 
-    await client.query('BEGIN');
+    const fee =
+      typeof buildDepositBreakdown === 'function'
+        ? buildDepositBreakdown(requestedNetAmount)
+        : applyWalletFundingFee(requestedNetAmount);
 
     const virtualAccount = await flutterwaveCreateVirtualAccount({
       amount: fee.grossAmount,
@@ -2098,8 +2140,33 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 
     await client.query(
       `INSERT INTO payment_intents
-       (id, user_id, tx_ref, idempotency_key, amount, currency, provider, status, meta, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'NGN', 'flutterwave', 'initiated', $6, NOW())`,
+       (
+         id,
+         user_id,
+         tx_ref,
+         idempotency_key,
+         amount,
+         currency,
+         provider,
+         status,
+         meta,
+         expires_at,
+         created_at
+       )
+       VALUES
+       (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         'NGN',
+         'flutterwave',
+         'initiated',
+         $6,
+         NOW() + INTERVAL '5 minutes',
+         NOW()
+       )`,
       [
         uid('pit_'),
         user.id,
@@ -2144,7 +2211,9 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
     }, 'Funding details generated');
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
     console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
     return respondError(res, 500, err?.message || 'Unable to initiate funding');
   } finally {
