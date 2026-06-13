@@ -50,7 +50,7 @@ const FLW_VA_URL = String(
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 
-const PAYMENT_INTENT_TTL_MINUTES = 5;
+
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
 const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
 
