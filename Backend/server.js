@@ -17,10 +17,6 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const envNumber = (value, fallback) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
