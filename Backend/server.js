@@ -386,15 +386,26 @@ async function purgeExpiredFunding(reference, userId) {
   );
 }
 
-function cleanupExpiredFundingArtifacts() {
-  return query(
-    `DELETE FROM transactions
-     WHERE type = 'funding'
-       AND category = 'wallet'
-       AND status = 'pending'
-       AND created_at < NOW() - INTERVAL '${FUNDING_INTENT_TTL_MINUTES} minutes'`
-  ).catch(err => console.error('PENDING TRANSACTION CLEANUP ERROR:', err?.message || err));
+async function cleanupExpiredFundingArtifacts() {
+  try {
+    await query(
+      `DELETE FROM transactions
+       WHERE type = 'funding'
+         AND category = 'wallet'
+         AND status = 'pending'
+         AND created_at < NOW() - INTERVAL '${FUNDING_INTENT_TTL_MINUTES} minutes'`
+    );
 
+    await query(
+      `DELETE FROM payment_intents
+       WHERE provider = 'flutterwave'
+         AND status IN ('initiated', 'pending')
+         AND created_at < NOW() - INTERVAL '${FUNDING_INTENT_TTL_MINUTES} minutes'`
+    );
+  } catch (err) {
+    console.error('CLEANUP ERROR:', err?.message || err);
+  }
+}
   return query(
     `DELETE FROM payment_intents
      WHERE provider = 'flutterwave'
