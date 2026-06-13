@@ -1998,8 +1998,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 
     const idempotencyKey = getIdempotencyKey(req);
     if (!idempotencyKey) {
-      return respondError(res, 400, 'X-Idempotency-Key is required');
-    }
+      idempotencyKey = crypto.randomUUID();
+}
 
     const userResult = await client.query(
       `SELECT id, full_name, email, phone
