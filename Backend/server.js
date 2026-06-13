@@ -911,12 +911,27 @@ async function initDb() {
   `);
 
   await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS transactions_purchase_idempotency_unique
-    ON transactions (user_id, category, idempotency_key, request_hash)
-    WHERE type = 'purchase'
-      AND idempotency_key IS NOT NULL
-      AND request_hash IS NOT NULL;
-  `);
+  ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
+`);
+
+await query(`
+  ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS request_hash TEXT;
+`);
+
+await query(`
+  ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+`);
+
+await query(`
+  CREATE UNIQUE INDEX IF NOT EXISTS transactions_purchase_idempotency_unique
+  ON transactions (user_id, category, idempotency_key, request_hash)
+  WHERE type = 'purchase'
+    AND idempotency_key IS NOT NULL
+    AND request_hash IS NOT NULL;
+`);
 
   await query(`
     CREATE INDEX IF NOT EXISTS transactions_user_id_category_idx
