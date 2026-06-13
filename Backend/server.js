@@ -26,8 +26,8 @@ const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
 const FLW_BASE_URL = String(process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3').replace(/\/$/, '');
 
-const PAYMENT_INTENT_TTL_MINUTES = 3;
-const PAYMENT_INTENT_PURGE_AFTER_HOURS = 24;
+const PAYMENT_INTENT_TTL_MINUTES = 15;
+const PAYMENT_INTENT_PURGE_AFTER_HOURS = 720;
 const FLW_WEBHOOK_HASH = process.env.FLW_WEBHOOK_HASH;
 const FLW_ACCOUNT_TYPE = String(process.env.FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase(); // dynamic | static
 const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
