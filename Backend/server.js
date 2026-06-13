@@ -1996,9 +1996,10 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Minimum funding amount is 100');
     }
 
-    const idempotencyKey = getIdempotencyKey(req);
-    if (!idempotencyKey) {
-      idempotencyKey = crypto.randomUUID();
+    let idempotencyKey = getIdempotencyKey(req);
+
+if (!idempotencyKey) {
+  idempotencyKey = crypto.randomUUID();
 }
 
     const userResult = await client.query(
