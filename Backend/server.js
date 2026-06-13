@@ -406,13 +406,7 @@ async function cleanupExpiredFundingArtifacts() {
     console.error('CLEANUP ERROR:', err?.message || err);
   }
 }
-  return query(
-    `DELETE FROM payment_intents
-     WHERE provider = 'flutterwave'
-       AND status IN ('initiated', 'pending')
-       AND created_at < NOW() - INTERVAL '${FUNDING_INTENT_TTL_MINUTES} minutes'`
-  ).catch(err => console.error('PAYMENT INTENT CLEANUP ERROR:', err?.message || err));
-}
+  
 function normalizeServiceType(v) {
   const s = String(v || '').toLowerCase().trim();
 
