@@ -13,6 +13,7 @@ const path = require('path');
 const mockProvider = require('./mock-vtpass-server');
 const fs = require('fs');
 const crypto = require('crypto');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -25,9 +26,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
 const FLW_BASE_URL = String(process.env.FLW_BASE_URL || 'https://api.flutterwave.com/v3').replace(/\/$/, '');
-
-const PAYMENT_INTENT_TTL_MINUTES = 15;
-const PAYMENT_INTENT_PURGE_AFTER_HOURS = 720;
 const FLW_WEBHOOK_HASH = process.env.FLW_WEBHOOK_HASH;
 const FLW_ACCOUNT_TYPE = String(process.env.FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase(); // dynamic | static
 const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
@@ -286,82 +284,6 @@ async function addTransaction({
   return inserted.rows[0];
 }
 
-
-const DEPOSIT_FEE_PERCENT = envNumber(
-  process.env.DEPOSIT_FEE_PERCENT || process.env.FLW_WALLET_FEE_PERCENT,
-  2
-);
-
-function applyWalletFundingFee(grossAmount) {
-  const gross = Number(grossAmount || 0);
-  const feePercent = DEPOSIT_FEE_PERCENT;
-  const feeAmount = (gross * feePercent) / 100;
-  const netAmount = gross - feeAmount;
-
-  return {
-    grossAmount: Number(gross.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount: Number(feeAmount.toFixed(2)),
-    netAmount: Number(netAmount.toFixed(2))
-  };
-}
-
-function getIdempotencyKey(req) {
-  return String(
-    req.headers['x-idempotency-key'] ||
-    req.body?.idempotencyKey ||
-    req.body?.idempotency_key ||
-    ''
-  ).trim();
-}
-
-function isValidFlutterwaveWebhook(req) {
-  const expected = String(process.env.FLW_WEBHOOK_HASH || '').trim();
-  if (!expected) return true;
-
-  const got = String(
-    req.headers['verif-hash'] ||
-    req.headers['x-flw-secret-hash'] ||
-    ''
-  ).trim();
-
-  return got && got === expected;
-}
-
-function normalizeStatus(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isSuccessStatus(value) {
-  return ['successful', 'success', 'completed', 'complete', 'paid', 'ok'].includes(
-    normalizeStatus(value)
-  );
-}
-function buildDepositBreakdown(netAmount) {
-  const net = Number(netAmount || 0);
-  const feePercent = DEPOSIT_FEE_PERCENT;
-  const feeAmount = Number(((net * feePercent) / 100).toFixed(2));
-  const grossAmount = Number((net + feeAmount).toFixed(2));
-
-  return {
-    netAmount: Number(net.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount,
-    grossAmount
-  };
-}
-
-function webhookDedupKey(body = {}) {
-  const data = body.data || {};
-  const parts = [
-    String(body.event || ''),
-    String(data.tx_ref || body.tx_ref || ''),
-    String(data.status || body.status || ''),
-    String(data.amount || body.amount || ''),
-    String(data.flw_ref || '')
-  ];
-  return crypto.createHash('sha256').update(parts.join('|')).digest('hex');
-}
 function requireAuth(req, res, next) {
   try {
     console.log('================ AUTH DEBUG ================');
@@ -550,62 +472,8 @@ async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
-    CREATE TABLE IF NOT EXISTS processed_webhook_events (
-      id TEXT PRIMARY KEY,
-      event_hash TEXT NOT NULL UNIQUE,
-      reference TEXT,
-      payload JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS provider_tx_ref TEXT;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS webhook_hash TEXT;
-  `);
-
-  await query(`
-    ALTER TABLE transactions
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-  `);
-
-  await query(`
-    DROP INDEX IF EXISTS payment_intents_idempotency_key_unique;
-  `);
-
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_user_id_idempotency_key_unique
-    ON payment_intents (user_id, idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
   `);
 }
-setInterval(async () => {
-  try {
-    await query(`
-      DELETE FROM payment_intents
-      WHERE status = 'initiated'
-        AND (expires_at IS NULL OR expires_at <= NOW())
-    `);
-  } catch (err) {
-    console.error('PAYMENT INTENT CLEANUP ERROR:', err);
-  }
-}, 60 * 1000).unref?.();
 
 function flutterwaveHeaders() {
   if (!FLW_SECRET_KEY) {
@@ -631,90 +499,14 @@ function splitFullName(fullName = '') {
 }
 
 function isValidFlutterwaveWebhook(req) {
-  const expected = String(process.env.FLW_WEBHOOK_HASH || '').trim();
-  if (!expected) return true;
+  if (!process.env.FLW_WEBHOOK_HASH) return true;
 
-  const got = String(
-    req.headers['verif-hash'] ||
-    req.headers['x-flw-secret-hash'] ||
-    ''
-  ).trim();
+  const got =
+    String(req.headers['verif-hash'] || req.headers['x-flw-secret-hash'] || '').trim();
 
-  return got && got === expected;
+  return got && got === process.env.FLW_WEBHOOK_HASH;
 }
 
-function normalizeStatus(value) {
-  return String(value || '').trim().toLowerCase();
-}
-function isFailureStatus(value) {
-  return ['failed', 'cancelled', 'canceled', 'reversed', 'aborted', 'error', 'timeout', 'timed-out', 'declined'].includes(
-    normalizeStatus(value)
-  );
-}
-function webhookDedupKey(body = {}) {
-  const data = body.data || {};
-  return crypto
-    .createHash('sha256')
-    .update([
-      String(body.event || ''),
-      String(data.tx_ref || body.tx_ref || ''),
-      String(data.status || body.status || ''),
-      String(data.amount || body.amount || ''),
-      String(data.flw_ref || ''),
-      String(data.id || '')
-    ].join('|'))
-    .digest('hex');
-}
-
-async function deleteExpiredPaymentIntents() {
-  try {
-    await query(`
-      UPDATE payment_intents
-      SET status = 'expired'
-      WHERE provider = 'flutterwave'
-        AND status IN ('initiated', 'pending')
-        AND expires_at IS NOT NULL
-        AND expires_at <= NOW()
-    `);
-
-    await query(`
-      DELETE FROM payment_intents
-      WHERE status = 'expired'
-        AND created_at < NOW() - INTERVAL '${PAYMENT_INTENT_PURGE_AFTER_HOURS} hours'
-    `);
-  } catch (err) {
-    console.error('PAYMENT INTENT CLEANUP ERROR:', err);
-  }
-}
-function getIdempotencyKey(req) {
-  return String(
-    req.headers['x-idempotency-key'] ||
-    req.body?.idempotencyKey ||
-    req.body?.idempotency_key ||
-    ''
-  ).trim();
-}
-async function verifyFlutterwaveByReference(reference) {
-  if (!FLW_SECRET_KEY) {
-    throw new Error('Flutterwave secret key not set');
-  }
-  if (!FLW_BASE_URL) {
-    throw new Error('FLW_BASE_URL is missing');
-  }
-
-  const response = await axios.get(`${FLW_BASE_URL}/transactions/verify_by_reference`, {
-    params: { tx_ref: reference },
-    headers: flutterwaveHeaders(),
-    timeout: 30000
-  });
-
-  return response.data;
-}
-setInterval(() => {
-  deleteExpiredPaymentIntents().catch(err => {
-    console.error('PAYMENT INTENT CLEANUP LOOP ERROR:', err);
-  });
-}, 60 * 1000).unref?.();
 async function flutterwaveCreateCustomer(user) {
   if (!user?.email) {
     throw new Error('User email is required to create Flutterwave customer');
@@ -790,19 +582,6 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       return { ok: false, reason: 'Payment intent not found' };
     }
 
-    const walletResult = await client.query(
-      `SELECT * FROM wallets
-       WHERE user_id = $1
-       FOR UPDATE`,
-      [intent.user_id]
-    );
-
-    const wallet = walletResult.rows[0];
-    if (!wallet) {
-      await client.query('ROLLBACK');
-      return { ok: false, reason: 'Wallet not found' };
-    }
-
     if (String(intent.status).toLowerCase() === 'successful') {
       await client.query('COMMIT');
       return { ok: true, alreadyProcessed: true };
@@ -811,11 +590,10 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
     const expectedAmount = Number(intent.amount || 0);
     const paidAmount = Number(amount || 0);
 
-    if (expectedAmount && paidAmount && Math.abs(expectedAmount - paidAmount) > 0.01) {
+    if (expectedAmount && paidAmount && expectedAmount !== paidAmount) {
       await client.query(
         `UPDATE payment_intents
          SET status = 'failed',
-             verified_at = NOW(),
              meta = $2
          WHERE tx_ref = $1`,
         [
@@ -830,33 +608,11 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
         ]
       );
 
-      await client.query(
-        `UPDATE transactions
-         SET status = 'failed',
-             description = $2,
-             meta = $3,
-             updated_at = NOW()
-         WHERE reference = $1
-           AND user_id = $4`,
-        [
-          reference,
-          'Wallet funding failed',
-          JSON.stringify({
-            reason: 'amount_mismatch',
-            expectedAmount,
-            paidAmount,
-            flutterwaveData,
-            rawWebhook
-          }),
-          intent.user_id
-        ]
-      );
-
       await client.query('COMMIT');
       return { ok: false, reason: 'Amount mismatch' };
     }
 
-    const fee = buildDepositBreakdown(paidAmount || expectedAmount);
+    const fee = applyWalletFundingFee(paidAmount || expectedAmount);
     const creditedAmount = Number(fee.netAmount || 0);
 
     await client.query(
@@ -867,70 +623,53 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       [intent.user_id, creditedAmount]
     );
 
-    const txUpdate = await client.query(
-      `UPDATE transactions
-       SET status = 'success',
-           amount = $2,
-           meta = $3,
-           updated_at = NOW()
-       WHERE reference = $1
-         AND user_id = $4
-       RETURNING *`,
+    await client.query(
+      `UPDATE payment_intents
+       SET status = 'successful',
+           verified_at = NOW(),
+           meta = $2
+       WHERE tx_ref = $1`,
       [
         reference,
-        creditedAmount,
         JSON.stringify({
           flutterwaveData,
           rawWebhook,
           creditedAmount,
-          fee,
-          grossAmount: expectedAmount,
-          netAmount: creditedAmount
+          fee
+        })
+      ]
+    );
+
+    await client.query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2
+       WHERE reference = $1
+         AND user_id = $3`,
+      [
+        reference,
+        JSON.stringify({
+          flutterwaveData,
+          rawWebhook,
+          creditedAmount,
+          fee
         }),
         intent.user_id
       ]
     );
 
-    await client.query(
-      `UPDATE payment_intents
-       SET status = 'successful',
-           verified_at = NOW(),
-           provider_tx_ref = COALESCE($2, provider_tx_ref),
-           webhook_hash = COALESCE($3, webhook_hash),
-           meta = $4
-       WHERE tx_ref = $1`,
-      [
+    await addNotification(
+      intent.user_id,
+      'Wallet funded',
+      `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
+      {
         reference,
-        String(flutterwaveData?.id || flutterwaveData?.flw_ref || flutterwaveData?.reference || '') || null,
-        String(rawWebhook ? webhookDedupKey(rawWebhook) : '') || null,
-        JSON.stringify({
-          flutterwaveData,
-          rawWebhook,
-          creditedAmount,
-          fee,
-          grossAmount: expectedAmount,
-          netAmount: creditedAmount
-        })
-      ]
+        creditedAmount
+      },
+      true
     );
 
     await client.query('COMMIT');
-
-    try {
-      const tx = txUpdate.rows[0];
-      if (tx) {
-        await addNotification(
-          intent.user_id,
-          'Wallet funded',
-          `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
-          { reference, creditedAmount, fee, tx_id: tx.id },
-          true
-        );
-      }
-    } catch (notifyErr) {
-      console.error('NOTIFICATION ERROR:', notifyErr?.message || notifyErr);
-    }
-
     return { ok: true, creditedAmount };
   } catch (err) {
     try {
@@ -941,83 +680,6 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
     client.release();
   }
 }
-async function processFundingFailure({
-  reference,
-  flutterwaveData = {},
-  rawWebhook = null,
-  reason = 'failed'
-}) {
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-
-    const intentResult = await client.query(
-      `SELECT * FROM payment_intents
-       WHERE tx_ref = $1
-       FOR UPDATE`,
-      [reference]
-    );
-
-    const intent = intentResult.rows[0];
-    if (!intent) {
-      await client.query('ROLLBACK');
-      return { ok: false, reason: 'Payment intent not found' };
-    }
-
-    if (String(intent.status).toLowerCase() === 'successful') {
-      await client.query('COMMIT');
-      return { ok: true, alreadyProcessed: true };
-    }
-
-    await client.query(
-      `UPDATE payment_intents
-       SET status = 'failed',
-           verified_at = NOW(),
-           meta = $2
-       WHERE tx_ref = $1`,
-      [
-        reference,
-        JSON.stringify({
-          reason,
-          flutterwaveData,
-          rawWebhook
-        })
-      ]
-    );
-
-    await client.query(
-      `UPDATE transactions
-       SET status = 'failed',
-           description = $2,
-           meta = $3,
-           updated_at = NOW()
-       WHERE reference = $1
-         AND user_id = $4`,
-      [
-        reference,
-        'Wallet funding failed',
-        JSON.stringify({
-          reason,
-          flutterwaveData,
-          rawWebhook
-        }),
-        intent.user_id
-      ]
-    );
-
-    await client.query('COMMIT');
-    return { ok: true };
-  } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (_) {}
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
 async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
   const { first, last } = splitFullName(
     user.full_name || user.fullName || user.name || 'User'
@@ -1381,56 +1043,6 @@ function providerRequestLooksSuccessful(data) {
 
   return false;
 }
-async function reconcilePendingFundingIntents() {
-  const pending = await query(
-    `SELECT *
-     FROM payment_intents
-     WHERE provider = 'flutterwave'
-       AND status IN ('initiated', 'pending')
-       AND expires_at IS NOT NULL
-       AND expires_at > NOW()
-       AND created_at < NOW() - INTERVAL '2 minutes'
-     ORDER BY created_at ASC
-     LIMIT 50`
-  );
-
-  for (const intent of pending.rows) {
-    try {
-      const verification = await verifyFlutterwaveByReference(intent.tx_ref);
-      const data = verification?.data || verification || {};
-      const status = normalizeStatus(data.status || verification?.status || '');
-      const amount = Number(data.amount || intent.amount || 0);
-
-      if (isSuccessStatus(status)) {
-        await processFundingSuccess({
-          reference: intent.tx_ref,
-          amount,
-          flutterwaveData: data,
-          rawWebhook: null
-        });
-        continue;
-      }
-
-      if (isFailureStatus(status)) {
-        await processFundingFailure({
-          reference: intent.tx_ref,
-          flutterwaveData: data,
-          rawWebhook: null,
-          reason: status
-        });
-      }
-    } catch (err) {
-      console.error('Reconcile failed for', intent.tx_ref, err?.message || err);
-    }
-  }
-}
-
-setInterval(() => {
-  reconcilePendingFundingIntents().catch(err => {
-    console.error('Funding reconcile loop failed:', err?.message || err);
-  });
-}, 120000).unref?.();
-
 
 async function fetchProviderPlans(serviceType, params = {}) {
   const normalizedServiceType = normalizeServiceType(serviceType);
@@ -1532,7 +1144,6 @@ function buildProviderPayload({
     ...extra
   });
 }
-
 async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
@@ -2019,7 +1630,6 @@ app.post('/api/auth/login', async (req, res) => {
        LIMIT 1`,
       [cleanEmail, cleanPhone]
     );
-
     const user = result.rows[0];
     if (!user) return respondError(res, 401, 'Invalid credentials');
 
@@ -2178,23 +1788,16 @@ app.get('/api/wallet/balance', requireAuth, async (req, res) => {
   }
 });
 
-
-
 app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
-  const client = await pool.connect();
-
   try {
-    let idempotencyKey = getIdempotencyKey(req);
-    if (!idempotencyKey) {
-      idempotencyKey = crypto.randomUUID();
-    }
+    const { amount } = req.body || {};
+    const amt = toNumber(amount, 0);
 
-    const requestedNetAmount = Number(req.body?.amount || 0);
-    if (!Number.isFinite(requestedNetAmount) || requestedNetAmount < 100) {
+    if (amt < 100) {
       return respondError(res, 400, 'Minimum funding amount is 100');
     }
 
-    const userResult = await client.query(
+    const userResult = await query(
       `SELECT id, full_name, email, phone
        FROM users
        WHERE id = $1
@@ -2203,55 +1806,14 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     );
 
     const user = userResult.rows[0];
-    if (!user) return respondError(res, 404, 'User not found');
-
-    await client.query(
-      `DELETE FROM payment_intents
-       WHERE user_id = $1
-         AND idempotency_key = $2
-         AND status IN ('initiated', 'pending')
-         AND expires_at IS NOT NULL
-         AND expires_at <= NOW()`,
-      [req.user.id, idempotencyKey]
-    );
-
-    const existingIntent = await client.query(
-      `SELECT *
-       FROM payment_intents
-       WHERE user_id = $1
-         AND idempotency_key = $2
-         AND status IN ('initiated', 'pending', 'successful')
-         AND (expires_at IS NULL OR expires_at > NOW())
-       LIMIT 1`,
-      [req.user.id, idempotencyKey]
-    );
-
-    if (existingIntent.rows[0]) {
-      const intent = existingIntent.rows[0];
-      const meta = intent.meta || {};
-      const fee = meta.fee || {};
-
-      return respondOk(res, {
-        reference: intent.tx_ref,
-        amount: Number(meta.netAmount || intent.amount || requestedNetAmount).toFixed(2),
-        gross_amount: Number(meta.grossAmount || 0).toFixed(2),
-        fee_percent: Number(fee.feePercent || DEPOSIT_FEE_PERCENT).toFixed(2),
-        fee_amount: Number(fee.feeAmount || 0).toFixed(2),
-        net_amount: Number(meta.netAmount || intent.amount || requestedNetAmount).toFixed(2),
-        account_number: meta?.virtualAccount?.account_number || null,
-        bank_name: meta?.virtualAccount?.bank_name || null,
-        account_name: meta?.virtualAccount?.account_name || null,
-        expiry_date: meta?.virtualAccount?.expiry_date || null,
-        account_type: meta?.accountType || FLW_ACCOUNT_TYPE
-      }, 'Funding details loaded');
+    if (!user) {
+      return respondError(res, 404, 'User not found');
     }
 
     const reference = flutterwaveTxRef('fund');
-    const fee = buildDepositBreakdown(requestedNetAmount);
-    const expiresAt = new Date(Date.now() + (PAYMENT_INTENT_TTL_MINUTES * 60 * 1000));
 
     const virtualAccount = await flutterwaveCreateVirtualAccount({
-      amount: fee.grossAmount,
+      amount: amt,
       user,
       reference
     });
@@ -2281,87 +1843,40 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
     const intentMeta = {
       purpose: 'wallet_funding',
       accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
-      netAmount: fee.netAmount,
-      grossAmount: fee.grossAmount,
-      fee,
       virtualAccount
     };
 
-    await client.query('BEGIN');
-
-    await client.query(
+    await query(
       `INSERT INTO payment_intents
-       (
-         id,
-         user_id,
-         tx_ref,
-         idempotency_key,
-         amount,
-         currency,
-         provider,
-         status,
-         meta,
-         expires_at,
-         created_at
-       )
-       VALUES
-       (
-         $1,
-         $2,
-         $3,
-         $4,
-         $5,
-         'NGN',
-         'flutterwave',
-         'initiated',
-         $6,
-         $7,
-         NOW()
-       )`,
+       (id, user_id, tx_ref, amount, currency, provider, status, meta, created_at)
+       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, NOW())`,
       [
         uid('pit_'),
         user.id,
         reference,
-        idempotencyKey,
-        fee.grossAmount,
-        JSON.stringify(intentMeta),
-        expiresAt
+        Number(amt).toFixed(2),
+        JSON.stringify(intentMeta)
       ]
     );
 
-    await client.query(
-      `INSERT INTO transactions
-       (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at, updated_at)
-       VALUES
-       ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW(), NOW())`,
-      [
-        uid('tx_'),
-        user.id,
-        'funding',
-        'wallet',
-        fee.netAmount,
-        reference,
-        'Wallet funding initiated',
-        JSON.stringify({
-          provider: 'flutterwave',
-          grossAmount: fee.grossAmount,
-          feePercent: fee.feePercent,
-          feeAmount: fee.feeAmount,
-          netAmount: fee.netAmount,
-          accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
-        })
-      ]
-    );
-
-    await client.query('COMMIT');
+    await addTransaction({
+      userId: user.id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(amt).toFixed(2),
+      status: 'pending',
+      reference,
+      description: 'Wallet funding initiated',
+      meta: {
+        provider: 'flutterwave',
+        accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+        virtualAccount
+      }
+    });
 
     return respondOk(res, {
       reference,
-      amount: fee.netAmount.toFixed(2),
-      gross_amount: fee.grossAmount.toFixed(2),
-      fee_percent: fee.feePercent.toFixed(2),
-      fee_amount: fee.feeAmount.toFixed(2),
-      net_amount: fee.netAmount.toFixed(2),
+      amount: Number(amt).toFixed(2),
       account_number: accountNumber,
       bank_name: bankName,
       account_name: accountName,
@@ -2369,168 +1884,11 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
     }, 'Funding details generated');
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
     console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
     return respondError(res, 500, err?.message || 'Unable to initiate funding');
-  } finally {
-    client.release();
   }
 });
-app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
-  try {
-    const reference = String(req.params.reference || '').trim();
-    if (!reference) {
-      return respondError(res, 400, 'reference is required');
-    }
 
-    const intentResult = await query(
-      `SELECT * FROM payment_intents
-       WHERE tx_ref = $1 AND user_id = $2
-       LIMIT 1`,
-      [reference, req.user.id]
-    );
-
-    const transactionResult = await query(
-      `SELECT * FROM transactions
-       WHERE reference = $1 AND user_id = $2
-       LIMIT 1`,
-      [reference, req.user.id]
-    );
-
-    const wallet = await ensureWallet(req.user.id);
-
-    const intent = intentResult.rows[0] || null;
-    const transaction = transactionResult.rows[0] || null;
-
-    return respondOk(
-      res,
-      {
-        reference,
-        intent,
-        transaction,
-        wallet: {
-          id: wallet.id,
-          balance: Number(wallet.balance).toFixed(2),
-          currency: wallet.currency
-        }
-      },
-      'Funding status loaded'
-    );
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Unable to load funding status');
-  }
-});
-app.post('/api/webhooks/flutterwave', async (req, res) => {
-  try {
-    if (!isValidFlutterwaveWebhook(req)) {
-      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
-    }
-
-    const body = req.body || {};
-    const event = String(body.event || '').toLowerCase();
-    const data = body.data || {};
-
-    const isRelevant =
-      event === 'charge.completed' ||
-      event === 'transfer.completed' ||
-      event === 'transfer.successful' ||
-      String(body['event.type'] || '').toUpperCase() === 'BANK_TRANSFER_TRANSACTION';
-
-    if (!isRelevant) {
-      return res.status(200).json({ received: true });
-    }
-
-    const reference =
-      data.tx_ref ||
-      body.tx_ref ||
-      body.meta_data?.tx_ref ||
-      body.meta_data?.reference ||
-      null;
-
-    if (!reference) {
-      return res.status(200).json({ received: true });
-    }
-
-    const status = normalizeStatus(data.status || body.status || '');
-    const paidAmount = Number(data.amount ?? body.amount ?? 0);
-    const eventHash = webhookDedupKey(body);
-
-    const processed = await query(
-      `INSERT INTO processed_webhook_events (id, event_hash, reference, payload)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (event_hash) DO NOTHING
-       RETURNING id`,
-      [uid('whe_'), eventHash, reference, JSON.stringify(body)]
-    );
-
-    if (!processed.rows[0]) {
-      return res.status(200).json({ received: true, duplicate: true });
-    }
-
-    if (isSuccessStatus(status)) {
-      const result = await processFundingSuccess({
-        reference,
-        amount: paidAmount,
-        flutterwaveData: data,
-        rawWebhook: body
-      });
-
-      return res.status(200).json({
-        received: true,
-        processed: true,
-        result
-      });
-    }
-
-    if (isFailureStatus(status)) {
-      const result = await processFundingFailure({
-        reference,
-        flutterwaveData: data,
-        rawWebhook: body,
-        reason: status || 'failed'
-      });
-
-      return res.status(200).json({
-        received: true,
-        processed: true,
-        result
-      });
-    }
-
-    await query(
-      `UPDATE payment_intents
-       SET meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
-       WHERE tx_ref = $1`,
-      [
-        reference,
-        JSON.stringify({
-          lastWebhookStatus: status || 'pending',
-          lastWebhookPayload: body
-        })
-      ]
-    );
-
-    await query(
-      `UPDATE transactions
-       SET meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb,
-           updated_at = NOW()
-       WHERE reference = $1`,
-      [
-        reference,
-        JSON.stringify({
-          lastWebhookStatus: status || 'pending',
-          lastWebhookPayload: body
-        })
-      ]
-    );
-
-    return res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('WEBHOOK ERROR:', err?.response?.data || err?.message || err);
-    return res.status(500).json({ success: false, message: 'Webhook error' });
-  }
-});
 /**
  * Optional: frontend can poll this route to know whether the transfer has been matched.
  */
@@ -2927,7 +2285,205 @@ app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processS
 app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
 app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
 
+/* WEBHOOK */
 
+app.get('/api/webhooks/flutterwave', (req, res) => {
+  return res.status(200).send('Flutterwave webhook endpoint is live');
+});
+
+app.post('/api/webhooks/flutterwave', async (req, res) => {
+  try {
+    console.log('========== FLW WEBHOOK HIT ==========');
+    console.log('Expected Hash:', process.env.FLW_WEBHOOK_HASH);
+    console.log('Received Hash:', req.headers['verif-hash']);
+    console.log('Received x-flw-secret-hash:', req.headers['x-flw-secret-hash']);
+    console.log('Headers:', req.headers);
+    console.log('Raw Body:', req.rawBody);
+    console.log('Parsed Body:', req.body);
+
+           if (!isValidFlutterwaveWebhook(req)) {
+      console.log('INVALID FLW SIGNATURE');
+      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
+    }
+
+    console.log('SIGNATURE VERIFIED');
+
+    const body = req.body || {};
+    const event = String(body.event || '').toLowerCase();
+    const data = body.data || {};
+
+    const isRelevant =
+      event === 'charge.completed' ||
+      event === 'transfer.completed' ||
+      event === 'transfer.successful' ||
+      String(body['event.type'] || '').toUpperCase() === 'BANK_TRANSFER_TRANSACTION';
+
+    if (!isRelevant) {
+      console.log('NOT A RELEVANT EVENT:', event);
+      return res.status(200).json({ received: true });
+    }
+
+    const reference =
+      data.tx_ref ||
+      body.tx_ref ||
+      body.meta_data?.tx_ref ||
+      body.meta_data?.reference ||
+      null;
+
+    const status = String(data.status || body.status || '').toLowerCase();
+    const amount = Number(data.amount ?? body.amount ?? 0);
+
+    console.log('EVENT:', event);
+    console.log('REFERENCE:', reference);
+    console.log('STATUS:', status);
+    console.log('AMOUNT:', amount);
+
+    if (!reference) {
+      console.log('NO REFERENCE IN WEBHOOK');
+      return res.status(200).json({ received: true });
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1
+       LIMIT 1`,
+      [reference]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) {
+      console.log('NO PAYMENT INTENT FOUND FOR', reference);
+      return res.status(200).json({ received: true });
+    }
+
+    console.log('FOUND INTENT:', intent);
+
+    if (String(intent.status).toLowerCase() === 'successful') {
+      console.log('ALREADY PROCESSED', reference);
+      return res.status(200).json({ received: true });
+    }
+
+    if (status && status !== 'successful' && status !== 'completed') {
+      console.log('PAYMENT NOT SUCCESSFUL YET');
+
+      await query(
+        `UPDATE payment_intents
+         SET status = 'failed',
+             meta = $2
+         WHERE tx_ref = $1`,
+        [
+          reference,
+          JSON.stringify({
+            webhook: body,
+            reason: 'flutterwave_not_successful'
+          })
+        ]
+      );
+
+      return res.status(200).json({ received: true });
+    }
+
+    const expectedAmount = Number(intent.amount || 0);
+    if (expectedAmount && amount && expectedAmount !== amount) {
+      console.log('AMOUNT MISMATCH');
+
+      await query(
+        `UPDATE payment_intents
+         SET status = 'failed',
+             meta = $2
+         WHERE tx_ref = $1`,
+        [
+          reference,
+          JSON.stringify({
+            webhook: body,
+            reason: 'amount_mismatch',
+            expectedAmount,
+            paidAmount: amount
+          })
+        ]
+      );
+
+      return res.status(200).json({ received: true });
+    }
+
+    const fee =
+      typeof applyWalletFundingFee === 'function'
+        ? applyWalletFundingFee(amount || expectedAmount)
+        : {
+            grossAmount: amount || expectedAmount,
+            feePercent: 0,
+            feeAmount: 0,
+            netAmount: amount || expectedAmount
+          };
+
+    const creditedAmount = Number(fee.netAmount || 0);
+
+    console.log('CREDITED AMOUNT:', creditedAmount);
+
+    await query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [intent.user_id, creditedAmount]
+    );
+
+    await query(
+      `UPDATE payment_intents
+       SET status = 'successful',
+           verified_at = NOW(),
+           meta = $2
+       WHERE tx_ref = $1`,
+      [
+        reference,
+        JSON.stringify({
+          webhook: body,
+          creditedAmount,
+          fee
+        })
+      ]
+    );
+
+    const txUpdate = await query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2,
+           updated_at = NOW()
+       WHERE reference = $1
+         AND user_id = $3
+       RETURNING *`,
+      [
+        reference,
+        JSON.stringify({
+          webhook: body,
+          creditedAmount,
+          fee
+        }),
+        intent.user_id
+      ]
+    );
+
+    const tx = txUpdate.rows[0];
+    if (!tx) {
+      console.log('NO EXISTING TRANSACTION FOUND TO UPDATE FOR', reference);
+      return res.status(200).json({ received: true });
+    }
+
+    await addNotification(
+      intent.user_id,
+      'Wallet funded',
+      `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
+      { tx_id: tx.id, reference, creditedAmount },
+      true
+    );
+
+    console.log('WEBHOOK PROCESSED SUCCESSFULLY FOR', reference);
+    return res.status(200).json({ received: true, processed: true });
+  } catch (err) {
+    console.error('WEBHOOK ERROR:', err?.response?.data || err?.message || err);
+    return res.status(500).json({ success: false, message: 'Webhook error' });
+  }
+});
 /* LOGOUT */
 
 app.post('/api/auth/logout', requireAuth, async (req, res) => {
