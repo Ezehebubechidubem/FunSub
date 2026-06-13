@@ -1625,16 +1625,7 @@ setInterval(() => {
   });
 }, 120000).unref?.();
 
-const SERVICE_CATALOG = [
-  { key: 'recharge_pin', label: 'Recharge Pin', route: '/api/services/recharge-pin' },
-  { key: 'data_pin', label: 'Data Pin', route: '/api/services/data-pin' },
-  { key: 'exam_pin', label: 'Exam PIN', route: '/api/services/exam-pin' },
-  { key: 'electricity', label: 'Electricity', route: '/api/services/electricity' },
-  { key: 'cable_tv', label: 'Cable TV', route: '/api/services/cable' },
-  { key: 'airtime', label: 'Airtime', route: '/api/services/airtime' },
-  { key: 'data', label: 'Data', route: '/api/services/data' },
-  { key: 'betting', label: 'Betting', route: '/api/services/betting' }
-];
+
 
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'PhoneStop backend is running' });
