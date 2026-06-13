@@ -450,46 +450,6 @@ const kycUpload = multer({
 
 async function initDb() {
   await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS provider_tx_ref TEXT;
-  `);
-
-  await query(`
-    ALTER TABLE payment_intents
-    ADD COLUMN IF NOT EXISTS webhook_hash TEXT;
-  `);
-
-  await query(`
-    DROP INDEX IF EXISTS payment_intents_idempotency_key_unique;
-  `);
-
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_user_id_idempotency_key_unique
-    ON payment_intents (user_id, idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
-  `);
-}
-
-await query(`
-CREATE TABLE IF NOT EXISTS processed_webhook_events (
-  id TEXT PRIMARY KEY,
-  event_hash TEXT NOT NULL UNIQUE,
-  reference TEXT,
-  payload JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-`);
-  await query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       role TEXT NOT NULL DEFAULT 'user',
@@ -586,6 +546,44 @@ CREATE TABLE IF NOT EXISTS processed_webhook_events (
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS processed_webhook_events (
+      id TEXT PRIMARY KEY,
+      event_hash TEXT NOT NULL UNIQUE,
+      reference TEXT,
+      payload JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS provider_tx_ref TEXT;
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+    ADD COLUMN IF NOT EXISTS webhook_hash TEXT;
+  `);
+
+  await query(`
+    DROP INDEX IF EXISTS payment_intents_idempotency_key_unique;
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_user_id_idempotency_key_unique
+    ON payment_intents (user_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
   `);
 }
 setInterval(async () => {
