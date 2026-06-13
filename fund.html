@@ -116,6 +116,25 @@
     input:focus{border-color:var(--gold)}
     input::placeholder{color:#9ca3af}
 
+    .fee-preview{
+      margin-top:10px;
+      border:1px dashed #e6d29b;
+      background:#fffdf7;
+      border-radius:16px;
+      padding:12px 14px;
+      font-size:14px;
+      font-weight:800;
+      color:#111;
+      line-height:1.45;
+    }
+
+    .fee-note{
+      margin-top:8px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
     .btn{
       border:none;
       border-radius:14px;
@@ -369,6 +388,12 @@
       <div class="field-group">
         <label for="amountInput">Amount</label>
         <input id="amountInput" type="number" min="100" step="1" placeholder="5000" />
+
+        <div class="fee-preview" id="feePreview">2% fee of ₦0 = ₦0</div>
+        <div class="fee-note" id="feeNote">
+          Enter the amount you want to fund. The app will add 2% fee and show the total you must pay for a successful transaction.
+        </div>
+
         <div class="muted-note">Enter the amount you want to fund. Tap Generate Account to create your payment details.</div>
       </div>
 
@@ -377,14 +402,14 @@
         <button class="btn secondary" type="button" id="clearBtn">Clear</button>
       </div>
 
-<div class="status info" id="fundStatus"></div>
+      <div class="status info" id="fundStatus"></div>
     </section>
 
     <section class="card" id="detailsCard" style="display:none;">
       <div class="section-title">Payment Details</div>
       <div class="details-grid">
         <div class="detail-box">
-          <div class="detail-label">Amount</div>
+          <div class="detail-label">Amount to Pay</div>
           <div class="detail-value" id="detailAmount">₦0.00</div>
         </div>
 
@@ -434,8 +459,7 @@
       </div>
     </section>
   </main>
-
-  <script>
+<script>
     const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
     const userKey = 'funsub_user';
@@ -460,6 +484,8 @@
     const verifyText = document.getElementById('verifyText');
     const countdownValue = document.getElementById('countdownValue');
     const countdownNote = document.getElementById('countdownNote');
+    const feePreview = document.getElementById('feePreview');
+    const feeNote = document.getElementById('feeNote');
 
     let currentFundingSession = null;
     let fundingPollTimer = null;
@@ -501,18 +527,33 @@
       fundStatus.textContent = message;
     }
 
-    function formatRoundedTransactionMoney(value) {
-  const num = Number(value || 0);
-  if (Number.isNaN(num)) return "₦0";
-  const rounded = Math.round(num / 100) * 100;
-  return `₦${Math.max(0, rounded).toLocaleString("en-NG", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  })}`;
-}
+    function money(value) {
+      const num = Number(value || 0);
+      return `₦${num.toLocaleString('en-NG', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      })}`;
+    }
+
     function safe(v, fallback = '—') {
       const s = String(v ?? '').trim();
       return s || fallback;
+    }
+
+    function updateFeePreview() {
+      const amount = Number(amountInput.value || 0);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        feePreview.textContent = '2% fee of ₦0 = ₦0';
+        feeNote.textContent = 'Enter the amount you want to fund. The app will add 2% fee and show the total you must pay for a successful transaction.';
+        return;
+      }
+
+      const fee = Math.round(amount * 0.02);
+      const gross = amount + fee;
+
+      feePreview.textContent = `2% fee of ${money(amount)} = ${money(gross)}`;
+      feeNote.textContent = `To fund ${money(amount)}, you must pay ${money(gross)}. This includes the 2% fee of ${money(fee)} for a successful transaction.`;
     }
 
     async function copyText(text, label = 'Copied') {
@@ -539,7 +580,12 @@
       }
 
       detailsCard.style.display = 'block';
-      detailAmount.textContent = formatMoney(details.amount || 0);
+
+      const net = Number(details.amount || 0);
+      const feeAmount = Number(details.fee_amount || 0);
+      const gross = Number(details.gross_amount || net + feeAmount);
+
+      detailAmount.textContent = money(gross);
       detailBank.textContent = safe(details.bank_name || details.bank || details.provider_bank);
       detailAccountName.textContent = safe(details.account_name || details.accountName || details.customer_name);
       detailAccountNumber.textContent = safe(details.account_number || details.accountNumber || details.virtual_account_number);
@@ -687,7 +733,10 @@
         }
 
         currentFundingSession = {
-          amount,
+          amount: Number(data?.amount || amount || 0),
+          fee_amount: Number(data?.fee_amount || 0),
+          gross_amount: Number(data?.gross_amount || 0),
+          net_amount: Number(data?.net_amount || 0),
           reference: data?.reference || data?.tx_ref || data?.txRef || null,
           bank_name: data?.bank_name || data?.bankName || null,
           account_name: data?.account_name || data?.accountName || null,
@@ -721,6 +770,7 @@
       countdownEndsAt = null;
       stopCountdown();
       stopPolling();
+      updateFeePreview();
       setStatus('Ready', 'info');
       showToast('Cleared', 'Funding details cleared');
     }
@@ -731,11 +781,14 @@
       copyText(value, currentFundingSession.account_number ? 'Account number copied' : 'Reference copied');
     });
 
+    amountInput.addEventListener('input', updateFeePreview);
     generateBtn.addEventListener('click', initiateFunding);
     clearBtn.addEventListener('click', clearFundingUI);
 
     window.addEventListener('DOMContentLoaded', () => {
       const token = getToken();
+      updateFeePreview();
+
       if (!token) {
         setStatus('Please log in first', 'error');
         showToast('Error', 'Please log in first');
@@ -745,7 +798,7 @@
       setStatus('Ready', 'info');
       const user = getUser();
       if (user?.full_name || user?.name || user?.username) {
-        // No visible greeting here, but user is available for future extension.
+        // no visible greeting here
       }
     });
 
