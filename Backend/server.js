@@ -13,10 +13,13 @@ const path = require('path');
 const mockProvider = require('./mock-vtpass-server');
 const fs = require('fs');
 const crypto = require('crypto');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const envNumber = (value, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
@@ -279,10 +282,7 @@ async function addTransaction({
 
   return inserted.rows[0];
 }
-const envNumber = (value, fallback) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
+
 
 const DEPOSIT_FEE_PERCENT = envNumber(
   process.env.DEPOSIT_FEE_PERCENT || process.env.FLW_WALLET_FEE_PERCENT,
