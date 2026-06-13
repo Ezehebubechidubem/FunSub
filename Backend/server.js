@@ -16,6 +16,7 @@ const crypto = require('crypto');
 
 const app = express();
 app.disable('x-powered-by');
+
 const PORT = process.env.PORT || 3000;
 
 const envNumber = (value, fallback) => {
@@ -45,7 +46,11 @@ const SUCCESS_STATUSES = new Set([
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
-const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
+
+const FLW_WALLET_FEE_PERCENT = envNumber(
+  process.env.DEPOSIT_FEE_PERCENT || process.env.FLW_WALLET_FEE_PERCENT,
+  2
+);
 
 const SERVICE_MARKUP_DEFAULTS = {
   airtime: envNumber(process.env.AIRTIME_MARKUP_PERCENT, 1),
@@ -73,41 +78,16 @@ const PROVIDER_TIMEOUT_MS = envNumber(process.env.PROVIDER_TIMEOUT_MS, 30000);
 const FUNDING_INITIATE_LIMIT_COUNT = envNumber(process.env.FUNDING_INITIATE_LIMIT_COUNT, 5);
 const FUNDING_INITIATE_LIMIT_WINDOW_MINUTES = envNumber(process.env.FUNDING_INITIATE_LIMIT_WINDOW_MINUTES, 10);
 const PAYMENT_INTENT_TTL_MINUTES = envNumber(process.env.PAYMENT_INTENT_TTL_MINUTES, 15);
-const PURCHASE_IDEMPOTENCY_TTL_MINUTES = envNumber(process.env.PURCHASE_IDEMPOTENCY_TTL_MINUTES, 15);
 
 const PROVIDER_ENDPOINTS = {
-  airtime: {
-    plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_AIRTIME_BUY_PATH || ''
-  },
-  data: {
-    plansPath: process.env.VTPASS_DATA_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_DATA_BUY_PATH || ''
-  },
-  cable_tv: {
-    plansPath: process.env.VTPASS_CABLE_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_CABLE_BUY_PATH || ''
-  },
-  electricity: {
-    plansPath: process.env.VTPASS_ELECTRICITY_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_ELECTRICITY_BUY_PATH || ''
-  },
-  betting: {
-    plansPath: process.env.VTPASS_BETTING_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_BETTING_BUY_PATH || ''
-  },
-  recharge_pin: {
-    plansPath: process.env.VTPASS_RECHARGE_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_RECHARGE_PIN_BUY_PATH || ''
-  },
-  data_pin: {
-    plansPath: process.env.VTPASS_DATA_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_DATA_PIN_BUY_PATH || ''
-  },
-  exam_pin: {
-    plansPath: process.env.VTPASS_EXAM_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || ''
-  }
+  airtime: { plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '', buyPath: process.env.VTPASS_AIRTIME_BUY_PATH || '' },
+  data: { plansPath: process.env.VTPASS_DATA_PLANS_PATH || '', buyPath: process.env.VTPASS_DATA_BUY_PATH || '' },
+  cable_tv: { plansPath: process.env.VTPASS_CABLE_PLANS_PATH || '', buyPath: process.env.VTPASS_CABLE_BUY_PATH || '' },
+  electricity: { plansPath: process.env.VTPASS_ELECTRICITY_PLANS_PATH || '', buyPath: process.env.VTPASS_ELECTRICITY_BUY_PATH || '' },
+  betting: { plansPath: process.env.VTPASS_BETTING_PLANS_PATH || '', buyPath: process.env.VTPASS_BETTING_BUY_PATH || '' },
+  recharge_pin: { plansPath: process.env.VTPASS_RECHARGE_PIN_PLANS_PATH || '', buyPath: process.env.VTPASS_RECHARGE_PIN_BUY_PATH || '' },
+  data_pin: { plansPath: process.env.VTPASS_DATA_PIN_PLANS_PATH || '', buyPath: process.env.VTPASS_DATA_PIN_BUY_PATH || '' },
+  exam_pin: { plansPath: process.env.VTPASS_EXAM_PIN_PLANS_PATH || '', buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || '' }
 };
 
 if (!process.env.DATABASE_URL) {
@@ -133,14 +113,12 @@ app.use(express.json({
   }
 }));
 
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: envNumber(process.env.RATE_LIMIT_MAX, 300),
-    standardHeaders: true,
-    legacyHeaders: false
-  })
-);
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envNumber(process.env.RATE_LIMIT_MAX, 300),
+  standardHeaders: true,
+  legacyHeaders: false
+}));
 
 const AUTH_LOGIN_LIMITER = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -204,6 +182,10 @@ function isFailureStatus(value) {
   ].includes(normalizeStatus(value));
 }
 
+async function query(text, params = []) {
+  return pool.query(text, params);
+}
+
 function flutterwaveHeaders() {
   if (!FLW_SECRET_KEY) {
     throw new Error('FLW_SECRET_KEY is missing');
@@ -233,16 +215,9 @@ function isValidFlutterwaveWebhook(req) {
   return got && got === FLW_WEBHOOK_HASH;
 }
 
-async function query(text, params = []) {
-  return pool.query(text, params);
-}
-
 function requireAuth(req, res, next) {
   try {
-    console.log('================ AUTH DEBUG ================');
-
     const authHeaderValue = req.headers.authorization;
-    console.log('AUTH HEADER:', authHeaderValue);
 
     if (!authHeaderValue) {
       return res.status(401).json({ success: false, message: 'Authorization header missing' });
@@ -253,21 +228,11 @@ function requireAuth(req, res, next) {
     }
 
     const token = authHeaderValue.split(' ')[1];
-    console.log('TOKEN:', token);
-
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('DECODED USER:', decoded);
 
     req.user = decoded;
-
-    console.log('AUTH SUCCESS');
-    console.log('============================================');
     next();
   } catch (err) {
-    console.log('AUTH FAILED');
-    console.log('ERROR MESSAGE:', err.message);
-    console.log('============================================');
-
     return res.status(401).json({ success: false, message: err.message || 'Unauthorized' });
   }
 }
@@ -314,54 +279,6 @@ const kycUpload = multer({
   limits: { fileSize: 12 * 1024 * 1024 }
 });
 
-async function addNotification(userId, title, message, meta = {}, isSystem = true) {
-  await query(
-    `INSERT INTO notifications
-     (id, user_id, title, message, meta, is_read, is_system, created_at)
-     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
-    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
-  );
-}
-
-async function addTransaction({
-  userId,
-  type,
-  category,
-  amount,
-  currency = 'NGN',
-  status = 'success',
-  reference,
-  description,
-  meta = {},
-  idempotencyKey = null,
-  requestHash = null
-}) {
-  const txRef = reference || uid('ref_');
-
-  const inserted = await query(
-    `INSERT INTO transactions
-     (id, user_id, type, category, amount, currency, status, reference, description, meta, idempotency_key, request_hash, updated_at, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
-     RETURNING *`,
-    [
-      uid('tx_'),
-      userId,
-      type,
-      category,
-      amount,
-      currency,
-      status,
-      txRef,
-      description,
-      JSON.stringify(meta),
-      idempotencyKey,
-      requestHash
-    ]
-  );
-
-  return inserted.rows[0];
-}
-
 async function ensureWallet(userId) {
   const found = await query('SELECT * FROM wallets WHERE user_id = $1 LIMIT 1', [userId]);
   if (found.rows[0]) return found.rows[0];
@@ -375,49 +292,14 @@ async function ensureWallet(userId) {
   return created.rows[0];
 }
 
-function requireDebugAccess(req, res, next) {
-  const got = req.headers['x-debug-key'] || req.query.debug_key;
-  const expected = process.env.DEBUG_KEY;
-
-  if (!expected || got !== expected) {
-    return respondError(res, 403, 'Debug access denied');
-  }
-
-  next();
+async function addNotification(userId, title, message, meta = {}, isSystem = true) {
+  await query(
+    `INSERT INTO notifications
+     (id, user_id, title, message, meta, is_read, is_system, created_at)
+     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
+    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
+  );
 }
-function getDefaultMarkupPercent(serviceType) {
-  const key = normalizeServiceType(serviceType);
-  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
-}
-
-function applyWalletFundingFee(grossAmount) {
-  const gross = toNumber(grossAmount, 0);
-  const feePercent = FLW_WALLET_FEE_PERCENT;
-  const feeAmount = (gross * feePercent) / 100;
-  const netAmount = gross - feeAmount;
-
-  return {
-    grossAmount: Number(gross.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount: Number(feeAmount.toFixed(2)),
-    netAmount: Number(netAmount.toFixed(2))
-  };
-}
-
-function buildDepositBreakdown(netAmount) {
-  const net = toNumber(netAmount, 0);
-  const feePercent = FLW_WALLET_FEE_PERCENT;
-  const feeAmount = Number(((net * feePercent) / 100).toFixed(2));
-  const grossAmount = Number((net + feeAmount).toFixed(2));
-
-  return {
-    netAmount: Number(net.toFixed(2)),
-    feePercent: Number(feePercent.toFixed(2)),
-    feeAmount,
-    grossAmount
-  };
-}
-
 function hashJson(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 }
@@ -478,6 +360,39 @@ function getPurchaseRequestHash({
     ).trim(),
     phone: String(body.phone || '').trim()
   });
+}
+
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
+}
+
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
+
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
+}
+
+function buildDepositBreakdown(netAmount) {
+  const net = toNumber(netAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = Number(((net * feePercent) / 100).toFixed(2));
+  const grossAmount = Number((net + feeAmount).toFixed(2));
+
+  return {
+    netAmount: Number(net.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount,
+    grossAmount
+  };
 }
 
 function normalizeServiceType(v) {
@@ -776,284 +691,45 @@ async function requeryVtpassTransaction(requestId) {
 
   return response.data;
 }
+async function addTransaction({
+  userId,
+  type,
+  category,
+  amount,
+  currency = 'NGN',
+  status = 'success',
+  reference,
+  description,
+  meta = {},
+  idempotencyKey = null,
+  requestHash = null,
+  expiresAt = null
+}) {
+  const txRef = reference || uid('ref_');
 
-async function deleteExpiredPaymentIntents() {
-  try {
-    await query(`
-      DELETE FROM payment_intents
-      WHERE provider = 'flutterwave'
-        AND status IN ('initiated', 'pending')
-        AND expires_at IS NOT NULL
-        AND expires_at <= NOW()
-    `);
-  } catch (err) {
-    console.error('PAYMENT INTENT CLEANUP ERROR:', err);
-  }
-}
-
-setInterval(() => {
-  deleteExpiredPaymentIntents().catch(err => {
-    console.error('PAYMENT INTENT CLEANUP LOOP ERROR:', err?.message || err);
-  });
-}, 60 * 1000).unref?.();
-async function initDb() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      role TEXT NOT NULL DEFAULT 'user',
-      full_name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      phone TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      state TEXT,
-      avatar_url TEXT,
-      kyc_status TEXT NOT NULL DEFAULT 'unverified',
-      profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
-      online BOOLEAN NOT NULL DEFAULT FALSE,
-      last_login_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS wallets (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-      balance NUMERIC(14,2) NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT 'NGN',
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS transactions (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      category TEXT NOT NULL,
-      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT 'NGN',
-      status TEXT NOT NULL DEFAULT 'success',
-      reference TEXT NOT NULL UNIQUE,
-      description TEXT,
-      meta JSONB DEFAULT '{}'::jsonb,
-      idempotency_key TEXT,
-      request_hash TEXT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      meta JSONB DEFAULT '{}'::jsonb,
-      is_read BOOLEAN NOT NULL DEFAULT FALSE,
-      is_system BOOLEAN NOT NULL DEFAULT FALSE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS kyc_requests (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      id_type TEXT NOT NULL,
-      id_number TEXT NOT NULL,
-      selfie_url TEXT,
-      id_front_url TEXT,
-      id_back_url TEXT,
-      utility_bill_url TEXT,
-      address TEXT,
-      status TEXT NOT NULL DEFAULT 'pending',
-      admin_note TEXT,
-      submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      reviewed_at TIMESTAMPTZ
-    );
-
-    CREATE TABLE IF NOT EXISTS payment_intents (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      tx_ref TEXT NOT NULL UNIQUE,
-      amount NUMERIC(14,2) NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'NGN',
-      provider TEXT NOT NULL DEFAULT 'flutterwave',
-      status TEXT NOT NULL DEFAULT 'initiated',
-      meta JSONB DEFAULT '{}'::jsonb,
-      expires_at TIMESTAMPTZ,
-      provider_tx_ref TEXT,
-      webhook_hash TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      verified_at TIMESTAMPTZ
-    );
-
-    CREATE TABLE IF NOT EXISTS admin_logs (
-      id TEXT PRIMARY KEY,
-      admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-      action TEXT NOT NULL,
-      meta JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS pricing_rules (
-      id TEXT PRIMARY KEY,
-      service_type TEXT NOT NULL UNIQUE,
-      markup_percent NUMERIC(5,2) NOT NULL DEFAULT 2,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS processed_webhook_events (
-      id TEXT PRIMARY KEY,
-      event_hash TEXT NOT NULL UNIQUE,
-      reference TEXT,
-      payload JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-  ALTER TABLE transactions
-  ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
-`);
-
-await query(`
-  ALTER TABLE transactions
-  ADD COLUMN IF NOT EXISTS request_hash TEXT;
-`);
-
-await query(`
-  ALTER TABLE transactions
-  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
-`);
-
-await query(`
-  CREATE UNIQUE INDEX IF NOT EXISTS transactions_purchase_idempotency_unique
-  ON transactions (user_id, category, idempotency_key, request_hash)
-  WHERE type = 'purchase'
-    AND idempotency_key IS NOT NULL
-    AND request_hash IS NOT NULL;
-`);
-
-  await query(`
-    CREATE INDEX IF NOT EXISTS transactions_user_id_category_idx
-    ON transactions (user_id, category, created_at DESC);
-  `);
-}
-
-async function ensurePricingRule(serviceType) {
-  const normalized = normalizeServiceType(serviceType);
-
-  const found = await query(
-    `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
-    [normalized]
-  );
-
-  if (found.rows[0]) return found.rows[0];
-
-  const created = await query(
-    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, true, NOW(), NOW())
+  const inserted = await query(
+    `INSERT INTO transactions
+     (id, user_id, type, category, amount, currency, status, reference, description, meta, idempotency_key, request_hash, expires_at, updated_at, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
      RETURNING *`,
-    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
+    [
+      uid('tx_'),
+      userId,
+      type,
+      category,
+      amount,
+      currency,
+      status,
+      txRef,
+      description,
+      JSON.stringify(meta),
+      idempotencyKey,
+      requestHash,
+      expiresAt
+    ]
   );
 
-  return created.rows[0];
-}
-
-async function getMarkupPercent(serviceType) {
-  const normalized = normalizeServiceType(serviceType);
-
-  const envMap = {
-    airtime: process.env.AIRTIME_MARKUP_PERCENT,
-    data: process.env.DATA_MARKUP_PERCENT,
-    cable_tv: process.env.CABLE_TV_MARKUP_PERCENT,
-    electricity: process.env.ELECTRICITY_MARKUP_PERCENT,
-    betting: process.env.BETTING_MARKUP_PERCENT,
-    recharge_pin: process.env.RECHARGE_PIN_MARKUP_PERCENT,
-    data_pin: process.env.DATA_PIN_MARKUP_PERCENT,
-    exam_pin: process.env.EXAM_PIN_MARKUP_PERCENT
-  };
-
-  const rawEnv = envMap[normalized];
-  const envValue = Number(rawEnv);
-
-  if (rawEnv !== undefined && rawEnv !== null && String(rawEnv).trim() !== '' && Number.isFinite(envValue)) {
-    return envValue;
-  }
-
-  const rule = await ensurePricingRule(normalized);
-  return Number(rule.markup_percent ?? getDefaultMarkupPercent(normalized));
-}
-
-async function applyMarkup(serviceType, baseAmount) {
-  const markupPercent = await getMarkupPercent(serviceType);
-  const base = Number(baseAmount);
-  const fee = (base * markupPercent) / 100;
-  const finalPrice = base + fee;
-
-  return {
-    serviceType,
-    basePrice: Number(base.toFixed(2)),
-    markupPercent: Number(markupPercent.toFixed(2)),
-    markupFee: Number(fee.toFixed(2)),
-    finalPrice: Number(finalPrice.toFixed(2))
-  };
-}
-
-function providerRequestLooksSuccessful(data) {
-  if (!data) return false;
-  if (data.success === true) return true;
-
-  const responseDescription = String(data.response_description || '').trim().toLowerCase();
-  const code = String(data.code || data.response_code || data.responseCode || '').trim().toLowerCase();
-  const txStatus = String(
-    data?.content?.transactions?.status ||
-    data?.content?.status ||
-    data?.data?.content?.transactions?.status ||
-    ''
-  ).toLowerCase();
-
-  if (code === '000' || code === '00' || code === '0') return true;
-  if (txStatus === 'delivered' || txStatus === 'successful' || txStatus === 'success' || txStatus === 'ok') return true;
-  if (responseDescription.includes('success')) return true;
-
-  return false;
-}
-async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
-  const { first, last } = splitFullName(
-    user.full_name || user.fullName || user.name || 'User'
-  );
-
-  const isStatic = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static';
-
-  const vaPayload = {
-    email: user.email,
-    amount: isStatic ? 0 : Number(amount),
-    tx_ref: reference,
-    firstname: first,
-    lastname: last,
-    phonenumber: user.phone ? String(user.phone) : undefined,
-    narration: user.full_name || user.fullName || user.name || 'Wallet funding',
-    is_permanent: isStatic,
-    meta: {
-      user_id: user.id,
-      purpose: 'wallet_funding',
-      reference
-    }
-  };
-
-  const cleanedPayload = Object.fromEntries(
-    Object.entries(vaPayload).filter(([, value]) => value !== undefined && value !== null && value !== '')
-  );
-
-  console.log('FLW_VA_URL:', FLW_VA_URL);
-  console.log('VA PAYLOAD:', cleanedPayload);
-
-  const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
-    headers: flutterwaveHeaders(),
-    timeout: 30000
-  });
-
-  return vaRes.data?.data || vaRes.data;
+  return inserted.rows[0];
 }
 
 async function processFundingSuccess({ reference, amount, flutterwaveData = {}, rawWebhook = null }) {
@@ -1080,23 +756,10 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       return { ok: true, alreadyProcessed: true };
     }
 
-    const walletResult = await client.query(
-      `SELECT * FROM wallets
-       WHERE user_id = $1
-       FOR UPDATE`,
-      [intent.user_id]
-    );
-
-    const wallet = walletResult.rows[0];
-    if (!wallet) {
-      await client.query('ROLLBACK');
-      return { ok: false, reason: 'Wallet not found' };
-    }
-
-    const expectedAmount = Number(intent.amount || 0);
+    const expectedGross = Number(intent.amount || 0);
     const paidAmount = Number(amount || 0);
 
-    if (expectedAmount && paidAmount && Math.abs(expectedAmount - paidAmount) > 0.01) {
+    if (expectedGross && paidAmount && Math.abs(expectedGross - paidAmount) > 0.01) {
       await client.query(
         `UPDATE payment_intents
          SET status = 'failed',
@@ -1111,7 +774,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
           String(rawWebhook ? webhookDedupKey(rawWebhook) : '') || null,
           JSON.stringify({
             reason: 'amount_mismatch',
-            expectedAmount,
+            expectedAmount: expectedGross,
             paidAmount,
             flutterwaveData,
             rawWebhook
@@ -1133,7 +796,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
           'Wallet funding failed',
           JSON.stringify({
             reason: 'amount_mismatch',
-            expectedAmount,
+            expectedAmount: expectedGross,
             paidAmount,
             flutterwaveData,
             rawWebhook
@@ -1152,12 +815,12 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
             intent.user_id,
             'funding',
             'wallet',
-            expectedAmount,
+            expectedGross,
             reference,
             'Wallet funding failed',
             JSON.stringify({
               reason: 'amount_mismatch',
-              expectedAmount,
+              expectedAmount: expectedGross,
               paidAmount,
               flutterwaveData,
               rawWebhook
@@ -1170,7 +833,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       return { ok: false, reason: 'Amount mismatch' };
     }
 
-    const fee = applyWalletFundingFee(paidAmount || expectedAmount);
+    const fee = applyWalletFundingFee(paidAmount || expectedGross);
     const creditedAmount = Number(fee.netAmount || 0);
 
     if (!Number.isFinite(creditedAmount) || creditedAmount <= 0) {
@@ -1203,7 +866,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
           rawWebhook,
           creditedAmount,
           fee,
-          grossAmount: expectedAmount,
+          grossAmount: expectedGross,
           netAmount: creditedAmount
         }),
         intent.user_id
@@ -1228,7 +891,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
             rawWebhook,
             creditedAmount,
             fee,
-            grossAmount: expectedAmount,
+            grossAmount: expectedGross,
             netAmount: creditedAmount
           })
         ]
@@ -1252,7 +915,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
           rawWebhook,
           creditedAmount,
           fee,
-          grossAmount: expectedAmount,
+          grossAmount: expectedGross,
           netAmount: creditedAmount
         })
       ]
@@ -1260,23 +923,17 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
 
     await client.query('COMMIT');
 
-    try {
-      await addNotification(
-        intent.user_id,
-        'Wallet funded',
-        `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
-        { reference, creditedAmount, fee },
-        true
-      );
-    } catch (notifyErr) {
-      console.error('NOTIFICATION ERROR:', notifyErr?.message || notifyErr);
-    }
+    await addNotification(
+      intent.user_id,
+      'Wallet funded',
+      `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
+      { reference, creditedAmount, fee },
+      true
+    );
 
     return { ok: true, creditedAmount };
   } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (_) {}
+    try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;
   } finally {
     client.release();
@@ -1378,15 +1035,789 @@ async function processFundingFailure({
     await client.query('COMMIT');
     return { ok: true };
   } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (_) {}
+    try { await client.query('ROLLBACK'); } catch (_) {}
     throw err;
   } finally {
     client.release();
   }
 }
-///////////////////////////////////////////////////////////////////////////////////////////
+async function flutterwaveCreateCustomer(user) {
+  if (!user?.email) {
+    throw new Error('User email is required to create Flutterwave customer');
+  }
+
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
+
+  const customerPayload = {
+    email: user.email,
+    name: {
+      first,
+      last
+    },
+    phone: user.phone ? { number: String(user.phone) } : undefined,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding'
+    }
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(customerPayload).filter(([, value]) =>
+      value !== undefined && value !== null && value !== ''
+    )
+  );
+
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, cleanedPayload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return customerRes.data?.data || customerRes.data;
+}
+
+function extractFlutterwaveVirtualAccount(input = {}) {
+  const candidates = [
+    input,
+    input?.data,
+    input?.data?.data,
+    input?.data?.data?.data,
+    input?.data?.virtual_account,
+    input?.virtual_account
+  ].filter(Boolean);
+
+  const pick = (keys) => {
+    for (const obj of candidates) {
+      for (const key of keys) {
+        const value = obj?.[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+    }
+    return null;
+  };
+
+  return {
+    account_number: pick(['account_number', 'accountNumber', 'virtual_account_number']),
+    bank_name: pick(['bank_name', 'bankName']),
+    account_name: pick(['account_name', 'accountName']),
+    expiry_date: pick(['expiry_date', 'expires_at']),
+    raw: input
+  };
+}
+
+async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
+
+  const isStatic = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static';
+
+  const vaPayload = {
+    email: user.email,
+    amount: isStatic ? 0 : Number(amount),
+    tx_ref: reference,
+    firstname: first,
+    lastname: last,
+    phonenumber: user.phone ? String(user.phone) : undefined,
+    narration: user.full_name || user.fullName || user.name || 'Wallet funding',
+    is_permanent: isStatic,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding',
+      reference
+    }
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(vaPayload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+
+  const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  const normalized = extractFlutterwaveVirtualAccount(vaRes.data);
+  return normalized;
+}
+
+async function deleteExpiredPaymentIntents() {
+  try {
+    await query(`
+      UPDATE payment_intents
+      SET status = 'expired',
+          verified_at = NOW()
+      WHERE provider = 'flutterwave'
+        AND status IN ('initiated', 'pending')
+        AND expires_at IS NOT NULL
+        AND expires_at <= NOW()
+    `);
+  } catch (err) {
+    console.error('PAYMENT INTENT CLEANUP ERROR:', err);
+  }
+}
+
+setInterval(() => {
+  deleteExpiredPaymentIntents().catch(err => {
+    console.error('PAYMENT INTENT CLEANUP LOOP ERROR:', err?.message || err);
+  });
+}, 60 * 1000).unref?.();
+
+async function initDb() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'user',
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      phone TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      state TEXT,
+      avatar_url TEXT,
+      kyc_status TEXT NOT NULL DEFAULT 'unverified',
+      profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
+      online BOOLEAN NOT NULL DEFAULT FALSE,
+      last_login_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS wallets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      balance NUMERIC(14,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      status TEXT NOT NULL DEFAULT 'success',
+      reference TEXT NOT NULL UNIQUE,
+      description TEXT,
+      meta JSONB DEFAULT '{}'::jsonb,
+      idempotency_key TEXT,
+      request_hash TEXT,
+      expires_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      meta JSONB DEFAULT '{}'::jsonb,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS kyc_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      id_type TEXT NOT NULL,
+      id_number TEXT NOT NULL,
+      selfie_url TEXT,
+      id_front_url TEXT,
+      id_back_url TEXT,
+      utility_bill_url TEXT,
+      address TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT,
+      submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      reviewed_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_intents (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tx_ref TEXT NOT NULL UNIQUE,
+      idempotency_key TEXT,
+      amount NUMERIC(14,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      provider TEXT NOT NULL DEFAULT 'flutterwave',
+      status TEXT NOT NULL DEFAULT 'initiated',
+      meta JSONB DEFAULT '{}'::jsonb,
+      expires_at TIMESTAMPTZ,
+      provider_tx_ref TEXT,
+      webhook_hash TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      verified_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      meta JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS pricing_rules (
+      id TEXT PRIMARY KEY,
+      service_type TEXT NOT NULL UNIQUE,
+      markup_percent NUMERIC(5,2) NOT NULL DEFAULT 2,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS processed_webhook_events (
+      id TEXT PRIMARY KEY,
+      event_hash TEXT NOT NULL UNIQUE,
+      reference TEXT,
+      payload JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_idempotency_key_unique
+    ON payment_intents (idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+  `);
+
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS transactions_purchase_idempotency_unique
+    ON transactions (user_id, category, idempotency_key, request_hash)
+    WHERE type = 'purchase'
+      AND idempotency_key IS NOT NULL
+      AND request_hash IS NOT NULL;
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS transactions_user_id_category_idx
+    ON transactions (user_id, category, created_at DESC);
+  `);
+}
+async function ensurePricingRule(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+
+  const found = await query(
+    `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
+    [normalized]
+  );
+
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, true, NOW(), NOW())
+     RETURNING *`,
+    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
+  );
+
+  return created.rows[0];
+}
+
+async function getMarkupPercent(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+
+  const envMap = {
+    airtime: process.env.AIRTIME_MARKUP_PERCENT,
+    data: process.env.DATA_MARKUP_PERCENT,
+    cable_tv: process.env.CABLE_TV_MARKUP_PERCENT,
+    electricity: process.env.ELECTRICITY_MARKUP_PERCENT,
+    betting: process.env.BETTING_MARKUP_PERCENT,
+    recharge_pin: process.env.RECHARGE_PIN_MARKUP_PERCENT,
+    data_pin: process.env.DATA_PIN_MARKUP_PERCENT,
+    exam_pin: process.env.EXAM_PIN_MARKUP_PERCENT
+  };
+
+  const rawEnv = envMap[normalized];
+  const envValue = Number(rawEnv);
+
+  if (rawEnv !== undefined && rawEnv !== null && String(rawEnv).trim() !== '' && Number.isFinite(envValue)) {
+    return envValue;
+  }
+
+  const rule = await ensurePricingRule(normalized);
+  return Number(rule.markup_percent ?? getDefaultMarkupPercent(normalized));
+}
+
+async function applyMarkup(serviceType, baseAmount) {
+  const markupPercent = await getMarkupPercent(serviceType);
+  const base = Number(baseAmount);
+  const fee = (base * markupPercent) / 100;
+  const finalPrice = base + fee;
+
+  return {
+    serviceType,
+    basePrice: Number(base.toFixed(2)),
+    markupPercent: Number(markupPercent.toFixed(2)),
+    markupFee: Number(fee.toFixed(2)),
+    finalPrice: Number(finalPrice.toFixed(2))
+  };
+}
+
+function providerRequestLooksSuccessful(data) {
+  if (!data) return false;
+  if (data.success === true) return true;
+
+  const responseDescription = String(data.response_description || '').trim().toLowerCase();
+  const code = String(data.code || data.response_code || data.responseCode || '').trim().toLowerCase();
+  const txStatus = String(
+    data?.content?.transactions?.status ||
+    data?.content?.status ||
+    data?.data?.content?.transactions?.status ||
+    ''
+  ).toLowerCase();
+
+  if (code === '000' || code === '00' || code === '0') return true;
+  if (txStatus === 'delivered' || txStatus === 'successful' || txStatus === 'success' || txStatus === 'ok') return true;
+  if (responseDescription.includes('success')) return true;
+
+  return false;
+}
+
+async function processServicePayment(req, res, serviceType, serviceName) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) {
+      return respondError(res, 401, 'Unauthorized');
+    }
+
+    let pricing;
+    let selectedPlan = null;
+    let providerPayload = null;
+    let description = `${serviceName} purchase`;
+
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      '';
+
+    const destination =
+      normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    const idempotencyKey = getPurchaseIdempotencyKey(req, `${userId}:${normalizedServiceType}:${destination}`);
+    const requestHashBase = {
+      serviceType: normalizedServiceType,
+      body,
+      destination,
+      pricing: null,
+      selectedPlan: null,
+      providerPayload: null
+    };
+
+    if (normalizedServiceType === 'airtime') {
+      const amount = toNumber(body.amount, 0);
+
+      if (amount <= 0 || !destination) {
+        return respondError(res, 400, 'amount and phone are required');
+      }
+
+      pricing = await applyMarkup('airtime', amount);
+
+      providerPayload = buildProviderPayload({
+        serviceType: 'airtime',
+        amount,
+        phone: destination,
+        network: body.network,
+        extra: body.extra || {}
+      });
+
+      requestHashBase.pricing = pricing;
+      requestHashBase.providerPayload = providerPayload;
+    } else {
+      const variationCode = String(
+        body.variation_code ||
+        body.planId ||
+        body.plan_id ||
+        body.planCode ||
+        body.code ||
+        ''
+      ).trim();
+
+      if (!variationCode) {
+        return respondError(res, 400, 'variation_code is required');
+      }
+
+      if (
+        !destination &&
+        !body.phone &&
+        !body.smartcard_number &&
+        !body.meter_number &&
+        !body.customer_id
+      ) {
+        return respondError(res, 400, 'Customer number is required');
+      }
+
+      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
+        network: body.network,
+        serviceID: body.serviceID || body.serviceId
+      });
+
+      if (normalizedServiceType === 'data' && !serviceID) {
+        return respondError(res, 400, 'Invalid network');
+      }
+
+      const planAmount = Number(body.plan_amount || body.amount || 0);
+
+      if (Number.isFinite(planAmount) && planAmount > 0) {
+        selectedPlan = {
+          id: variationCode,
+          name: body.plan_name || `${serviceName} Plan`,
+          rawPrice: planAmount,
+          meta: {}
+        };
+      } else {
+        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
+          network: body.network || undefined,
+          provider: body.provider || undefined,
+          serviceID
+        })).map(normalizeProviderPlan);
+
+        selectedPlan = providerPlans.find(plan => {
+          const planId = String(plan.id || '').trim().toLowerCase();
+          const metaVariation = String(
+            plan.meta?.variation_code ||
+            plan.meta?.variationCode ||
+            plan.meta?.code ||
+            ''
+          ).trim().toLowerCase();
+
+          return (
+            planId === variationCode.toLowerCase() ||
+            metaVariation === variationCode.toLowerCase()
+          );
+        });
+
+        if (!selectedPlan) {
+          return respondError(res, 404, 'Selected plan not found');
+        }
+      }
+
+      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+
+      providerPayload = buildProviderPayload({
+        serviceType: normalizedServiceType,
+        amount: selectedPlan.rawPrice,
+        phone: body.phone || destination || undefined,
+        meterNumber: body.meter_number || destination || undefined,
+        smartCardNumber: body.smartcard_number || destination || undefined,
+        accountNumber: body.accountNumber || destination || undefined,
+        planId: selectedPlan.id,
+        planName: selectedPlan.name,
+        network: body.network,
+        selectedPlan,
+        extra: {
+          ...(body.extra || {}),
+          serviceID,
+          variation_code: variationCode
+        }
+      });
+
+      description = `${serviceName} - ${selectedPlan.name}`;
+    }
+
+    if (!pricing || !providerPayload) {
+      return respondError(res, 400, 'Unable to prepare purchase');
+    }
+
+    const requestHash = getPurchaseRequestHash({
+      serviceType: normalizedServiceType,
+      body,
+      destination,
+      pricing,
+      selectedPlan,
+      providerPayload
+    });
+
+    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
+    const client = await pool.connect();
+    let txRow = null;
+    let transactionStarted = false;
+
+    try {
+      await client.query('BEGIN');
+      transactionStarted = true;
+
+      const existing = await client.query(
+        `SELECT * FROM transactions
+         WHERE user_id = $1
+           AND category = $2
+           AND type = 'purchase'
+           AND idempotency_key = $3
+           AND request_hash = $4
+         LIMIT 1`,
+        [userId, normalizedServiceType, idempotencyKey, requestHash]
+      );
+
+      if (existing.rows[0]) {
+        await client.query('COMMIT');
+        transactionStarted = false;
+        return respondOk(res, {
+          transaction: existing.rows[0],
+          pricing,
+          duplicate: true
+        }, 'Purchase already processed');
+      }
+
+      const walletResult = await client.query(
+        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query('ROLLBACK');
+        return respondError(res, 404, 'Wallet not found');
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < Number(purchaseAmount)) {
+        await client.query('ROLLBACK');
+        return respondError(res, 400, 'Insufficient wallet balance');
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, idempotency_key, request_hash, updated_at, created_at)
+         VALUES
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, $9, $10, NOW(), NOW())
+         RETURNING *`,
+        [
+          uid('tx_'),
+          userId,
+          'purchase',
+          normalizedServiceType,
+          purchaseAmount,
+          uid('ref_'),
+          description,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            providerPayload,
+            selectedPlan,
+            pricing
+          }),
+          idempotencyKey,
+          requestHash
+        ]
+      );
+
+      txRow = inserted.rows[0];
+
+      await client.query('COMMIT');
+      transactionStarted = false;
+    } catch (err) {
+      if (transactionStarted) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const providerResponse = USING_MOCK_PROVIDER
+      ? await (String(body.force_fail).toLowerCase() === 'true'
+        ? mockProvider.buyFail({
+            request_id: body.request_id,
+            serviceID: providerPayload.serviceID,
+            phone: providerPayload.phone,
+            amount: providerPayload.amount,
+            serviceType: normalizedServiceType,
+            email: body.email
+          })
+        : mockProvider.buySuccess({
+            request_id: body.request_id,
+            serviceID: providerPayload.serviceID,
+            phone: providerPayload.phone,
+            amount: providerPayload.amount,
+            variation_code: providerPayload.variation_code,
+            serviceType: normalizedServiceType,
+            email: body.email
+          }))
+      : await callProvider(
+          normalizedServiceType,
+          'buy',
+          providerPayload,
+          {
+            network: body.network,
+            serviceID: body.serviceID || body.serviceId,
+            selectedPlan,
+            planId: selectedPlan?.id,
+            planName: selectedPlan?.name,
+            extra: body.extra || {}
+          }
+        );
+
+    const success = providerRequestLooksSuccessful(providerResponse);
+
+    if (!success) {
+      await pool.query(
+        `UPDATE wallets
+         SET balance = balance + $2, updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'failed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} failed`,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            providerPayload,
+            selectedPlan,
+            pricing,
+            providerResponse
+          })
+        ]
+      );
+
+      return respondError(
+        res,
+        400,
+        providerResponse?.response_description || 'Purchase failed'
+      );
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2
+       WHERE id = $1`,
+      [
+        txRow.id,
+        JSON.stringify({
+          serviceType: normalizedServiceType,
+          serviceName,
+          providerPayload,
+          selectedPlan,
+          pricing,
+          providerResponse
+        })
+      ]
+    );
+
+    await addNotification(
+      userId,
+      `${serviceName} purchased`,
+      `${description} was successful`,
+      {
+        transactionId: txRow.id,
+        serviceType: normalizedServiceType,
+        pricing,
+        providerResponse
+      },
+      true
+    );
+
+    return respondOk(res, {
+      transaction: {
+        ...txRow,
+        status: 'success'
+      },
+      pricing,
+      providerResponse
+    }, `${serviceName} purchased successfully`);
+  } catch (err) {
+    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
+    return respondError(
+      res,
+      500,
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
+    );
+  }
+}
+async function reconcilePendingFundingIntents() {
+  const pending = await query(
+    `SELECT * FROM payment_intents
+     WHERE provider = 'flutterwave'
+       AND status = 'initiated'
+       AND created_at < NOW() - INTERVAL '2 minutes'
+     ORDER BY created_at ASC
+     LIMIT 50`
+  );
+
+  for (const intent of pending.rows) {
+    try {
+      const data = await axios.get(`${FLW_BASE_URL}/transactions/verify_by_reference`, {
+        params: { tx_ref: intent.tx_ref },
+        headers: flutterwaveHeaders(),
+        timeout: 30000
+      }).then(r => r.data?.data || r.data);
+
+      const providerStatus = normalizeStatus(data?.status || data?.tx_status || '');
+      const amount = Number(data?.amount || 0);
+
+      if (isSuccessStatus(providerStatus)) {
+        await processFundingSuccess({
+          reference: intent.tx_ref,
+          amount,
+          flutterwaveData: data,
+          rawWebhook: null
+        });
+      } else if (isFailureStatus(providerStatus)) {
+        await processFundingFailure({
+          reference: intent.tx_ref,
+          flutterwaveData: data,
+          rawWebhook: null,
+          reason: providerStatus || 'failed'
+        });
+      } else if (intent.expires_at && new Date(intent.expires_at).getTime() <= Date.now()) {
+        await processFundingFailure({
+          reference: intent.tx_ref,
+          flutterwaveData: data,
+          rawWebhook: null,
+          reason: 'expired'
+        });
+      }
+    } catch (err) {
+      console.error('Reconcile failed for', intent.tx_ref, err?.message || err);
+    }
+  }
+}
+
+setInterval(() => {
+  reconcilePendingFundingIntents().catch(err => {
+    console.error('Funding reconcile loop failed:', err?.message || err);
+  });
+}, 120000).unref?.();
+
+const SERVICE_CATALOG = [
+  { key: 'recharge_pin', label: 'Recharge Pin', route: '/api/services/recharge-pin' },
+  { key: 'data_pin', label: 'Data Pin', route: '/api/services/data-pin' },
+  { key: 'exam_pin', label: 'Exam PIN', route: '/api/services/exam-pin' },
+  { key: 'electricity', label: 'Electricity', route: '/api/services/electricity' },
+  { key: 'cable_tv', label: 'Cable TV', route: '/api/services/cable' },
+  { key: 'airtime', label: 'Airtime', route: '/api/services/airtime' },
+  { key: 'data', label: 'Data', route: '/api/services/data' },
+  { key: 'betting', label: 'Betting', route: '/api/services/betting' }
+];
+
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'PhoneStop backend is running' });
 });
@@ -1629,10 +2060,7 @@ app.get('/api/wallet/balance', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
-  const client = await pool.connect();
-
   try {
     const { amount } = req.body || {};
     const amt = toNumber(amount, 0);
@@ -1677,27 +2105,9 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       reference
     });
 
-    const accountNumber =
-      virtualAccount?.account_number ||
-      virtualAccount?.data?.account_number ||
-      null;
-
-    const bankName =
-      virtualAccount?.bank_name ||
-      virtualAccount?.data?.bank_name ||
-      null;
-
-    const accountName =
-      virtualAccount?.account_name ||
-      virtualAccount?.data?.account_name ||
-      user.full_name ||
-      user.email ||
-      'Wallet funding';
-
-    const expiryDate =
-      virtualAccount?.expiry_date ||
-      virtualAccount?.data?.expiry_date ||
-      null;
+    if (!virtualAccount?.account_number) {
+      return respondError(res, 502, 'Unable to generate virtual account');
+    }
 
     const intentMeta = {
       purpose: 'wallet_funding',
@@ -1710,12 +2120,13 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 
     await query(
       `INSERT INTO payment_intents
-       (id, user_id, tx_ref, amount, currency, provider, status, meta, expires_at, created_at)
-       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, $6, NOW())`,
+       (id, user_id, tx_ref, idempotency_key, amount, currency, provider, status, meta, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'NGN', 'flutterwave', 'initiated', $6, $7, NOW())`,
       [
         uid('pit_'),
         user.id,
         reference,
+        `${req.user.id}:fund:${amt}`,
         fee.grossAmount,
         JSON.stringify(intentMeta),
         expiresAt
@@ -1724,8 +2135,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 
     await query(
       `INSERT INTO transactions
-       (id, user_id, type, category, amount, currency, status, reference, description, meta, updated_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW(), NOW())`,
+       (id, user_id, type, category, amount, currency, status, reference, description, meta, expires_at, updated_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, $9, NOW(), NOW())`,
       [
         uid('tx_'),
         user.id,
@@ -1742,7 +2153,8 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
           netAmount: fee.netAmount,
           accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
           expiresAt
-        })
+        }),
+        expiresAt
       ]
     );
 
@@ -1753,19 +2165,16 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
       fee_percent: fee.feePercent.toFixed(2),
       fee_amount: fee.feeAmount.toFixed(2),
       net_amount: fee.netAmount.toFixed(2),
-      account_number: accountNumber,
-      bank_name: bankName,
-      account_name: accountName,
-      expiry_date: expiryDate,
+      account_number: virtualAccount.account_number,
+      bank_name: virtualAccount.bank_name,
+      account_name: virtualAccount.account_name,
+      expiry_date: virtualAccount.expiry_date,
       expires_at: expiresAt,
       account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
     }, 'Funding details generated');
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
     console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
     return respondError(res, 500, err?.message || 'Unable to initiate funding');
-  } finally {
-    client.release();
   }
 });
 
@@ -2020,17 +2429,6 @@ app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
 });
 
 /* SERVICES LIST */
-const SERVICE_CATALOG = [
-  { key: 'recharge_pin', label: 'Recharge Pin', route: '/api/services/recharge-pin' },
-  { key: 'data_pin', label: 'Data Pin', route: '/api/services/data-pin' },
-  { key: 'exam_pin', label: 'Exam PIN', route: '/api/services/exam-pin' },
-  { key: 'electricity', label: 'Electricity', route: '/api/services/electricity' },
-  { key: 'cable_tv', label: 'Cable TV', route: '/api/services/cable' },
-  { key: 'airtime', label: 'Airtime', route: '/api/services/airtime' },
-  { key: 'data', label: 'Data', route: '/api/services/data' },
-  { key: 'betting', label: 'Betting', route: '/api/services/betting' }
-];
-
 app.get('/api/services', requireAuth, async (req, res) => {
   try {
     return respondOk(res, { services: SERVICE_CATALOG }, 'Services loaded');
@@ -2039,7 +2437,6 @@ app.get('/api/services', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
-
 
 /* BILLS / SERVICES */
 app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
@@ -2084,9 +2481,6 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
     return respondOk(res, { serviceType, plans: withPricing }, 'Plans loaded');
   } catch (err) {
     console.error('LOAD PLANS ERROR:', err);
-    console.error('MESSAGE:', err?.message);
-    console.error('STACK:', err?.stack);
-    console.error('RESPONSE DATA:', err?.response?.data);
     return respondError(res, 500, 'Unable to load plans');
   }
 });
@@ -2100,289 +2494,6 @@ app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processS
 app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
 app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
 
-/* WALLET FUNDING */
-app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const { amount } = req.body || {};
-    const amt = toNumber(amount, 0);
-
-    if (amt < 100) {
-      return respondError(res, 400, 'Minimum funding amount is 100');
-    }
-
-    const recentAttempts = await query(
-      `SELECT COUNT(*)::int AS count
-       FROM payment_intents
-       WHERE user_id = $1
-         AND provider = 'flutterwave'
-         AND created_at > NOW() - INTERVAL '${FUNDING_INITIATE_LIMIT_WINDOW_MINUTES} minutes'`,
-      [req.user.id]
-    );
-
-    if ((recentAttempts.rows[0]?.count || 0) >= FUNDING_INITIATE_LIMIT_COUNT) {
-      return respondError(res, 429, 'Too many funding requests. Try again later.');
-    }
-
-    const userResult = await query(
-      `SELECT id, full_name, email, phone
-       FROM users
-       WHERE id = $1
-       LIMIT 1`,
-      [req.user.id]
-    );
-
-    const user = userResult.rows[0];
-    if (!user) {
-      return respondError(res, 404, 'User not found');
-    }
-
-    const fee = buildDepositBreakdown(amt);
-    const reference = flutterwaveTxRef('fund');
-    const expiresAt = new Date(Date.now() + (PAYMENT_INTENT_TTL_MINUTES * 60 * 1000));
-
-    const virtualAccount = await flutterwaveCreateVirtualAccount({
-      amount: fee.grossAmount,
-      user,
-      reference
-    });
-
-    const accountNumber =
-      virtualAccount?.account_number ||
-      virtualAccount?.data?.account_number ||
-      null;
-
-    const bankName =
-      virtualAccount?.bank_name ||
-      virtualAccount?.data?.bank_name ||
-      null;
-
-    const accountName =
-      virtualAccount?.account_name ||
-      virtualAccount?.data?.account_name ||
-      user.full_name ||
-      user.email ||
-      'Wallet funding';
-
-    const expiryDate =
-      virtualAccount?.expiry_date ||
-      virtualAccount?.data?.expiry_date ||
-      null;
-
-    const intentMeta = {
-      purpose: 'wallet_funding',
-      accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
-      grossAmount: fee.grossAmount,
-      netAmount: fee.netAmount,
-      fee,
-      virtualAccount
-    };
-
-    await query(
-      `INSERT INTO payment_intents
-       (id, user_id, tx_ref, amount, currency, provider, status, meta, expires_at, created_at)
-       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, $6, NOW())`,
-      [
-        uid('pit_'),
-        user.id,
-        reference,
-        fee.grossAmount,
-        JSON.stringify(intentMeta),
-        expiresAt
-      ]
-    );
-
-    await query(
-      `INSERT INTO transactions
-       (id, user_id, type, category, amount, currency, status, reference, description, meta, updated_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW(), NOW())`,
-      [
-        uid('tx_'),
-        user.id,
-        'funding',
-        'wallet',
-        fee.netAmount,
-        reference,
-        'Wallet funding initiated',
-        JSON.stringify({
-          provider: 'flutterwave',
-          grossAmount: fee.grossAmount,
-          feePercent: fee.feePercent,
-          feeAmount: fee.feeAmount,
-          netAmount: fee.netAmount,
-          accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
-          expiresAt
-        })
-      ]
-    );
-
-    return respondOk(res, {
-      reference,
-      amount: fee.netAmount.toFixed(2),
-      gross_amount: fee.grossAmount.toFixed(2),
-      fee_percent: fee.feePercent.toFixed(2),
-      fee_amount: fee.feeAmount.toFixed(2),
-      net_amount: fee.netAmount.toFixed(2),
-      account_number: accountNumber,
-      bank_name: bankName,
-      account_name: accountName,
-      expiry_date: expiryDate,
-      expires_at: expiresAt,
-      account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
-    }, 'Funding details generated');
-  } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
-    console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
-    return respondError(res, 500, err?.message || 'Unable to initiate funding');
-  } finally {
-    client.release();
-  }
-});
-
-app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
-  try {
-    const reference = String(req.params.reference || '').trim();
-    if (!reference) {
-      return respondError(res, 400, 'reference is required');
-    }
-
-    const intentResult = await query(
-      `SELECT * FROM payment_intents
-       WHERE tx_ref = $1 AND user_id = $2
-       LIMIT 1`,
-      [reference, req.user.id]
-    );
-
-    const transactionResult = await query(
-      `SELECT * FROM transactions
-       WHERE reference = $1 AND user_id = $2
-       LIMIT 1`,
-      [reference, req.user.id]
-    );
-
-    const wallet = await ensureWallet(req.user.id);
-
-    const intent = intentResult.rows[0] || null;
-    const transaction = transactionResult.rows[0] || null;
-
-    return respondOk(
-      res,
-      {
-        reference,
-        intent,
-        transaction,
-        wallet: {
-          id: wallet.id,
-          balance: Number(wallet.balance).toFixed(2),
-          currency: wallet.currency
-        }
-      },
-      'Funding status loaded'
-    );
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Unable to load funding status');
-  }
-});
-
-app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
-  try {
-    const transactionId = String(req.params.transactionId || '').trim();
-    if (!transactionId) {
-      return respondError(res, 400, 'transactionId is required');
-    }
-
-    const data = await axios.get(`${FLW_BASE_URL}/transactions/verify_by_reference`, {
-      params: { tx_ref: transactionId },
-      headers: flutterwaveHeaders(),
-      timeout: 30000
-    }).then(r => r.data?.data || r.data);
-
-    if (!data) return respondError(res, 400, 'Unable to verify payment');
-
-    const providerStatus = normalizeStatus(data.status || data.tx_status || '');
-    const amount = toNumber(data.amount, 0);
-    const txRef = String(data.tx_ref || data.reference || '').trim();
-
-    if (!txRef) {
-      return respondError(res, 400, 'Missing transaction reference');
-    }
-
-    const intentResult = await query(
-      `SELECT * FROM payment_intents
-       WHERE tx_ref = $1 AND user_id = $2
-       LIMIT 1`,
-      [txRef, req.user.id]
-    );
-
-    const intent = intentResult.rows[0];
-    if (!intent) return respondError(res, 404, 'Payment intent not found');
-
-    const existingTransactionResult = await query(
-      `SELECT * FROM transactions
-       WHERE reference = $1 AND user_id = $2
-       LIMIT 1`,
-      [txRef, req.user.id]
-    );
-
-    const existingTransaction = existingTransactionResult.rows[0] || null;
-
-    if (isSuccessStatus(intent.status) || (existingTransaction && isSuccessStatus(existingTransaction.status))) {
-      const wallet = await ensureWallet(req.user.id);
-
-      return respondOk(res, {
-        alreadyProcessed: true,
-        wallet: {
-          balance: Number(wallet.balance).toFixed(2),
-          currency: wallet.currency
-        }
-      }, 'Payment already processed');
-    }
-
-    if (isSuccessStatus(providerStatus)) {
-      const result = await processFundingSuccess({
-        reference: txRef,
-        amount,
-        flutterwaveData: data,
-        rawWebhook: null
-      });
-
-      const wallet = await ensureWallet(req.user.id);
-
-      return respondOk(res, {
-        processed: true,
-        result,
-        wallet: {
-          balance: Number(wallet.balance).toFixed(2),
-          currency: wallet.currency
-        }
-      }, 'Wallet funded successfully');
-    }
-
-    if (isFailureStatus(providerStatus)) {
-      await processFundingFailure({
-        reference: txRef,
-        flutterwaveData: data,
-        rawWebhook: null,
-        reason: providerStatus || 'failed'
-      });
-
-      return respondError(res, 400, 'Payment not successful');
-    }
-
-    return respondOk(res, {
-      pending: true,
-      reference: txRef,
-      status: providerStatus || 'pending',
-      transaction: existingTransaction,
-      intent
-    }, 'Payment still pending');
-  } catch (err) {
-    console.error(err.response?.data || err.message || err);
-    return respondError(res, 500, 'Unable to verify payment');
-  }
-});
 /* WEBHOOK */
 app.get('/api/webhooks/flutterwave', (req, res) => {
   return res.status(200).send('Flutterwave webhook endpoint is live');
@@ -2394,16 +2505,11 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     console.log('Expected Hash:', FLW_WEBHOOK_HASH);
     console.log('Received Hash:', req.headers['verif-hash']);
     console.log('Received x-flw-secret-hash:', req.headers['x-flw-secret-hash']);
-    console.log('Headers:', req.headers);
-    console.log('Raw Body:', req.rawBody);
-    console.log('Parsed Body:', req.body);
 
     if (!isValidFlutterwaveWebhook(req)) {
       console.log('INVALID FLW SIGNATURE');
       return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
     }
-
-    console.log('SIGNATURE VERIFIED');
 
     const body = req.body || {};
     const event = String(body.event || '').toLowerCase();
@@ -2416,7 +2522,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
       String(body['event.type'] || '').toUpperCase() === 'BANK_TRANSFER_TRANSACTION';
 
     if (!isRelevant) {
-      console.log('NOT A RELEVANT EVENT:', event);
       return res.status(200).json({ received: true });
     }
 
@@ -2430,13 +2535,7 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
     const status = String(data.status || body.status || '').toLowerCase();
     const amount = Number(data.amount ?? body.amount ?? 0);
 
-    console.log('EVENT:', event);
-    console.log('REFERENCE:', reference);
-    console.log('STATUS:', status);
-    console.log('AMOUNT:', amount);
-
     if (!reference) {
-      console.log('NO REFERENCE IN WEBHOOK');
       return res.status(200).json({ received: true });
     }
 
@@ -2475,8 +2574,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
 
       return res.status(200).json({ received: true, processed: true, result });
     }
-
-    console.log('PAYMENT STILL PENDING, NO STATUS CHANGE');
 
     await query(
       `UPDATE payment_intents
