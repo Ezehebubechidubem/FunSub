@@ -46,7 +46,6 @@ const SUCCESS_STATUSES = new Set([
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
-
 const FLW_WALLET_FEE_PERCENT = envNumber(
   process.env.DEPOSIT_FEE_PERCENT || process.env.FLW_WALLET_FEE_PERCENT,
   2
@@ -113,13 +112,6 @@ app.use(express.json({
   }
 }));
 
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: envNumber(process.env.RATE_LIMIT_MAX, 300),
-  standardHeaders: true,
-  legacyHeaders: false
-}));
-
 const AUTH_LOGIN_LIMITER = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -181,7 +173,6 @@ function isFailureStatus(value) {
     'declined'
   ].includes(normalizeStatus(value));
 }
-
 async function query(text, params = []) {
   return pool.query(text, params);
 }
@@ -300,67 +291,6 @@ async function addNotification(userId, title, message, meta = {}, isSystem = tru
     [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
   );
 }
-function hashJson(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
-}
-
-function webhookDedupKey(body = {}) {
-  const data = body.data || {};
-  return hashJson([
-    String(body.event || ''),
-    String(data.tx_ref || body.tx_ref || ''),
-    String(data.status || body.status || ''),
-    String(data.amount || body.amount || ''),
-    String(data.flw_ref || ''),
-    String(data.id || '')
-  ]);
-}
-
-function getPurchaseIdempotencyKey(req, fallbackKey = '') {
-  return String(
-    req.headers['x-idempotency-key'] ||
-    req.body?.idempotencyKey ||
-    req.body?.idempotency_key ||
-    fallbackKey ||
-    ''
-  ).trim();
-}
-
-function getPurchaseRequestHash({
-  serviceType,
-  body = {},
-  destination = '',
-  pricing = null,
-  selectedPlan = null,
-  providerPayload = null
-} = {}) {
-  return hashJson({
-    serviceType: normalizeServiceType(serviceType),
-    network: String(body.network || '').trim().toLowerCase(),
-    serviceID: String(providerPayload?.serviceID || body.serviceID || body.serviceId || '').trim(),
-    destination: String(destination || '').trim(),
-    amount: Number(pricing?.finalPrice || 0),
-    variation_code: String(
-      body.variation_code ||
-      body.planId ||
-      body.plan_id ||
-      body.planCode ||
-      body.code ||
-      selectedPlan?.id ||
-      ''
-    ).trim().toLowerCase(),
-    plan_name: String(body.plan_name || selectedPlan?.name || '').trim().toLowerCase(),
-    billersCode: String(
-      body.billersCode ||
-      body.meter_number ||
-      body.smartcard_number ||
-      body.accountNumber ||
-      body.customer_id ||
-      ''
-    ).trim(),
-    phone: String(body.phone || '').trim()
-  });
-}
 
 function getDefaultMarkupPercent(serviceType) {
   const key = normalizeServiceType(serviceType);
@@ -416,7 +346,6 @@ function normalizeServiceType(v) {
 
   return map[s] || s;
 }
-
 function providerHeaders(kind = 'get') {
   const headers = { 'Content-Type': 'application/json' };
 
@@ -615,7 +544,6 @@ async function fetchProviderPlans(serviceType, params = {}) {
     meta: item
   }));
 }
-
 function buildProviderPayload({
   serviceType,
   amount,
@@ -691,46 +619,6 @@ async function requeryVtpassTransaction(requestId) {
 
   return response.data;
 }
-async function addTransaction({
-  userId,
-  type,
-  category,
-  amount,
-  currency = 'NGN',
-  status = 'success',
-  reference,
-  description,
-  meta = {},
-  idempotencyKey = null,
-  requestHash = null,
-  expiresAt = null
-}) {
-  const txRef = reference || uid('ref_');
-
-  const inserted = await query(
-    `INSERT INTO transactions
-     (id, user_id, type, category, amount, currency, status, reference, description, meta, idempotency_key, request_hash, expires_at, updated_at, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
-     RETURNING *`,
-    [
-      uid('tx_'),
-      userId,
-      type,
-      category,
-      amount,
-      currency,
-      status,
-      txRef,
-      description,
-      JSON.stringify(meta),
-      idempotencyKey,
-      requestHash,
-      expiresAt
-    ]
-  );
-
-  return inserted.rows[0];
-}
 
 async function processFundingSuccess({ reference, amount, flutterwaveData = {}, rawWebhook = null }) {
   const client = await pool.connect();
@@ -771,7 +659,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
         [
           reference,
           String(flutterwaveData?.id || flutterwaveData?.flw_ref || flutterwaveData?.reference || '') || null,
-          String(rawWebhook ? webhookDedupKey(rawWebhook) : '') || null,
+          null,
           JSON.stringify({
             reason: 'amount_mismatch',
             expectedAmount: expectedGross,
@@ -909,7 +797,7 @@ async function processFundingSuccess({ reference, amount, flutterwaveData = {}, 
       [
         reference,
         String(flutterwaveData?.id || flutterwaveData?.flw_ref || flutterwaveData?.reference || '') || null,
-        String(rawWebhook ? webhookDedupKey(rawWebhook) : '') || null,
+        null,
         JSON.stringify({
           flutterwaveData,
           rawWebhook,
@@ -980,7 +868,7 @@ async function processFundingFailure({
       [
         reference,
         String(flutterwaveData?.id || flutterwaveData?.flw_ref || flutterwaveData?.reference || '') || null,
-        String(rawWebhook ? webhookDedupKey(rawWebhook) : '') || null,
+        null,
         JSON.stringify({
           reason,
           flutterwaveData,
@@ -1138,8 +1026,7 @@ async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
     timeout: 30000
   });
 
-  const normalized = extractFlutterwaveVirtualAccount(vaRes.data);
-  return normalized;
+  return extractFlutterwaveVirtualAccount(vaRes.data);
 }
 
 async function deleteExpiredPaymentIntents() {
@@ -1203,8 +1090,6 @@ async function initDb() {
       reference TEXT NOT NULL UNIQUE,
       description TEXT,
       meta JSONB DEFAULT '{}'::jsonb,
-      idempotency_key TEXT,
-      request_hash TEXT,
       expires_at TIMESTAMPTZ,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1241,7 +1126,6 @@ async function initDb() {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       tx_ref TEXT NOT NULL UNIQUE,
-      idempotency_key TEXT,
       amount NUMERIC(14,2) NOT NULL,
       currency TEXT NOT NULL DEFAULT 'NGN',
       provider TEXT NOT NULL DEFAULT 'flutterwave',
@@ -1270,28 +1154,6 @@ async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-
-    CREATE TABLE IF NOT EXISTS processed_webhook_events (
-      id TEXT PRIMARY KEY,
-      event_hash TEXT NOT NULL UNIQUE,
-      reference TEXT,
-      payload JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS payment_intents_idempotency_key_unique
-    ON payment_intents (idempotency_key)
-    WHERE idempotency_key IS NOT NULL;
-  `);
-
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS transactions_purchase_idempotency_unique
-    ON transactions (user_id, category, idempotency_key, request_hash)
-    WHERE type = 'purchase'
-      AND idempotency_key IS NOT NULL
-      AND request_hash IS NOT NULL;
   `);
 
   await query(`
@@ -1407,16 +1269,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     const destination =
       normalizePhone(rawDestination) || String(rawDestination).trim();
 
-    const idempotencyKey = getPurchaseIdempotencyKey(req, `${userId}:${normalizedServiceType}:${destination}`);
-    const requestHashBase = {
-      serviceType: normalizedServiceType,
-      body,
-      destination,
-      pricing: null,
-      selectedPlan: null,
-      providerPayload: null
-    };
-
     if (normalizedServiceType === 'airtime') {
       const amount = toNumber(body.amount, 0);
 
@@ -1433,9 +1285,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         network: body.network,
         extra: body.extra || {}
       });
-
-      requestHashBase.pricing = pricing;
-      requestHashBase.providerPayload = providerPayload;
     } else {
       const variationCode = String(
         body.variation_code ||
@@ -1532,16 +1381,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 400, 'Unable to prepare purchase');
     }
 
-    const requestHash = getPurchaseRequestHash({
-      serviceType: normalizedServiceType,
-      body,
-      destination,
-      pricing,
-      selectedPlan,
-      providerPayload
-    });
-
     const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
+
     const client = await pool.connect();
     let txRow = null;
     let transactionStarted = false;
@@ -1549,27 +1390,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     try {
       await client.query('BEGIN');
       transactionStarted = true;
-
-      const existing = await client.query(
-        `SELECT * FROM transactions
-         WHERE user_id = $1
-           AND category = $2
-           AND type = 'purchase'
-           AND idempotency_key = $3
-           AND request_hash = $4
-         LIMIT 1`,
-        [userId, normalizedServiceType, idempotencyKey, requestHash]
-      );
-
-      if (existing.rows[0]) {
-        await client.query('COMMIT');
-        transactionStarted = false;
-        return respondOk(res, {
-          transaction: existing.rows[0],
-          pricing,
-          duplicate: true
-        }, 'Purchase already processed');
-      }
 
       const walletResult = await client.query(
         'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
@@ -1597,9 +1417,9 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
       const inserted = await client.query(
         `INSERT INTO transactions
-         (id, user_id, type, category, amount, currency, status, reference, description, meta, idempotency_key, request_hash, updated_at, created_at)
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, updated_at, created_at)
          VALUES
-         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, $9, $10, NOW(), NOW())
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW(), NOW())
          RETURNING *`,
         [
           uid('tx_'),
@@ -1615,9 +1435,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             providerPayload,
             selectedPlan,
             pricing
-          }),
-          idempotencyKey,
-          requestHash
+          })
         ]
       );
 
@@ -1831,7 +1649,6 @@ app.get('/health', async (req, res) => {
   }
 });
 
-/* AUTH */
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { fullName, email, phone, password, confirmPassword, state } = req.body || {};
@@ -2044,7 +1861,6 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
   }
 });
 
-/* WALLET */
 app.get('/api/wallet/balance', requireAuth, async (req, res) => {
   try {
     const wallet = await ensureWallet(req.user.id);
@@ -2120,13 +1936,12 @@ app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
 
     await query(
       `INSERT INTO payment_intents
-       (id, user_id, tx_ref, idempotency_key, amount, currency, provider, status, meta, expires_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'NGN', 'flutterwave', 'initiated', $6, $7, NOW())`,
+       (id, user_id, tx_ref, amount, currency, provider, status, meta, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, $6, NOW())`,
       [
         uid('pit_'),
         user.id,
         reference,
-        `${req.user.id}:fund:${amt}`,
         fee.grossAmount,
         JSON.stringify(intentMeta),
         expiresAt
@@ -2321,8 +2136,6 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
     return respondError(res, 500, 'Unable to verify payment');
   }
 });
-
-/* TRANSACTIONS */
 app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit || 20), 100);
@@ -2342,7 +2155,6 @@ app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
   }
 });
 
-/* NOTIFICATIONS */
 app.get('/api/notifications', requireAuth, async (req, res) => {
   try {
     const result = await query(
@@ -2395,7 +2207,6 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
   }
 });
 
-/* PROVIDER DEBUG */
 app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
   try {
     return respondOk(res, {
@@ -2428,7 +2239,17 @@ app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
   }
 });
 
-/* SERVICES LIST */
+const SERVICE_CATALOG = [
+  { key: 'recharge_pin', label: 'Recharge Pin', route: '/api/services/recharge-pin' },
+  { key: 'data_pin', label: 'Data Pin', route: '/api/services/data-pin' },
+  { key: 'exam_pin', label: 'Exam PIN', route: '/api/services/exam-pin' },
+  { key: 'electricity', label: 'Electricity', route: '/api/services/electricity' },
+  { key: 'cable_tv', label: 'Cable TV', route: '/api/services/cable' },
+  { key: 'airtime', label: 'Airtime', route: '/api/services/airtime' },
+  { key: 'data', label: 'Data', route: '/api/services/data' },
+  { key: 'betting', label: 'Betting', route: '/api/services/betting' }
+];
+
 app.get('/api/services', requireAuth, async (req, res) => {
   try {
     return respondOk(res, { services: SERVICE_CATALOG }, 'Services loaded');
@@ -2438,7 +2259,6 @@ app.get('/api/services', requireAuth, async (req, res) => {
   }
 });
 
-/* BILLS / SERVICES */
 app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
@@ -2493,8 +2313,6 @@ app.post('/api/services/betting', requireAuth, async (req, res) => processServic
 app.post('/api/services/recharge-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'recharge_pin', 'Recharge Pin'));
 app.post('/api/services/data-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'data_pin', 'Data Pin'));
 app.post('/api/services/exam-pin', requireAuth, async (req, res) => processServicePayment(req, res, 'exam_pin', 'Exam PIN'));
-
-/* WEBHOOK */
 app.get('/api/webhooks/flutterwave', (req, res) => {
   return res.status(200).send('Flutterwave webhook endpoint is live');
 });
@@ -2537,20 +2355,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
 
     if (!reference) {
       return res.status(200).json({ received: true });
-    }
-
-    const dedupKey = webhookDedupKey(body);
-
-    const dedup = await query(
-      `INSERT INTO processed_webhook_events (id, event_hash, reference, payload)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (event_hash) DO NOTHING
-       RETURNING id`,
-      [uid('whe_'), dedupKey, reference, JSON.stringify(body)]
-    );
-
-    if (!dedup.rows[0]) {
-      return res.status(200).json({ received: true, duplicate: true });
     }
 
     if (isSuccessStatus(status)) {
@@ -2609,7 +2413,6 @@ app.post('/api/webhooks/flutterwave', async (req, res) => {
   }
 });
 
-/* LOGOUT */
 app.post('/api/auth/logout', requireAuth, async (req, res) => {
   try {
     await query(
@@ -2625,13 +2428,11 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
   }
 });
 
-/* ERRORS */
 app.use((err, req, res, next) => {
   console.error(err);
   return respondError(res, 500, 'Internal server error');
 });
 
-/* START */
 (async () => {
   try {
     await query('SELECT 1');
