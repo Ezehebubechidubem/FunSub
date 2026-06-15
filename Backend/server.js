@@ -133,6 +133,117 @@ function normalizeStatus(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function extractProviderText(response) {
+  const parts = [];
+
+  const push = (v) => {
+    const text = normalizeStatus(v);
+    if (text) parts.push(text);
+  };
+
+  push(response?.status);
+  push(response?.message);
+  push(response?.response_description);
+  push(response?.responseCode);
+  push(response?.response_code);
+  push(response?.code);
+  push(response?.statusCode);
+
+  push(response?.data?.status);
+  push(response?.data?.message);
+  push(response?.data?.response_description);
+  push(response?.data?.response_code);
+  push(response?.data?.responseCode);
+
+  push(response?.transaction?.status);
+  push(response?.transaction?.message);
+  push(response?.transaction?.response_description);
+  push(response?.transaction?.order_status);
+
+  push(response?.content?.transactions?.status);
+  push(response?.content?.transactions?.message);
+  push(response?.content?.transactions?.response_description);
+  push(response?.content?.transactions?.order_status);
+
+  push(response?.data?.content?.transactions?.status);
+  push(response?.data?.content?.transactions?.message);
+  push(response?.data?.content?.transactions?.response_description);
+  push(response?.data?.content?.transactions?.order_status);
+
+  push(response?.data?.transactions?.status);
+  push(response?.data?.transactions?.message);
+  push(response?.data?.transactions?.response_description);
+  push(response?.data?.transactions?.order_status);
+
+  return parts.join(' | ');
+}
+
+function providerResponseState(response) {
+  if (!response) return 'failed';
+
+  if (response.success === true) return 'success';
+
+  const code = String(
+    response.code ??
+    response.statusCode ??
+    response.response_code ??
+    response.responseCode ??
+    response.data?.code ??
+    response.data?.statusCode ??
+    response.data?.response_code ??
+    response.data?.responseCode ??
+    ''
+  ).trim();
+
+  if (['00', '0', '200'].includes(code)) return 'success';
+
+  const text = extractProviderText(response);
+
+  if (!text) return 'failed';
+
+  if (
+    text.includes('failed') ||
+    text.includes('failure') ||
+    text.includes('declined') ||
+    text.includes('rejected') ||
+    text.includes('cancelled') ||
+    text.includes('canceled') ||
+    text.includes('error') ||
+    text.includes('invalid')
+  ) {
+    return 'failed';
+  }
+
+  if (
+    text.includes('order completed') ||
+    text.includes('transaction successful') ||
+    text.includes('purchase successful') ||
+    text.includes('success') ||
+    text.includes('successful') ||
+    text.includes('completed') ||
+    text.includes('complete') ||
+    text.includes('paid') ||
+    text.includes('ok') ||
+    text.includes('submitted successfully') ||
+    text.includes('processed successfully')
+  ) {
+    return 'success';
+  }
+
+  if (
+    text.includes('pending') ||
+    text.includes('processing') ||
+    text.includes('queued') ||
+    text.includes('in progress') ||
+    text.includes('awaiting') ||
+    text.includes('submitted')
+  ) {
+    return 'pending';
+  }
+
+  return 'failed';
+}
+
 function isSuccessStatus(value) {
   return SUCCESS_STATUSES.has(normalizeStatus(value));
 }
@@ -1089,99 +1200,82 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     }
 
     const providerResponse = await buyServiceThroughGateway({
-      serviceType: normalizedServiceType,
-      body,
-      selectedPlan,
-      requestId: txRow.reference
-    });
+  serviceType: normalizedServiceType,
+  body,
+  selectedPlan,
+  requestId: txRow.reference
+});
 
-    const success = providerRequestLooksSuccessful(providerResponse);
+console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
 
-    if (!success) {
-      await pool.query(
-        `UPDATE wallets
-         SET balance = balance + $2,
-             updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
+const providerState = providerResponseState(providerResponse);
+const providerText = extractProviderText(providerResponse);
 
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'failed',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} failed`,
-          JSON.stringify({
-            serviceType: normalizedServiceType,
-            serviceName,
-            selectedPlan,
-            pricing,
-            providerResponse
-          })
-        ]
-      );
-
-      return respondError(
-        res,
-        400,
-        providerResponse?.response_description || providerResponse?.message || 'Purchase failed'
-      );
-    }
-
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'success',
-           meta = $2
-       WHERE id = $1`,
-      [
-        txRow.id,
-        JSON.stringify({
-          serviceType: normalizedServiceType,
-          serviceName,
-          selectedPlan,
-          pricing,
-          providerResponse
-        })
-      ]
-    );
-
-    await addNotification(
-      userId,
-      `${serviceName} purchased`,
-      `${description} was successful`,
-      {
-        transactionId: txRow.id,
+if (providerState === 'pending') {
+  await pool.query(
+    `UPDATE transactions
+     SET status = 'pending',
+         description = $2,
+         meta = $3
+     WHERE id = $1`,
+    [
+      txRow.id,
+      description,
+      JSON.stringify({
         serviceType: normalizedServiceType,
+        serviceName,
+        selectedPlan,
         pricing,
         providerResponse
-      },
-      true
-    );
+      })
+    ]
+  );
 
-    return respondOk(res, {
-      transaction: {
-        ...txRow,
-        status: 'success'
-      },
-      pricing,
-      providerResponse
-    }, `${serviceName} purchased successfully`);
-  } catch (err) {
-    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
-    console.error('ERROR MESSAGE:', err?.message);
-    console.error('ERROR STACK:', err?.stack);
-    console.error('ERROR RESPONSE DATA:', err?.response?.data);
+  return res.status(202).json({
+    success: true,
+    message: providerText || 'Purchase pending',
+    transaction: {
+      ...txRow,
+      status: 'pending'
+    },
+    pricing,
+    providerResponse
+  });
+}
 
-    return respondError(
-      res,
-      500,
-      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
-    );
-  }
+if (providerState !== 'success') {
+  await pool.query(
+    `UPDATE wallets
+     SET balance = balance + $2,
+         updated_at = NOW()
+     WHERE user_id = $1`,
+    [userId, purchaseAmount]
+  );
+
+  await pool.query(
+    `UPDATE transactions
+     SET status = 'failed',
+         description = $2,
+         meta = $3
+     WHERE id = $1`,
+    [
+      txRow.id,
+      `${description} failed`,
+      JSON.stringify({
+        serviceType: normalizedServiceType,
+        serviceName,
+        selectedPlan,
+        pricing,
+        providerResponse
+      })
+    ]
+  );
+
+  return respondError(
+    res,
+    400,
+    providerText || providerResponse?.response_description || providerResponse?.message || 'Purchase failed'
+  );
 }
 
 function requireDebugAccess(req, res, next) {
