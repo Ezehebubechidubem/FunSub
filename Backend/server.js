@@ -136,7 +136,84 @@ function normalizeStatus(value) {
 function isSuccessStatus(value) {
   return SUCCESS_STATUSES.has(normalizeStatus(value));
 }
+function providerRequestLooksSuccessful(response) {
+  if (response?.success === true) return true;
+  if ([response?.code, response?.statusCode].some((v) => Number(v) === 200)) return true;
 
+  const candidates = [
+    response?.status,
+    response?.message,
+    response?.response_description,
+    response?.data?.status,
+    response?.data?.message,
+    response?.data?.response_description
+  ]
+    .map((v) => normalizeStatus(v))
+    .filter(Boolean);
+
+  if (candidates.some((v) => SUCCESS_STATUSES.has(v))) return true;
+
+  const responseCode = String(response?.response_code ?? response?.data?.response_code ?? '').trim();
+  if (['00', '0', '200'].includes(responseCode)) return true;
+
+  return false;
+}
+
+async function buyServiceThroughGateway({
+  serviceType,
+  body,
+  selectedPlan,
+  requestId
+}) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+
+  switch (normalizedServiceType) {
+    case 'airtime':
+      return iacafe.buyAirtime({
+        request_id: requestId,
+        phone: body.phone,
+        service_id: body.service_id || body.serviceId,
+        amount: body.amount
+      });
+
+    case 'data':
+      return iacafe.buyData({
+        request_id: requestId,
+        phone: body.phone,
+        plan: selectedPlan,
+        service_id: body.service_id || body.serviceId
+      });
+
+    case 'cable_tv':
+      return iacafe.buyCable({
+        request_id: requestId,
+        customer_id: body.smartcard_number || body.customer_id || body.accountNumber || body.billersCode,
+        service_id: body.service_id || body.serviceId,
+        plan: selectedPlan
+      });
+
+    case 'electricity':
+      return iacafe.buyElectricity({
+        request_id: requestId,
+        customer_id: body.meter_number || body.meterNumber || body.customer_id || body.billersCode,
+        service_id: body.service_id || body.serviceId,
+        meter_number: body.meter_number || body.meterNumber,
+        account_number: body.accountNumber,
+        amount: body.amount
+      });
+
+    case 'betting':
+      return iacafe.buyBetting({
+        request_id: requestId,
+        customer_id: body.customer_id || body.accountNumber || body.phone,
+        service_id: body.service_id || body.serviceId,
+        amount: body.amount
+      });
+
+    default:
+      throw new Error(`${normalizedServiceType} is not supported yet`);
+  }
+}
 async function verifyFlutterwaveByReference(reference) {
   const url = 'https://api.flutterwave.com/v3/transactions/verify_by_reference';
 
