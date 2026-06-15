@@ -10,7 +10,6 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const axios = require('axios');
 const path = require('path');
-const mockProvider = require('./mock-vtpass-server');
 const fs = require('fs');
 const crypto = require('crypto');
 
