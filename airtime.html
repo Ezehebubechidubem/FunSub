@@ -357,7 +357,6 @@
 
   <script>
     const BUY_URL = "https://funsub.onrender.com/api/services/airtime";
-
     let currentNetwork = "mtn";
     let lastReceipt = null;
 
@@ -365,7 +364,7 @@
       return localStorage.getItem("funsub_token") || "";
     }
 
-    function generateRequestId(prefix = "AIRTIME") {
+    function generateRequestId(prefix = "AIR") {
       const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
       return `${prefix}_${Date.now()}_${rand}`;
     }
@@ -376,29 +375,29 @@
         mtn: {
           name: "MTN",
           logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg",
-          service_id: "mtn-airtime"
+          service_id: "mtn"
         },
         glo: {
           name: "GLO",
           logo: "https://i.postimg.cc/B64Y96DS/glo.png",
-          service_id: "glo-airtime"
+          service_id: "glo"
         },
         airtel: {
           name: "Airtel",
           logo: "https://i.postimg.cc/FKZbSxf8/airtel.png",
-          service_id: "airtel-airtime"
+          service_id: "airtel"
         },
         "9mobile": {
           name: "9mobile",
           logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png",
-          service_id: "etisalat-airtime"
+          service_id: "9mobile"
         }
       };
 
       return map[n] || {
         name: n.toUpperCase(),
         logo: "",
-        service_id: ""
+        service_id: n
       };
     }
 
@@ -486,7 +485,7 @@
 
     function showPendingModal(message) {
       document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "none";
+      document.getElementById("receiptSection").style.display = "block";
       document.getElementById("transactionIcon").className = "transaction-icon pending";
       document.getElementById("transactionIcon").innerHTML = "🟡";
       document.getElementById("transactionTitle").innerText = "Transaction Pending";
@@ -495,7 +494,7 @@
 
     function showFailedModal(message) {
       document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "none";
+      document.getElementById("receiptSection").style.display = "block";
       document.getElementById("transactionIcon").className = "transaction-icon failed";
       document.getElementById("transactionIcon").innerHTML = "❌";
       document.getElementById("transactionTitle").innerText = "Transaction Failed";
@@ -525,7 +524,6 @@
     }) {
       document.getElementById("receiptNetworkLogo").src = networkMeta.logo || "";
       document.getElementById("receiptNetworkName").innerText = networkMeta.name || "";
-
       document.getElementById("receiptReference").innerText = reference || "";
       document.getElementById("receiptRequestId").innerText = requestId || "";
       document.getElementById("receiptAmount").innerText = formatAmount(amount);
@@ -545,9 +543,7 @@
       const phone = document.getElementById("phone").value.trim();
       const amountRaw = document.getElementById("amount").value.trim();
       const networkMeta = getNetworkMeta(currentNetwork);
-      const service_id = networkMeta.service_id;
       const request_id = generateRequestId("AIRTIME");
-
       const amount = Number(amountRaw);
 
       if (!/^0\d{10}$/.test(phone)) {
@@ -555,7 +551,7 @@
         return;
       }
 
-      if (!service_id) {
+      if (!networkMeta.service_id) {
         alert("Please choose a valid network");
         return;
       }
@@ -581,7 +577,7 @@
           body: JSON.stringify({
             request_id,
             phone,
-            service_id,
+            service_id: networkMeta.service_id,
             amount
           })
         });
@@ -589,24 +585,12 @@
         const data = await response.json().catch(() => ({}));
         console.log("AIRTIME RESPONSE:", data);
 
-        const tx =
-          data.transaction ||
-          data.data?.transaction ||
-          data.result ||
-          data.content ||
-          {};
-
-        const statusText = String(
-          tx.status ||
-          data.status ||
-          data.transaction?.status ||
-          ""
-        ).toLowerCase();
+        const tx = data.transaction || data.data?.transaction || data.result || {};
+        const statusText = String(tx.status || data.status || "").toLowerCase();
 
         const reference =
           tx.reference ||
           tx.tx_ref ||
-          tx.request_id ||
           data.reference ||
           request_id;
 
@@ -626,7 +610,7 @@
             networkMeta,
             requestId: request_id,
             reference,
-            amount: amount,
+            amount,
             phone,
             status: tx.status || data.status || "success"
           });
@@ -655,7 +639,7 @@
             networkMeta,
             requestId: request_id,
             reference,
-            amount: amount,
+            amount,
             phone,
             status: "pending"
           });
@@ -679,7 +663,7 @@
           networkMeta,
           requestId: request_id,
           reference,
-          amount: amount,
+          amount,
           phone,
           status: "failed"
         });
@@ -701,7 +685,7 @@
           networkMeta,
           requestId: request_id,
           reference: "",
-          amount: amount,
+          amount,
           phone,
           status: "failed"
         });
