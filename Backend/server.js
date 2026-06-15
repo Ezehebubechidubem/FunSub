@@ -2177,7 +2177,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
 
-    if (![
+    const allowed = new Set([
       'airtime',
       'data',
       'cable_tv',
@@ -2186,43 +2186,198 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       'recharge_pin',
       'data_pin',
       'exam_pin'
-    ].includes(serviceType)) {
+    ]);
+
+    if (!allowed.has(serviceType)) {
       return respondError(res, 400, 'Invalid service type');
     }
 
-    const providerPlans = await fetchProviderPlans(serviceType, {
-      network: req.query.network || undefined,
-      provider: req.query.provider || undefined,
-      serviceID: req.query.serviceID || req.query.serviceId || undefined
-    });
+    // IA Cafe currently exposes dynamic plan listings mainly for:
+    // - data
+    // - cable
+    // Other services are best treated as provider lists / supported services.
+    if (serviceType === 'data') {
+      const service_id = String(
+        req.query.service_id ||
+        req.query.serviceId ||
+        req.query.network ||
+        ''
+      ).trim().toLowerCase();
 
-    const normalized = providerPlans.map(normalizeProviderPlan);
+      if (!service_id) {
+        return respondError(res, 400, 'service_id is required for data plans');
+      }
 
-    const withPricing = [];
-    for (const plan of normalized) {
-      const pricing = await applyMarkup(serviceType, plan.rawPrice);
-      withPricing.push({
-        ...plan,
-        pricing: {
-          basePrice: pricing.basePrice,
-          markupPercent: pricing.markupPercent,
-          markupFee: pricing.markupFee,
-          finalPrice: pricing.finalPrice
-        }
+      const regularRes = await iacafe.getVariations({
+        product: 'data',
+        service_id
       });
+
+      const budgetRes = await iacafe.getBudgetPlans({
+        network_id: req.query.network_id || req.query.networkId || undefined,
+        provider: req.query.provider || undefined
+      }).catch(() => null);
+
+      const regularPlansRaw = Array.isArray(regularRes?.data) ? regularRes.data : [];
+      const budgetPlansRaw = Array.isArray(budgetRes?.data) ? budgetRes.data : [];
+
+      const regularPlans = regularPlansRaw.map((plan) => ({
+        id: plan.variation_id,
+        name: plan.data_plan,
+        rawPrice: Number(plan.reseller_price || plan.price || 0),
+        availability: plan.availability || 'Available',
+        source: 'regular',
+        meta: plan
+      }));
+
+      const budgetPlans = budgetPlansRaw.map((plan) => ({
+        id: plan.data_plan,
+        name: plan.name,
+        rawPrice: Number(plan.api_user_price || 0),
+        availability: 'Available',
+        source: 'budget-data',
+        meta: plan
+      }));
+
+      const allPlans = [...regularPlans, ...budgetPlans]
+        .filter((plan) =>
+          String(plan.availability).toLowerCase() === 'available' ||
+          req.query.include_unavailable === 'true'
+        );
+
+      const withPricing = [];
+      for (const plan of allPlans) {
+        const pricing = await applyMarkup('data', plan.rawPrice);
+        withPricing.push({
+          ...plan,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType: 'data',
+        service_id,
+        plans: withPricing
+      }, 'Data plans loaded');
+    }
+
+    if (serviceType === 'cable_tv') {
+      const service_id = String(
+        req.query.service_id ||
+        req.query.serviceId ||
+        req.query.provider ||
+        ''
+      ).trim().toLowerCase();
+
+      if (!service_id) {
+        return respondError(res, 400, 'service_id is required for cable plans');
+      }
+
+      const cableRes = await iacafe.getVariations({
+        product: 'cable',
+        service_id
+      });
+
+      const cablePlansRaw = Array.isArray(cableRes?.data) ? cableRes.data : [];
+
+      const plans = cablePlansRaw
+        .map((plan) => ({
+          id: plan.variation_id || plan.id || plan.code,
+          name: plan.name || plan.variation_name || 'Cable Plan',
+          rawPrice: Number(plan.reseller_price || plan.price || plan.amount || 0),
+          availability: plan.availability || 'Available',
+          source: 'cable',
+          meta: plan
+        }))
+        .filter((plan) =>
+          String(plan.availability).toLowerCase() === 'available' ||
+          req.query.include_unavailable === 'true'
+        );
+
+      const withPricing = [];
+      for (const plan of plans) {
+        const pricing = await applyMarkup('cable_tv', plan.rawPrice);
+        withPricing.push({
+          ...plan,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType: 'cable_tv',
+        service_id,
+        plans: withPricing
+      }, 'Cable plans loaded');
+    }
+
+    // For the remaining services, IA Cafe does not expose a clean "plan list"
+    // in the same way. So we return supported providers/options.
+    const providersRes = await iacafe.getProviders();
+    const providers = providersRes?.data || {};
+
+    let options = [];
+
+    switch (serviceType) {
+      case 'airtime':
+        options = (providers.airtime || []).map((x) => ({
+          id: x,
+          name: x.toUpperCase()
+        }));
+        break;
+
+      case 'electricity':
+        options = (providers.electricity || []).map((x) => ({
+          id: x,
+          name: x.replace(/-/g, ' ').toUpperCase()
+        }));
+        break;
+
+      case 'betting':
+        options = (providers.betting || []).map((x) => ({
+          id: x,
+          name: x
+        }));
+        break;
+
+      case 'recharge_pin':
+      case 'data_pin':
+      case 'exam_pin':
+        options = (providers.epins || []).map((x) => ({
+          id: x,
+          name: x.toUpperCase()
+        }));
+        break;
+
+      default:
+        options = [];
+        break;
     }
 
     return respondOk(res, {
       serviceType,
-      plans: withPricing
-    }, 'Plans loaded');
+      options
+    }, 'Service options loaded');
   } catch (err) {
     console.error('LOAD PLANS ERROR:', err);
     console.error('MESSAGE:', err?.message);
     console.error('STACK:', err?.stack);
     console.error('RESPONSE DATA:', err?.response?.data);
 
-    return respondError(res, 500, 'Unable to load plans');
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.message || 'Unable to load plans'
+    );
   }
 });
 app.post('/api/services/data', requireAuth, async (req, res) => {
