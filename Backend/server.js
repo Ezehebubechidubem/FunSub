@@ -1037,12 +1037,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 401, 'Unauthorized');
     }
 
-    console.log('REQ.USER IN PROCESS:', req.user);
-    console.log('REQ.BODY IN PROCESS:', req.body);
-
-    let pricing;
+    let pricing = null;
     let selectedPlan = null;
-    let providerPayload = null;
     let description = `${serviceName} purchase`;
 
     const rawDestination =
@@ -1054,8 +1050,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       body.billersCode ||
       '';
 
-    const destination =
-      normalizePhone(rawDestination) || String(rawDestination).trim();
+    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
 
     if (normalizedServiceType === 'airtime') {
       const amount = toNumber(body.amount, 0);
@@ -1065,14 +1060,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       }
 
       pricing = await applyMarkup('airtime', amount);
-
-      providerPayload = buildProviderPayload({
-        serviceType: 'airtime',
-        amount,
-        phone: destination,
-        network: body.network,
-        extra: body.extra || {}
-      });
     } else {
       const variationCode = String(
         body.variation_code ||
@@ -1083,93 +1070,41 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         ''
       ).trim();
 
+      const planAmount = toNumber(body.plan_amount || body.amount, 0);
+
       if (!variationCode) {
         return respondError(res, 400, 'variation_code is required');
       }
 
-      if (
-        !destination &&
-        !body.phone &&
-        !body.smartcard_number &&
-        !body.meter_number &&
-        !body.customer_id
-      ) {
-        return respondError(res, 400, 'Customer number is required');
+      if (planAmount <= 0) {
+        return respondError(res, 400, 'plan_amount is required');
       }
 
-      const serviceID = resolveVtpassServiceId(normalizedServiceType, {
-        network: body.network,
-        serviceID: body.serviceID || body.serviceId
-      });
-
-      if (normalizedServiceType === 'data' && !serviceID) {
-        return respondError(res, 400, 'Invalid network');
-      }
-
-      const planAmount = Number(body.plan_amount || body.amount || 0);
-
-      if (Number.isFinite(planAmount) && planAmount > 0) {
-        selectedPlan = {
-          id: variationCode,
-          name: body.plan_name || `${serviceName} Plan`,
-          rawPrice: planAmount,
-          meta: {}
-        };
-      } else {
-        const providerPlans = (await fetchProviderPlans(normalizedServiceType, {
-          network: body.network || undefined,
-          provider: body.provider || undefined,
-          serviceID
-        })).map(normalizeProviderPlan);
-
-        selectedPlan = providerPlans.find(plan => {
-          const planId = String(plan.id || '').trim().toLowerCase();
-          const metaVariation = String(
-            plan.meta?.variation_code ||
-            plan.meta?.variationCode ||
-            plan.meta?.code ||
-            ''
-          ).trim().toLowerCase();
-
-          return (
-            planId === variationCode.toLowerCase() ||
-            metaVariation === variationCode.toLowerCase()
-          );
-        });
-
-        if (!selectedPlan) {
-          return respondError(res, 404, 'Selected plan not found');
+      selectedPlan = {
+        id: variationCode,
+        name: body.plan_name || `${serviceName} Plan`,
+        rawPrice: planAmount,
+        purchase_route:
+          String(body.purchase_route || body.plan_source || body.source || '').toLowerCase() === 'budget-data'
+            ? '/budget-data'
+            : '/data',
+        purchase_key: variationCode,
+        meta: {
+          service_id: body.service_id || body.serviceId,
+          provider: body.provider,
+          network: body.network
         }
-      }
+      };
 
       pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
-
-      providerPayload = buildProviderPayload({
-        serviceType: normalizedServiceType,
-        amount: selectedPlan.rawPrice,
-        phone: body.phone || destination || undefined,
-        meterNumber: body.meter_number || destination || undefined,
-        smartCardNumber: body.smartcard_number || destination || undefined,
-        accountNumber: body.accountNumber || destination || undefined,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        network: body.network,
-        selectedPlan,
-        extra: {
-          ...(body.extra || {}),
-          serviceID,
-          variation_code: variationCode
-        }
-      });
-
       description = `${serviceName} - ${selectedPlan.name}`;
     }
 
-    if (!pricing || !providerPayload) {
+    if (!pricing) {
       return respondError(res, 400, 'Unable to prepare purchase');
     }
 
-    const purchaseAmount = Number(pricing.finalPrice).toFixed(2);
+    const purchaseAmount = Number(pricing.finalPrice);
 
     const client = await pool.connect();
     let txRow = null;
@@ -1191,22 +1126,18 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       }
 
       const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < Number(purchaseAmount)) {
+      if (currentBalance < purchaseAmount) {
         await client.query('ROLLBACK');
         return respondError(res, 400, 'Insufficient wallet balance');
       }
 
-      const debitResult = await client.query(
+      await client.query(
         `UPDATE wallets
-         SET balance = balance - $2, updated_at = NOW()
-         WHERE user_id = $1
-         RETURNING balance`,
+         SET balance = balance - $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
         [userId, purchaseAmount]
       );
-
-      console.log('DEBIT RESULT:', debitResult.rows[0]);
-      console.log('PURCHASE AMOUNT:', purchaseAmount);
-      console.log('USER ID:', userId);
 
       const inserted = await client.query(
         `INSERT INTO transactions
@@ -1225,7 +1156,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           JSON.stringify({
             serviceType: normalizedServiceType,
             serviceName,
-            providerPayload,
             selectedPlan,
             pricing
           })
@@ -1247,45 +1177,20 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       client.release();
     }
 
-    const providerResponse = USING_MOCK_PROVIDER
-      ? await (String(body.force_fail).toLowerCase() === 'true'
-          ? mockProvider.buyFail({
-              request_id: body.request_id,
-              serviceID: providerPayload.serviceID,
-              phone: providerPayload.phone,
-              amount: providerPayload.amount,
-              serviceType: normalizedServiceType,
-              email: body.email
-            })
-          : mockProvider.buySuccess({
-              request_id: body.request_id,
-              serviceID: providerPayload.serviceID,
-              phone: providerPayload.phone,
-              amount: providerPayload.amount,
-              variation_code: providerPayload.variation_code,
-              serviceType: normalizedServiceType,
-              email: body.email
-            }))
-      : await callProvider(
-          normalizedServiceType,
-          'buy',
-          providerPayload,
-          {
-            network: body.network,
-            serviceID: body.serviceID || body.serviceId,
-            selectedPlan,
-            planId: selectedPlan?.id,
-            planName: selectedPlan?.name,
-            extra: body.extra || {}
-          }
-        );
+    const providerResponse = await buyServiceThroughGateway({
+      serviceType: normalizedServiceType,
+      body,
+      selectedPlan,
+      requestId: txRow.reference
+    });
 
     const success = providerRequestLooksSuccessful(providerResponse);
 
     if (!success) {
       await pool.query(
         `UPDATE wallets
-         SET balance = balance + $2, updated_at = NOW()
+         SET balance = balance + $2,
+             updated_at = NOW()
          WHERE user_id = $1`,
         [userId, purchaseAmount]
       );
@@ -1302,7 +1207,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           JSON.stringify({
             serviceType: normalizedServiceType,
             serviceName,
-            providerPayload,
             selectedPlan,
             pricing,
             providerResponse
@@ -1313,7 +1217,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(
         res,
         400,
-        providerResponse?.response_description || 'Purchase failed'
+        providerResponse?.response_description || providerResponse?.message || 'Purchase failed'
       );
     }
 
@@ -1327,7 +1231,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         JSON.stringify({
           serviceType: normalizedServiceType,
           serviceName,
-          providerPayload,
           selectedPlan,
           pricing,
           providerResponse
@@ -1369,29 +1272,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
   }
 }
-async function requeryVtpassTransaction(requestId) {
-  const usingMock = SERVICE_PROVIDER === 'mock';
-  const baseUrl = usingMock ? MOCK_PROVIDER_BASE_URL : VTPASS_BASE_URL;
-  const requeryPath = usingMock ? '/api/requery' : VTPASS_REQUERY_PATH;
 
-  if (!baseUrl) {
-    throw new Error('Provider base URL is missing');
-  }
-  if (!requeryPath) {
-    throw new Error('Provider requery path is missing');
-  }
-
-  const response = await axios.post(
-    `${baseUrl}${requeryPath}`,
-    { request_id: requestId },
-    {
-      headers: providerHeaders('post'),
-      timeout: PROVIDER_TIMEOUT_MS
-    }
-  );
-
-  return response.data;
-}
 function requireDebugAccess(req, res, next) {
   const got = req.headers['x-debug-key'] || req.query.debug_key;
   const expected = process.env.DEBUG_KEY;
