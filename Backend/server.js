@@ -224,6 +224,7 @@ function providerResponseState(response) {
     text.includes('complete') ||
     text.includes('paid') ||
     text.includes('ok') ||
+    text.includes('completed-api') ||
     text.includes('submitted successfully') ||
     text.includes('processed successfully')
   ) {
