@@ -266,6 +266,7 @@
         id="phone"
         maxlength="11"
         placeholder="08012345678"
+        inputmode="numeric"
       >
 
       <label>Choose Network</label>
@@ -293,6 +294,7 @@
         type="tel"
         id="amount"
         placeholder="Enter amount"
+        inputmode="numeric"
       >
 
       <button id="buyBtn" class="buy-btn">
@@ -323,13 +325,13 @@
         </div>
 
         <div class="receipt-row">
-          <span>Amount</span>
-          <span id="receiptAmount"></span>
+          <span>Request ID</span>
+          <span id="receiptRequestId"></span>
         </div>
 
         <div class="receipt-row">
-          <span>Description</span>
-          <span id="receiptDescription"></span>
+          <span>Amount</span>
+          <span id="receiptAmount"></span>
         </div>
 
         <div class="receipt-row">
@@ -355,6 +357,7 @@
 
   <script>
     const BUY_URL = "https://funsub.onrender.com/api/services/airtime";
+
     let currentNetwork = "mtn";
     let lastReceipt = null;
 
@@ -362,47 +365,49 @@
       return localStorage.getItem("funsub_token") || "";
     }
 
+    function generateRequestId(prefix = "AIRTIME") {
+      const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+      return `${prefix}_${Date.now()}_${rand}`;
+    }
+
     function getNetworkMeta(network) {
       const n = String(network || "").trim().toLowerCase();
       const map = {
         mtn: {
           name: "MTN",
-          logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg"
+          logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg",
+          service_id: "mtn-airtime"
         },
         glo: {
           name: "GLO",
-          logo: "https://i.postimg.cc/B64Y96DS/glo.png"
+          logo: "https://i.postimg.cc/B64Y96DS/glo.png",
+          service_id: "glo-airtime"
         },
         airtel: {
           name: "Airtel",
-          logo: "https://i.postimg.cc/FKZbSxf8/airtel.png"
+          logo: "https://i.postimg.cc/FKZbSxf8/airtel.png",
+          service_id: "airtel-airtime"
         },
         "9mobile": {
           name: "9mobile",
-          logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png"
+          logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png",
+          service_id: "etisalat-airtime"
         }
       };
 
-      return map[n] || { name: n.toUpperCase(), logo: "" };
-    }
-
-    function getServiceID(network) {
-      const map = {
-        mtn: "mtn-airtime",
-        glo: "glo-airtime",
-        airtel: "airtel-airtime",
-        "9mobile": "etisalat-airtime"
+      return map[n] || {
+        name: n.toUpperCase(),
+        logo: "",
+        service_id: ""
       };
-      return map[String(network || "").trim().toLowerCase()] || "";
     }
 
-    function formatWholeNaira(value) {
+    function formatAmount(value) {
       const num = Number(value);
-      if (Number.isNaN(num)) return "N/A";
-      const whole = Math.floor(num / 100) * 100;
-      return "₦" + whole.toLocaleString("en-NG", {
+      if (Number.isNaN(num)) return "₦0";
+      return "₦" + num.toLocaleString("en-NG", {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 0
+        maximumFractionDigits: 2
       });
     }
 
@@ -414,8 +419,8 @@
         "FunSub Airtime Receipt",
         `Network: ${r.networkName || ""}`,
         `Reference: ${r.reference || ""}`,
+        `Request ID: ${r.requestId || ""}`,
         `Amount: ${r.amount || ""}`,
-        `Description: ${r.description || ""}`,
         `Phone: ${r.phone || ""}`,
         `Status: ${r.status || ""}`,
         `Date: ${r.date || ""}`
@@ -452,9 +457,11 @@
     const phoneInput = document.getElementById("phone");
     phoneInput.addEventListener("input", function () {
       let value = this.value.replace(/\D/g, "");
+
       if (value.length > 0 && value.charAt(0) !== "0") {
         value = "";
       }
+
       value = value.slice(0, 11);
       this.value = value;
     });
@@ -495,11 +502,39 @@
       document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
     }
 
+    function showSuccessModal(message) {
+      document.getElementById("transactionModal").style.display = "flex";
+      document.getElementById("receiptSection").style.display = "block";
+      document.getElementById("transactionIcon").className = "transaction-icon success";
+      document.getElementById("transactionIcon").innerHTML = "✅";
+      document.getElementById("transactionTitle").innerText = "Transaction Successful";
+      document.getElementById("transactionMessage").innerText = message || "Transaction successful";
+    }
+
     function closeModal() {
       document.getElementById("transactionModal").style.display = "none";
     }
 
-    async function buyData() {
+    function setReceiptValues({
+      networkMeta,
+      requestId,
+      reference,
+      amount,
+      phone,
+      status
+    }) {
+      document.getElementById("receiptNetworkLogo").src = networkMeta.logo || "";
+      document.getElementById("receiptNetworkName").innerText = networkMeta.name || "";
+
+      document.getElementById("receiptReference").innerText = reference || "";
+      document.getElementById("receiptRequestId").innerText = requestId || "";
+      document.getElementById("receiptAmount").innerText = formatAmount(amount);
+      document.getElementById("receiptPhone").innerText = phone || "";
+      document.getElementById("receiptStatus").innerText = status || "";
+      document.getElementById("receiptDate").innerText = new Date().toLocaleString();
+    }
+
+    async function buyAirtime() {
       const token = getToken();
 
       if (!token) {
@@ -508,16 +543,24 @@
       }
 
       const phone = document.getElementById("phone").value.trim();
-      const amount = document.getElementById("amount").value.trim();
+      const amountRaw = document.getElementById("amount").value.trim();
       const networkMeta = getNetworkMeta(currentNetwork);
-      const serviceID = getServiceID(currentNetwork);
+      const service_id = networkMeta.service_id;
+      const request_id = generateRequestId("AIRTIME");
+
+      const amount = Number(amountRaw);
 
       if (!/^0\d{10}$/.test(phone)) {
         alert("Phone number must start with 0 and contain exactly 11 digits");
         return;
       }
 
-      if (!amount || Number(amount) <= 0) {
+      if (!service_id) {
+        alert("Please choose a valid network");
+        return;
+      }
+
+      if (!amountRaw || Number.isNaN(amount) || amount <= 0) {
         alert("Enter a valid amount");
         return;
       }
@@ -536,71 +579,116 @@
             "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
-            network: currentNetwork,
-            serviceID,
+            request_id,
             phone,
+            service_id,
             amount
           })
         });
 
-        const data = await response.json();
-        console.log("PURCHASE RESPONSE:", data);
+        const data = await response.json().catch(() => ({}));
+        console.log("AIRTIME RESPONSE:", data);
 
-        if (response.ok && data.transaction) {
-          const tx = data.providerResponse?.content?.transactions || {};
+        const tx =
+          data.transaction ||
+          data.data?.transaction ||
+          data.result ||
+          data.content ||
+          {};
 
-          document.getElementById("transactionIcon").className = "transaction-icon success";
-          document.getElementById("transactionIcon").innerHTML = "✅";
-          document.getElementById("transactionTitle").innerText = "Transaction Successful";
-          document.getElementById("transactionMessage").innerText = data.message || "Transaction successful";
+        const statusText = String(
+          tx.status ||
+          data.status ||
+          data.transaction?.status ||
+          ""
+        ).toLowerCase();
 
-          document.getElementById("receiptSection").style.display = "block";
-          document.getElementById("receiptNetworkLogo").src = networkMeta.logo;
-          document.getElementById("receiptNetworkName").innerText = networkMeta.name;
+        const reference =
+          tx.reference ||
+          tx.tx_ref ||
+          tx.request_id ||
+          data.reference ||
+          request_id;
 
-          document.getElementById("receiptReference").innerText = data.transaction.reference || "";
-          document.getElementById("receiptAmount").innerText = formatWholeNaira(data.transaction.amount || amount);
-          document.getElementById("receiptDescription").innerText = data.transaction.description || "Airtime Purchase";
-          document.getElementById("receiptPhone").innerText = tx.unique_element || phone;
-          document.getElementById("receiptStatus").innerText = tx.status || "success";
-          document.getElementById("receiptDate").innerText = new Date(data.transaction.created_at || Date.now()).toLocaleString();
+        if (
+          response.ok &&
+          (
+            data.transaction ||
+            data.success === true ||
+            statusText === "success" ||
+            statusText === "successful" ||
+            statusText === "completed"
+          )
+        ) {
+          showSuccessModal(data.message || "Transaction successful");
+
+          setReceiptValues({
+            networkMeta,
+            requestId: request_id,
+            reference,
+            amount: amount,
+            phone,
+            status: tx.status || data.status || "success"
+          });
 
           lastReceipt = {
             networkName: networkMeta.name,
-            reference: data.transaction.reference || "",
-            amount: formatWholeNaira(data.transaction.amount || amount),
-            description: data.transaction.description || "Airtime Purchase",
-            phone: tx.unique_element || phone,
-            status: tx.status || "success",
-            date: new Date(data.transaction.created_at || Date.now()).toLocaleString()
+            reference,
+            requestId: request_id,
+            amount: formatAmount(amount),
+            phone,
+            status: tx.status || data.status || "success",
+            date: new Date().toLocaleString()
           };
 
           return;
         }
 
         if (
-          String(data.status || "").toLowerCase() === "pending" ||
-          String(data.transaction?.status || "").toLowerCase() === "pending"
+          statusText === "pending" ||
+          data.status === "pending" ||
+          data.transaction?.status === "pending"
         ) {
           showPendingModal(data.message || "Transaction pending");
+
+          setReceiptValues({
+            networkMeta,
+            requestId: request_id,
+            reference,
+            amount: amount,
+            phone,
+            status: "pending"
+          });
+
           lastReceipt = {
             networkName: networkMeta.name,
-            reference: data.transaction?.reference || "",
-            amount: formatWholeNaira(amount),
-            description: "Airtime Purchase",
+            reference,
+            requestId: request_id,
+            amount: formatAmount(amount),
             phone,
             status: "pending",
             date: new Date().toLocaleString()
           };
+
           return;
         }
 
         showFailedModal(data.message || "Transaction failed");
+
+        setReceiptValues({
+          networkMeta,
+          requestId: request_id,
+          reference,
+          amount: amount,
+          phone,
+          status: "failed"
+        });
+
         lastReceipt = {
           networkName: networkMeta.name,
-          reference: data.transaction?.reference || "",
-          amount: formatWholeNaira(amount),
-          description: "Airtime Purchase",
+          reference,
+          requestId: request_id,
+          amount: formatAmount(amount),
           phone,
           status: "failed",
           date: new Date().toLocaleString()
@@ -608,11 +696,21 @@
       } catch (error) {
         console.error(error);
         showFailedModal("Unable to complete transaction");
+
+        setReceiptValues({
+          networkMeta,
+          requestId: request_id,
+          reference: "",
+          amount: amount,
+          phone,
+          status: "failed"
+        });
+
         lastReceipt = {
           networkName: networkMeta.name,
           reference: "",
-          amount: formatWholeNaira(amount),
-          description: "Airtime Purchase",
+          requestId: request_id,
+          amount: formatAmount(amount),
           phone,
           status: "failed",
           date: new Date().toLocaleString()
@@ -623,7 +721,7 @@
       }
     }
 
-    document.getElementById("buyBtn").addEventListener("click", buyData);
+    document.getElementById("buyBtn").addEventListener("click", buyAirtime);
   </script>
 </body>
 </html>
