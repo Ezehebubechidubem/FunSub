@@ -63,56 +63,6 @@ const SERVICE_MARKUP_DEFAULTS = {
   exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
 };
 
-const SERVICE_PROVIDER = String(process.env.SERVICE_PROVIDER || 'vtpass').toLowerCase();
-const USING_MOCK_PROVIDER = SERVICE_PROVIDER === 'mock';
-const VTPASS_VARIATIONS_PATH = String(process.env.VTPASS_VARIATIONS_PATH || '');
-const VTPASS_PAY_PATH = String(process.env.VTPASS_PAY_PATH || '');
-const VTPASS_REQUERY_PATH = String(process.env.VTPASS_REQUERY_PATH || '');
-
-const VTPASS_API_KEY = process.env.VTPASS_API_KEY || '';
-const VTPASS_PUBLIC_KEY = process.env.VTPASS_PUBLIC_KEY || '';
-const VTPASS_SECRET_KEY = process.env.VTPASS_SECRET_KEY || '';
-const PROVIDER_TIMEOUT_MS = envNumber(process.env.PROVIDER_TIMEOUT_MS, 30000);
-
-const PROVIDER_ENDPOINTS = {
-  airtime: {
-    plansPath: process.env.VTPASS_AIRTIME_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_AIRTIME_BUY_PATH || ''
-  },
-  data: {
-    plansPath: process.env.VTPASS_DATA_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_DATA_BUY_PATH || ''
-  },
-  cable_tv: {
-    plansPath: process.env.VTPASS_CABLE_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_CABLE_BUY_PATH || ''
-  },
-  electricity: {
-    plansPath: process.env.VTPASS_ELECTRICITY_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_ELECTRICITY_BUY_PATH || ''
-  },
-  betting: {
-    plansPath: process.env.VTPASS_BETTING_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_BETTING_BUY_PATH || ''
-  },
-  recharge_pin: {
-    plansPath: process.env.VTPASS_RECHARGE_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_RECHARGE_PIN_BUY_PATH || ''
-  },
-  data_pin: {
-    plansPath: process.env.VTPASS_DATA_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_DATA_PIN_BUY_PATH || ''
-  },
-  exam_pin: {
-    plansPath: process.env.VTPASS_EXAM_PIN_PLANS_PATH || '',
-    buyPath: process.env.VTPASS_EXAM_PIN_BUY_PATH || ''
-  }
-};
-
-// Added for Render: fail fast if DATABASE_URL is missing
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is missing on Render');
-}
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
