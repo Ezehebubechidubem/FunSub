@@ -867,23 +867,6 @@ async function applyMarkup(serviceType, baseAmount) {
     finalPrice: Number(finalPrice.toFixed(2))
   };
 }
-function providerHeaders(kind = 'get') {
-  const headers = {
-    'Content-Type': 'application/json'
-  };
-
-  if (VTPASS_API_KEY) {
-    headers['api-key'] = VTPASS_API_KEY;
-  }
-
-  if (kind === 'get') {
-    if (VTPASS_PUBLIC_KEY) headers['public-key'] = VTPASS_PUBLIC_KEY;
-  } else if (kind === 'post') {
-    if (VTPASS_SECRET_KEY) headers['secret-key'] = VTPASS_SECRET_KEY;
-  }
-
-  return headers;
-}
 
 function providerAuthPayload() {
   return {};
