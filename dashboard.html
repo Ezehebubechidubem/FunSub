@@ -1095,23 +1095,24 @@
     const getToken = () => localStorage.getItem("funsub_token") || "";
 
     function formatMoney(value) {
-      const num = Number(value || 0);
-      return `₦${num.toLocaleString("en-NG", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      })}`;
-    }
+  const num = Number(value || 0);
+  if (Number.isNaN(num)) return "₦0.00";
 
-    function formatWholeMoney(value) {
-      const num = Number(value || 0);
-      if(Number.isNaN(num)) return "₦0";
-       const rounded=Math.floor(num/100) * 100; 
-return `₦${rounded.toLocaleString("en-NG",{
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0
-        })}`;
-      }
+  return `₦${num.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+}
 
+function formatWholeMoney(value) {
+  const num = Number(value || 0);
+  if (Number.isNaN(num)) return "₦0.00";
+
+  return `₦${num.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+}
     function safeText(v, fallback = "") {
       const s = String(v ?? "").trim();
       return s || fallback;
