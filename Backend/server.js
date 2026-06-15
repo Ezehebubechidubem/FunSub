@@ -20,7 +20,11 @@ const envNumber = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
-
+const iacafe = createIacafeGateway({
+  baseURL: process.env.IACAFE_BASE_URL,
+  apiKey: process.env.IACAFE_API_KEY,
+  authType: process.env.IACAFE_AUTH_TYPE || "bearer",
+});
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
