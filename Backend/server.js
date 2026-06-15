@@ -263,14 +263,31 @@ function providerRequestLooksSuccessful(response) {
     .map((v) => normalizeStatus(v))
     .filter(Boolean);
 
-  if (candidates.some((v) => SUCCESS_STATUSES.has(v))) return true;
+  if (
+    candidates.some(
+      (v) =>
+        SUCCESS_STATUSES.has(v) ||
+        v === 'completed-api' ||
+        v === 'completed api' ||
+        v === 'complete' ||
+        v === 'completed' ||
+        v === 'transaction completed' ||
+        v === 'order completed' ||
+        v === 'payment completed' ||
+        v === 'transaction successful' ||
+        v === 'purchase successful' ||
+        v === 'processed successfully' ||
+        v === 'submitted successfully'
+    )
+  ) {
+    return true;
+  }
 
   const responseCode = String(response?.response_code ?? response?.data?.response_code ?? '').trim();
   if (['00', '0', '200'].includes(responseCode)) return true;
 
   return false;
 }
-
 async function buyServiceThroughGateway({
   serviceType,
   body,
