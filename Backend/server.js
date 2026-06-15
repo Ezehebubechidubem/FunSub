@@ -12,7 +12,7 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { createIacafeGateway } = require("./services/iacafeGateway");
+const { createIacafeGateway } = require("./services/VtuGateway");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
