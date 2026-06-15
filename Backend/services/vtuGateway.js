@@ -20,6 +20,20 @@ function clean(obj = {}) {
   return out;
 }
 
+function pickArray(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.plans)) return data.plans;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.response)) return data.response;
+  if (Array.isArray(data?.content?.variations)) return data.content.variations;
+  if (Array.isArray(data?.data?.content?.variations)) return data.data.content.variations;
+  if (Array.isArray(data?.data?.variations)) return data.data.variations;
+  if (Array.isArray(data?.variations)) return data.variations;
+  return [];
+}
+
 class ProviderClient {
   constructor({ name, baseURL, apiKey, authType = "bearer", timeout = 30000 }) {
     if (!name) throw new Error("Provider name is required");
@@ -35,10 +49,12 @@ class ProviderClient {
           ? {
               "X-API-Key": apiKey,
               "Content-Type": "application/json",
+              Accept: "application/json",
             }
           : {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
+              Accept: "application/json",
             },
     });
   }
@@ -65,18 +81,18 @@ function createVtuGateway({ primary, fallback }) {
     }
   }
 
-  function normalizeDataPlan(item, source = "iacafe") {
+  function normalizeDataPlan(item, source = "primary") {
     return {
-      id: item.variation_id ?? item.data_plan ?? item.id,
+      id: item.variation_id ?? item.data_plan ?? item.id ?? item.code,
       name: item.data_plan ?? item.name ?? item.variation_name ?? "Plan",
-      price: Number(item.reseller_price ?? item.price ?? item.api_user_price ?? 0),
+      price: Number(item.reseller_price ?? item.price ?? item.api_user_price ?? item.amount ?? 0),
       availability: item.availability ?? "Available",
       source,
       meta: item,
     };
   }
 
-  function normalizeCablePlan(item, source = "iacafe") {
+  function normalizeCablePlan(item, source = "primary") {
     return {
       id: item.variation_id ?? item.id ?? item.code,
       name: item.name ?? item.variation_name ?? "Plan",
@@ -94,20 +110,28 @@ function createVtuGateway({ primary, fallback }) {
     );
   }
 
+  async function getVariations({ product, service_id } = {}) {
+    if (!product) throw new Error("product is required");
+    return withFallback(
+      () => p.get("/variations", { product, service_id }),
+      () => f.get("/variations", { product, service_id })
+    );
+  }
+
+  async function getBudgetPlans({ network_id, provider } = {}) {
+    return withFallback(
+      () => p.get("/budget-data/plans", clean({ network_id, provider })),
+      () => f.get("/budget-data/plans", clean({ network_id, provider }))
+    );
+  }
+
   async function getPlans({ product, service_id, network_id, provider } = {}) {
     if (product === "data") {
-      const regular = await withFallback(
-        () => p.get("/variations", { product: "data", service_id }),
-        () => f.get("/variations", { product: "data", service_id })
-      );
+      const regular = await getVariations({ product: "data", service_id }).catch(() => null);
+      const budget = await getBudgetPlans({ network_id, provider }).catch(() => null);
 
-      const budget = await withFallback(
-        () => p.get("/budget-data/plans", clean({ network_id, provider })),
-        () => f.get("/budget-data/plans", clean({ network_id, provider }))
-      ).catch(() => null);
-
-      const regularList = Array.isArray(regular?.data) ? regular.data : [];
-      const budgetList = Array.isArray(budget?.data) ? budget.data : [];
+      const regularList = pickArray(regular);
+      const budgetList = pickArray(budget);
 
       return {
         product: "data",
@@ -116,29 +140,26 @@ function createVtuGateway({ primary, fallback }) {
           ...regularList.map((x) => ({
             ...normalizeDataPlan(x, "regular"),
             purchase_route: "/data",
-            purchase_key: x.variation_id,
+            purchase_key: x.variation_id ?? x.id ?? x.code,
           })),
           ...budgetList.map((x) => ({
-            id: x.data_plan,
-            name: x.name,
-            price: Number(x.api_user_price ?? 0),
+            id: x.data_plan ?? x.id ?? x.code,
+            name: x.name ?? x.data_plan ?? "Plan",
+            price: Number(x.api_user_price ?? x.price ?? 0),
             availability: "Available",
             source: "budget-data",
             meta: x,
             purchase_route: "/budget-data",
-            purchase_key: x.data_plan,
+            purchase_key: x.data_plan ?? x.id ?? x.code,
           })),
         ],
       };
     }
 
     if (product === "cable") {
-      const cable = await withFallback(
-        () => p.get("/variations", { product: "cable", service_id }),
-        () => f.get("/variations", { product: "cable", service_id })
-      );
+      const cable = await getVariations({ product: "cable", service_id }).catch(() => null);
+      const list = pickArray(cable);
 
-      const list = Array.isArray(cable?.data) ? cable.data : [];
       return {
         product: "cable",
         service_id,
@@ -150,13 +171,7 @@ function createVtuGateway({ primary, fallback }) {
       };
     }
 
-    // airtime / electricity / betting / epins
-    const response = await withFallback(
-      () => p.get("/providers"),
-      () => f.get("/providers")
-    );
-
-    return response;
+    return getProviders();
   }
 
   async function buyAirtime({ request_id, phone, service_id, amount }) {
@@ -173,26 +188,35 @@ function createVtuGateway({ primary, fallback }) {
     );
   }
 
-  async function buyData({ request_id, phone, plan }) {
+  async function buyBudgetData({ request_id, phone, data_plan }) {
+    const body = {
+      request_id: request_id || makeRequestId("BUDGETDATA"),
+      phone,
+      data_plan,
+    };
+
+    return withFallback(
+      () => p.post("/budget-data", body),
+      () => f.post("/budget-data", body)
+    );
+  }
+
+  async function buyData({ request_id, phone, plan, service_id }) {
+    if (!plan) throw new Error("Plan is required");
+
     const body = {
       request_id: request_id || makeRequestId("DATA"),
       phone,
     };
 
-    if (!plan) throw new Error("Plan is required");
-
-    // If plan came from /budget-data/plans, buy with /budget-data
     if (plan.purchase_route === "/budget-data") {
-      body.data_plan = plan.purchase_key;
-      return withFallback(
-        () => p.post("/budget-data", body),
-        () => f.post("/budget-data", body)
-      );
+      body.data_plan = plan.purchase_key ?? plan.id;
+      return buyBudgetData(body);
     }
 
-    // Regular data variation buy
-    body.variation_id = plan.purchase_key;
-    body.service_id = plan.meta?.service_id || plan.meta?.serviceId || plan.meta?.network || plan.service_id;
+    body.variation_id = plan.purchase_key ?? plan.id;
+    body.service_id = service_id || plan.meta?.service_id || plan.meta?.serviceId || plan.meta?.network;
+
     return withFallback(
       () => p.post("/data", body),
       () => f.post("/data", body)
@@ -250,8 +274,11 @@ function createVtuGateway({ primary, fallback }) {
     primary: p.name,
     fallback: f?.name || null,
     getProviders,
+    getVariations,
+    getBudgetPlans,
     getPlans,
     buyAirtime,
+    buyBudgetData,
     buyData,
     buyCable,
     buyElectricity,
@@ -260,4 +287,30 @@ function createVtuGateway({ primary, fallback }) {
   };
 }
 
-module.exports = { createVtuGateway, makeRequestId };
+function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 30000, fallback } = {}) {
+  return createVtuGateway({
+    primary: {
+      name: "iacafe",
+      baseURL,
+      apiKey,
+      authType,
+      timeout,
+    },
+    fallback: fallback
+      ? {
+          name: fallback.name || "fallback",
+          baseURL: fallback.baseURL,
+          apiKey: fallback.apiKey,
+          authType: fallback.authType || "bearer",
+          timeout: fallback.timeout || timeout,
+        }
+      : null,
+  });
+}
+
+module.exports = {
+  createVtuGateway,
+  createIacafeGateway,
+  makeRequestId,
+  isRetryableError,
+};
