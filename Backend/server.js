@@ -2233,31 +2233,11 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   }
 });
 app.post('/api/services/data', requireAuth, async (req, res) => {
-  try {
-    const result = await iacafe.buyBudgetData({
-      request_id: req.body.request_id,
-      phone: req.body.phone,
-      data_plan: req.body.data_plan,
-    });
-
-    return respondOk(res, { providerResponse: result }, "Data purchased");
-  } catch (err) {
-    return respondError(res, err.response?.status || 500, err.response?.data?.error?.message || err.message);
-  }
+  return processServicePayment(req, res, 'data', 'Data');
 });
-app.post('/api/services/airtime', requireAuth, async (req, res) => {
-  try {
-    const result = await iacafe.buyAirtime({
-      request_id: req.body.request_id,
-      phone: req.body.phone,
-      service_id: req.body.service_id,
-      amount: req.body.amount,
-    });
 
-    return respondOk(res, { providerResponse: result }, "Airtime purchased");
-  } catch (err) {
-    return respondError(res, err.response?.status || 500, err.response?.data?.error?.message || err.message);
-  }
+app.post('/api/services/airtime', requireAuth, async (req, res) => {
+  return processServicePayment(req, res, 'airtime', 'Airtime');
 });
 
 /* WEBHOOK */
