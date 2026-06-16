@@ -387,6 +387,17 @@
     return String(network || "").trim().toLowerCase();
   }
 
+  function getNetworkId(network) {
+    const n = String(network || "").trim().toLowerCase();
+    const map = {
+      mtn: 1,
+      glo: 2,
+      "9mobile": 3,
+      airtel: 4
+    };
+    return map[n] || "";
+  }
+
   function formatNaira(value) {
     const num = Number(value);
     if (Number.isNaN(num)) return "N/A";
@@ -490,9 +501,10 @@
 
     try {
       const serviceID = getServiceID(network);
+      const networkId = getNetworkId(network);
 
       const response = await fetch(
-        `${BASE_URL}?network=${encodeURIComponent(network)}&service_id=${encodeURIComponent(serviceID)}&serviceId=${encodeURIComponent(serviceID)}`,
+        `${BASE_URL}?network_id=${encodeURIComponent(networkId)}&network=${encodeURIComponent(network)}&service_id=${encodeURIComponent(serviceID)}&serviceId=${encodeURIComponent(serviceID)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`
@@ -581,6 +593,7 @@
     const source = selectedPlan.dataset.source || "";
     const purchase_route = selectedPlan.dataset.purchaseRoute || "";
     const serviceID = getServiceID(currentNetwork);
+    const network_id = getNetworkId(currentNetwork);
 
     showProcessingModal();
 
@@ -597,6 +610,7 @@
         },
         body: JSON.stringify({
           network: currentNetwork,
+          network_id,
           serviceID,
           service_id: serviceID,
           serviceId: serviceID,
