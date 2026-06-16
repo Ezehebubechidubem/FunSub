@@ -2047,7 +2047,6 @@ app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
 });
 
 /* SERVICES LIST */
-
 app.get('/api/services', requireAuth, async (req, res) => {
   try {
     return respondOk(res, {
@@ -2059,8 +2058,29 @@ app.get('/api/services', requireAuth, async (req, res) => {
   }
 });
 
-/* BILLS / SERVICES */
+function toNetworkId(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
+function getNetworkServiceId(networkId) {
+  const map = {
+    1: 'mtn',
+    2: 'glo',
+    3: '9mobile',
+    4: 'airtel'
+  };
+  return map[networkId] || null;
+}
+
+function extractArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.plans)) return payload.plans;
+  return [];
+}
+
+/* BILLS / SERVICES */
 app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
   try {
     const serviceType = normalizeServiceType(req.params.serviceType);
@@ -2080,58 +2100,72 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       return respondError(res, 400, 'Invalid service type');
     }
 
-    // IA Cafe currently exposes dynamic plan listings mainly for:
-    // - data
-    // - cable
-    // Other services are best treated as provider lists / supported services.
+    const includeUnavailable =
+      String(req.query.include_unavailable || '').toLowerCase() === 'true';
+
+    // DATA PLANS
     if (serviceType === 'data') {
-      const service_id = String(
+      const networkId = toNetworkId(req.query.network_id || req.query.networkId);
+      const provider = req.query.provider || undefined;
+
+      const explicitServiceId = String(
         req.query.service_id ||
         req.query.serviceId ||
-        req.query.network ||
         ''
       ).trim().toLowerCase();
 
+      const mappedServiceId = networkId ? getNetworkServiceId(networkId) : null;
+      const service_id = explicitServiceId || mappedServiceId;
+
       if (!service_id) {
-        return respondError(res, 400, 'service_id is required for data plans');
+        return respondError(
+          res,
+          400,
+          'service_id or network_id is required for data plans'
+        );
       }
 
       const regularRes = await iacafe.getVariations({
         product: 'data',
         service_id
+      }).catch((err) => {
+        console.error('REGULAR DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
       });
 
       const budgetRes = await iacafe.getBudgetPlans({
-        network_id: req.query.network_id || req.query.networkId || undefined,
-        provider: req.query.provider || undefined
-      }).catch(() => null);
+        network_id: networkId || undefined,
+        provider
+      }).catch((err) => {
+        console.error('BUDGET DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
 
-      const regularPlansRaw = Array.isArray(regularRes?.data) ? regularRes.data : [];
-      const budgetPlansRaw = Array.isArray(budgetRes?.data) ? budgetRes.data : [];
+      const regularPlansRaw = extractArray(regularRes);
+      const budgetPlansRaw = extractArray(budgetRes);
 
       const regularPlans = regularPlansRaw.map((plan) => ({
-        id: plan.variation_id,
-        name: plan.data_plan,
-        rawPrice: Number(plan.reseller_price || plan.price || 0),
-        availability: plan.availability || 'Available',
+        id: plan.variation_id ?? plan.id ?? plan.code,
+        name: plan.name ?? plan.variation_name ?? plan.data_plan ?? 'Data Plan',
+        rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+        availability: plan.availability ?? 'Available',
         source: 'regular',
         meta: plan
       }));
 
       const budgetPlans = budgetPlansRaw.map((plan) => ({
-        id: plan.data_plan,
-        name: plan.name,
-        rawPrice: Number(plan.api_user_price || 0),
-        availability: 'Available',
+        id: plan.data_plan ?? plan.id ?? plan.code,
+        name: plan.name ?? 'Data Plan',
+        rawPrice: Number(plan.api_user_price ?? plan.price ?? 0),
+        availability: plan.availability ?? 'Available',
         source: 'budget-data',
         meta: plan
       }));
 
-      const allPlans = [...regularPlans, ...budgetPlans]
-        .filter((plan) =>
-          String(plan.availability).toLowerCase() === 'available' ||
-          req.query.include_unavailable === 'true'
-        );
+      const allPlans = [...regularPlans, ...budgetPlans].filter((plan) => {
+        const available = String(plan.availability).toLowerCase() === 'available';
+        return available || includeUnavailable;
+      });
 
       const withPricing = [];
       for (const plan of allPlans) {
@@ -2149,11 +2183,13 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
       return respondOk(res, {
         serviceType: 'data',
+        network_id: networkId,
         service_id,
         plans: withPricing
       }, 'Data plans loaded');
     }
 
+    // CABLE TV PLANS
     if (serviceType === 'cable_tv') {
       const service_id = String(
         req.query.service_id ||
@@ -2169,23 +2205,26 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       const cableRes = await iacafe.getVariations({
         product: 'cable',
         service_id
+      }).catch((err) => {
+        console.error('CABLE PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
       });
 
-      const cablePlansRaw = Array.isArray(cableRes?.data) ? cableRes.data : [];
+      const cablePlansRaw = extractArray(cableRes);
 
       const plans = cablePlansRaw
         .map((plan) => ({
-          id: plan.variation_id || plan.id || plan.code,
-          name: plan.name || plan.variation_name || 'Cable Plan',
-          rawPrice: Number(plan.reseller_price || plan.price || plan.amount || 0),
-          availability: plan.availability || 'Available',
+          id: plan.variation_id ?? plan.id ?? plan.code,
+          name: plan.name ?? plan.variation_name ?? 'Cable Plan',
+          rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+          availability: plan.availability ?? 'Available',
           source: 'cable',
           meta: plan
         }))
-        .filter((plan) =>
-          String(plan.availability).toLowerCase() === 'available' ||
-          req.query.include_unavailable === 'true'
-        );
+        .filter((plan) => {
+          const available = String(plan.availability).toLowerCase() === 'available';
+          return available || includeUnavailable;
+        });
 
       const withPricing = [];
       for (const plan of plans) {
@@ -2208,25 +2247,27 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       }, 'Cable plans loaded');
     }
 
-    // For the remaining services, IA Cafe does not expose a clean "plan list"
-    // in the same way. So we return supported providers/options.
-    const providersRes = await iacafe.getProviders();
-    const providers = providersRes?.data || {};
+    // OTHER SERVICES: RETURN SUPPORTED OPTIONS
+    const providersRes = await iacafe.getProviders().catch((err) => {
+      console.error('PROVIDERS ERROR:', err?.response?.data || err?.message);
+      return null;
+    });
 
+    const providers = providersRes?.data || {};
     let options = [];
 
     switch (serviceType) {
       case 'airtime':
         options = (providers.airtime || []).map((x) => ({
           id: x,
-          name: x.toUpperCase()
+          name: String(x).toUpperCase()
         }));
         break;
 
       case 'electricity':
         options = (providers.electricity || []).map((x) => ({
           id: x,
-          name: x.replace(/-/g, ' ').toUpperCase()
+          name: String(x).replace(/-/g, ' ').toUpperCase()
         }));
         break;
 
@@ -2242,7 +2283,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
       case 'exam_pin':
         options = (providers.epins || []).map((x) => ({
           id: x,
-          name: x.toUpperCase()
+          name: String(x).toUpperCase()
         }));
         break;
 
