@@ -22,15 +22,23 @@
   color: #16a34a;
 }
 
+.status-success {
+  background: #ECFDF3;
+  color: #0f7a3b;
+}
+
 .status-failed {
-  color: #dc2626;
+  background: #FEE4E2;
+  color: #b42318;
 }
 
 .status-pending {
-  color: #eab308;
+  background: #FFF8E1;
+  color: #8a6d00;
 }
 
 .status-reversed {
+  background: #E8F1FF;
   color: #2563eb;
 }
     *{box-sizing:border-box}
@@ -1195,11 +1203,15 @@ function formatWholeMoney(value) {
     }
 
     function getStatusClass(status) {
-      const s = String(status || "").toLowerCase();
-      if (s === "success" || s === "successful" || s === "delivered") return "status-success";
-      if (s === "pending" || s === "initiated" || s === "processing") return "status-pending";
-      return "status-failed";
-    }
+  const s = String(status || "").toLowerCase();
+
+  if (s === "success" || s === "successful" || s === "delivered") return "status-success";
+  if (s === "pending" || s === "initiated" || s === "processing") return "status-pending";
+  if (s === "reversed" || s === "reverse") return "status-reversed";
+  if (s === "failed" || s === "error" || s === "declined") return "status-failed";
+
+  return "";
+}
 
     function renderTransactions(transactions = []) {
       if (!Array.isArray(transactions) || transactions.length === 0) {
