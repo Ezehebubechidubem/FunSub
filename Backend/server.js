@@ -177,121 +177,108 @@ function extractProviderText(response) {
 
   return parts.join(' | ');
 }
-async function cleanupExpiredPendingTransactions() {
+async function cleanupExpiredFundingIntents() {
   try {
     const expiredResult = await pool.query(
       `
-      SELECT id
-      FROM transactions
+      SELECT tx_ref, user_id, amount
+      FROM payment_intents
       WHERE status = 'pending'
-        AND created_at < NOW() - INTERVAL '60 seconds'
+        AND created_at < NOW() - INTERVAL '1 hour'
       ORDER BY created_at ASC
       `
     );
 
     if (!expiredResult.rows.length) return;
 
-    for (const row of expiredResult.rows) {
+    for (const intent of expiredResult.rows) {
       const client = await pool.connect();
 
       try {
         await client.query('BEGIN');
 
-        const txResult = await client.query(
+        const lockedIntent = await client.query(
           `
-          SELECT id, user_id, amount, status, description, reference, meta, type, category, created_at
-          FROM transactions
-          WHERE id = $1
+          SELECT tx_ref, user_id, amount, status
+          FROM payment_intents
+          WHERE tx_ref = $1
           FOR UPDATE
           `,
-          [row.id]
+          [intent.tx_ref]
         );
 
-        if (!txResult.rows.length) {
+        if (!lockedIntent.rows.length) {
           await client.query('ROLLBACK');
           continue;
         }
 
-        const tx = txResult.rows[0];
-        const currentStatus = String(tx.status || '').toLowerCase();
-
-        if (currentStatus !== 'pending') {
+        const currentIntent = lockedIntent.rows[0];
+        if (String(currentIntent.status || '').toLowerCase() !== 'pending') {
           await client.query('ROLLBACK');
           continue;
         }
 
-        const type = String(tx.type || '').toLowerCase();
-        const category = String(tx.category || '').toLowerCase();
+        await client.query(
+          `
+          UPDATE payment_intents
+          SET status = 'expired',
+              meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
+          WHERE tx_ref = $1
+          `,
+          [
+            currentIntent.tx_ref,
+            JSON.stringify({
+              expiredAt: new Date().toISOString(),
+              reason: 'funding_not_completed_within_1_hour'
+            })
+          ]
+        );
 
-        const isWalletFunding =
-          category === 'wallet' ||
-          type.includes('fund') ||
-          type.includes('deposit') ||
-          type.includes('topup');
+        await client.query(
+          `
+          UPDATE transactions
+          SET status = 'expired',
+              meta = $2
+          WHERE reference = $1
+            AND user_id = $3
+            AND status = 'pending'
+          `,
+          [
+            currentIntent.tx_ref,
+            JSON.stringify({
+              expiredAt: new Date().toISOString(),
+              reason: 'funding_not_completed_within_1_hour'
+            }),
+            currentIntent.user_id
+          ]
+        );
 
-        const isServicePurchase = !isWalletFunding;
+        await client.query('COMMIT');
 
-        if (isWalletFunding) {
-          await client.query(
-            `
-            UPDATE transactions
-            SET status = 'failed',
-                description = CONCAT(COALESCE(description, ''), ' (Auto Failed)')
-            WHERE id = $1
-            `,
-            [tx.id]
-          );
-
-          await client.query('COMMIT');
-
-          console.log(`Auto-failed pending wallet funding ${tx.reference || tx.id}`);
-          continue;
-        }
-
-        if (isServicePurchase) {
-          const walletUpdate = await client.query(
-            `
-            UPDATE wallets
-            SET balance = balance + $2,
-                updated_at = NOW()
-            WHERE user_id = $1
-            RETURNING id
-            `,
-            [tx.user_id, Number(tx.amount || 0)]
-          );
-
-          if (!walletUpdate.rows.length) {
-            await client.query('ROLLBACK');
-            continue;
-          }
-
-          await client.query(
-            `
-            UPDATE transactions
-            SET status = 'reversed',
-                description = CONCAT(COALESCE(description, ''), ' (Auto Reversed)')
-            WHERE id = $1
-            `,
-            [tx.id]
-          );
-
-          await client.query('COMMIT');
-
-          console.log(`Auto-reversed pending service transaction ${tx.reference || tx.id}`);
-        }
+        console.log(`Expired funding intent ${currentIntent.tx_ref}`);
       } catch (err) {
         try {
           await client.query('ROLLBACK');
         } catch (_) {}
-        console.error('AUTO CLEANUP ERROR:', err?.message || err);
+        console.error('FUNDING EXPIRE ERROR:', err?.message || err);
       } finally {
         client.release();
       }
     }
   } catch (err) {
-    console.error('PENDING CLEANUP ERROR:', err?.message || err);
+    console.error('FUNDING CLEANUP ERROR:', err?.message || err);
   }
 }
+
+cleanupExpiredFundingIntents().catch((err) => {
+  console.error('INITIAL FUNDING EXPIRE ERROR:', err?.message || err);
+});
+
+setInterval(() => {
+  cleanupExpiredFundingIntents().catch((err) => {
+    console.error('INTERVAL FUNDING EXPIRE ERROR:', err?.message || err);
+  });
+}, 60_000);
 function providerResponseState(response) {
   if (!response) return 'failed';
 
