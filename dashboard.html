@@ -1108,10 +1108,6 @@
 
     const getToken = () => localStorage.getItem("funsub_token") || "";
 
-const status = transaction.status.toLowerCase();
-statusElement.className = `status-${status}`;
-statusElement.textContent = status;
-
     function formatMoney(value) {
   const num = Number(value || 0);
   if (Number.isNaN(num)) return "₦0";
