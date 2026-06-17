@@ -18,7 +18,21 @@
       --shadow:0 14px 30px rgba(0,0,0,.08);
       --radius:22px;
     }
+.status-success {
+  color: #16a34a;
+}
 
+.status-failed {
+  color: #dc2626;
+}
+
+.status-pending {
+  color: #eab308;
+}
+
+.status-reversed {
+  color: #2563eb;
+}
     *{box-sizing:border-box}
     html, body{
       margin:0;
@@ -1093,6 +1107,10 @@
     const historyNavBtn = document.getElementById("historyNavBtn");
 
     const getToken = () => localStorage.getItem("funsub_token") || "";
+
+const status = transaction.status.toLowerCase();
+statusElement.className = `status-${status}`;
+statusElement.textContent = status;
 
     function formatMoney(value) {
   const num = Number(value || 0);
