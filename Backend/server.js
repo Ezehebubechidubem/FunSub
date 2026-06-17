@@ -1070,6 +1070,47 @@ function normalizeProviderPlan(plan) {
 
 async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
+  const PROVIDER_TIMEOUT_MS = 60_000;
+
+  async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
+    if (!txRow?.id) return;
+
+    await pool.query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId, purchaseAmount]
+    );
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'reversed',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [
+        txRow.id,
+        reason,
+        JSON.stringify(extraMeta)
+      ]
+    );
+  }
+
+  function withTimeout(promise, timeoutMs, timeoutMessage = 'Provider timeout') {
+    let timeoutId;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(timeoutMessage));
+      }, timeoutMs);
+    });
+
+    return Promise.race([
+      promise.finally(() => clearTimeout(timeoutId)),
+      timeoutPromise
+    ]);
+  }
 
   try {
     const body = req.body || {};
@@ -1197,7 +1238,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             serviceType: normalizedServiceType,
             serviceName,
             selectedPlan,
-            pricing
+            pricing,
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
           })
         ]
       );
@@ -1214,12 +1256,42 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       client.release();
     }
 
-    const providerResponse = await buyServiceThroughGateway({
-      serviceType: normalizedServiceType,
-      body,
-      selectedPlan,
-      requestId: txRow.reference
-    });
+    let providerResponse;
+
+    try {
+      providerResponse = await withTimeout(
+        buyServiceThroughGateway({
+          serviceType: normalizedServiceType,
+          body,
+          selectedPlan,
+          requestId: txRow.reference
+        }),
+        PROVIDER_TIMEOUT_MS,
+        'Provider timeout'
+      );
+    } catch (err) {
+      console.error('PROVIDER CALL TIMEOUT/ERROR:', err?.message);
+
+      await reverseAndRefund(
+        txRow,
+        userId,
+        purchaseAmount,
+        `${description} reversed`,
+        {
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          reverseReason: err?.message || 'Provider timeout'
+        }
+      );
+
+      return respondError(
+        res,
+        504,
+        err?.message || 'Provider timeout. Wallet reversed.'
+      );
+    }
 
     console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
 
@@ -1241,7 +1313,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             serviceName,
             selectedPlan,
             pricing,
-            providerResponse
+            providerResponse,
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
           })
         ]
       );
