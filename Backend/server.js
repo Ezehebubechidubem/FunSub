@@ -199,7 +199,7 @@ async function cleanupExpiredPendingTransactions() {
 
         const txResult = await client.query(
           `
-          SELECT id, user_id, amount, status, description, reference, meta, created_at
+          SELECT id, user_id, amount, status, description, reference, meta, type, category, created_at
           FROM transactions
           WHERE id = $1
           FOR UPDATE
@@ -213,45 +213,77 @@ async function cleanupExpiredPendingTransactions() {
         }
 
         const tx = txResult.rows[0];
-        if (String(tx.status).toLowerCase() !== 'pending') {
+        const currentStatus = String(tx.status || '').toLowerCase();
+
+        if (currentStatus !== 'pending') {
           await client.query('ROLLBACK');
           continue;
         }
 
-        const walletUpdate = await client.query(
-          `
-          UPDATE wallets
-          SET balance = balance + $2,
-              updated_at = NOW()
-          WHERE user_id = $1
-          RETURNING id
-          `,
-          [tx.user_id, Number(tx.amount || 0)]
-        );
+        const type = String(tx.type || '').toLowerCase();
+        const category = String(tx.category || '').toLowerCase();
 
-        if (!walletUpdate.rows.length) {
-          await client.query('ROLLBACK');
+        const isWalletFunding =
+          category === 'wallet' ||
+          type.includes('fund') ||
+          type.includes('deposit') ||
+          type.includes('topup');
+
+        const isServicePurchase = !isWalletFunding;
+
+        if (isWalletFunding) {
+          await client.query(
+            `
+            UPDATE transactions
+            SET status = 'failed',
+                description = CONCAT(COALESCE(description, ''), ' (Auto Failed)')
+            WHERE id = $1
+            `,
+            [tx.id]
+          );
+
+          await client.query('COMMIT');
+
+          console.log(`Auto-failed pending wallet funding ${tx.reference || tx.id}`);
           continue;
         }
 
-        await client.query(
-          `
-          UPDATE transactions
-          SET status = 'reversed',
-              description = CONCAT(COALESCE(description, ''), ' (Auto Reversed)')
-          WHERE id = $1
-          `,
-          [tx.id]
-        );
+        if (isServicePurchase) {
+          const walletUpdate = await client.query(
+            `
+            UPDATE wallets
+            SET balance = balance + $2,
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING id
+            `,
+            [tx.user_id, Number(tx.amount || 0)]
+          );
 
-        await client.query('COMMIT');
+          if (!walletUpdate.rows.length) {
+            await client.query('ROLLBACK');
+            continue;
+          }
 
-        console.log(`Auto-reversed pending transaction ${tx.reference || tx.id}`);
+          await client.query(
+            `
+            UPDATE transactions
+            SET status = 'reversed',
+                description = CONCAT(COALESCE(description, ''), ' (Auto Reversed)')
+            WHERE id = $1
+            `,
+            [tx.id]
+          );
+
+          await client.query('COMMIT');
+
+          console.log(`Auto-reversed pending service transaction ${tx.reference || tx.id}`);
+        }
       } catch (err) {
         try {
           await client.query('ROLLBACK');
         } catch (_) {}
-        console.error('AUTO REVERSE ERROR:', err?.message || err);
+        console.error('AUTO CLEANUP ERROR:', err?.message || err);
       } finally {
         client.release();
       }
@@ -260,16 +292,6 @@ async function cleanupExpiredPendingTransactions() {
     console.error('PENDING CLEANUP ERROR:', err?.message || err);
   }
 }
-
-cleanupExpiredPendingTransactions().catch((err) => {
-  console.error('INITIAL CLEANUP ERROR:', err?.message || err);
-});
-
-setInterval(() => {
-  cleanupExpiredPendingTransactions().catch((err) => {
-    console.error('INTERVAL CLEANUP ERROR:', err?.message || err);
-  });
-}, 60_000);
 function providerResponseState(response) {
   if (!response) return 'failed';
 
