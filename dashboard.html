@@ -1114,7 +1114,7 @@ statusElement.textContent = status;
 
     function formatMoney(value) {
   const num = Number(value || 0);
-  if (Number.isNaN(num)) return "₦0.00";
+  if (Number.isNaN(num)) return "₦0";
 
   return `₦${num.toLocaleString("en-NG", {
     minimumFractionDigits: 2,
@@ -1124,7 +1124,7 @@ statusElement.textContent = status;
 
 function formatWholeMoney(value) {
   const num = Number(value || 0);
-  if (Number.isNaN(num)) return "₦0.00";
+  if (Number.isNaN(num)) return "₦0";
 
   return `₦${num.toLocaleString("en-NG", {
     minimumFractionDigits: 2,
