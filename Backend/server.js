@@ -177,7 +177,101 @@ function extractProviderText(response) {
 
   return parts.join(' | ');
 }
+// Auto-reverse pending transactions older than 60 seconds
+async function cleanupExpiredPendingTransactions() {
+  try {
+    const expiredResult = await pool.query(
+      `
+      SELECT id
+      FROM transactions
+      WHERE status = 'pending'
+        AND created_at < NOW() - INTERVAL '60 seconds'
+      ORDER BY created_at ASC
+      `
+    );
 
+    if (!expiredResult.rows.length) {
+      return;
+    }
+
+    for (const row of expiredResult.rows) {
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        const txResult = await client.query(
+          `
+          SELECT id, user_id, amount, status, description, reference, meta, created_at
+          FROM transactions
+          WHERE id = $1
+          FOR UPDATE
+          `,
+          [row.id]
+        );
+
+        if (!txResult.rows.length) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        const tx = txResult.rows[0];
+
+        if (tx.status !== 'pending') {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        await client.query(
+          `
+          UPDATE wallets
+          SET balance = balance + $2,
+              updated_at = NOW()
+          WHERE user_id = $1
+          `,
+          [tx.user_id, Number(tx.amount || 0)]
+        );
+
+        await client.query(
+          `
+          UPDATE transactions
+          SET status = 'reversed',
+              description = CONCAT(COALESCE(description, ''), ' (Auto Reversed)')
+          WHERE id = $1
+          `,
+          [tx.id]
+        );
+
+        await client.query('COMMIT');
+
+        console.log(
+          `Auto-reversed pending transaction ${tx.reference || tx.id}`
+        );
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
+        console.error('AUTO REVERSE ERROR:', err?.message || err);
+      } finally {
+        client.release();
+      }
+    }
+  } catch (err) {
+    console.error('PENDING CLEANUP ERROR:', err?.message || err);
+  }
+}
+
+// Run once on startup
+cleanupExpiredPendingTransactions().catch((err) => {
+  console.error('INITIAL CLEANUP ERROR:', err?.message || err);
+});
+
+// Run every 60 seconds
+setInterval(() => {
+  cleanupExpiredPendingTransactions().catch((err) => {
+    console.error('INTERVAL CLEANUP ERROR:', err?.message || err);
+  });
+}, 60_000);
 function providerResponseState(response) {
   if (!response) return 'failed';
 
