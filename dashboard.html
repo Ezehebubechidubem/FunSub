@@ -1113,8 +1113,8 @@
   if (Number.isNaN(num)) return "₦0";
 
   return `₦${num.toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
   })}`;
 }
 
@@ -1123,8 +1123,8 @@ function formatWholeMoney(value) {
   if (Number.isNaN(num)) return "₦0";
 
   return `₦${num.toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   })}`;
 }
     function safeText(v, fallback = "") {
