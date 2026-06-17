@@ -185,6 +185,7 @@ async function cleanupExpiredFundingIntents() {
       FROM payment_intents
       WHERE status = 'pending'
         AND created_at < NOW() - INTERVAL '1 hour'
+        AND COALESCE(meta->>'purpose', '') = 'wallet_funding'
       ORDER BY created_at ASC
       `
     );
@@ -199,7 +200,7 @@ async function cleanupExpiredFundingIntents() {
 
         const lockedIntent = await client.query(
           `
-          SELECT tx_ref, user_id, amount, status
+          SELECT tx_ref, user_id, amount, status, meta
           FROM payment_intents
           WHERE tx_ref = $1
           FOR UPDATE
@@ -218,10 +219,17 @@ async function cleanupExpiredFundingIntents() {
           continue;
         }
 
+        const purpose = String(currentIntent.meta?.purpose || '').toLowerCase();
+        if (purpose !== 'wallet_funding') {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
         await client.query(
           `
           UPDATE payment_intents
           SET status = 'expired',
+              verified_at = NOW(),
               meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
           WHERE tx_ref = $1
           `,
@@ -238,9 +246,11 @@ async function cleanupExpiredFundingIntents() {
           `
           UPDATE transactions
           SET status = 'expired',
+              updated_at = NOW(),
               meta = $2
           WHERE reference = $1
             AND user_id = $3
+            AND category = 'wallet'
             AND status = 'pending'
           `,
           [
