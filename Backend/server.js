@@ -177,7 +177,6 @@ function extractProviderText(response) {
 
   return parts.join(' | ');
 }
-// Auto-reverse pending transactions older than 60 seconds
 async function cleanupExpiredPendingTransactions() {
   try {
     const expiredResult = await pool.query(
@@ -190,9 +189,7 @@ async function cleanupExpiredPendingTransactions() {
       `
     );
 
-    if (!expiredResult.rows.length) {
-      return;
-    }
+    if (!expiredResult.rows.length) return;
 
     for (const row of expiredResult.rows) {
       const client = await pool.connect();
@@ -216,21 +213,26 @@ async function cleanupExpiredPendingTransactions() {
         }
 
         const tx = txResult.rows[0];
-
-        if (tx.status !== 'pending') {
+        if (String(tx.status).toLowerCase() !== 'pending') {
           await client.query('ROLLBACK');
           continue;
         }
 
-        await client.query(
+        const walletUpdate = await client.query(
           `
           UPDATE wallets
           SET balance = balance + $2,
               updated_at = NOW()
           WHERE user_id = $1
+          RETURNING id
           `,
           [tx.user_id, Number(tx.amount || 0)]
         );
+
+        if (!walletUpdate.rows.length) {
+          await client.query('ROLLBACK');
+          continue;
+        }
 
         await client.query(
           `
@@ -244,9 +246,7 @@ async function cleanupExpiredPendingTransactions() {
 
         await client.query('COMMIT');
 
-        console.log(
-          `Auto-reversed pending transaction ${tx.reference || tx.id}`
-        );
+        console.log(`Auto-reversed pending transaction ${tx.reference || tx.id}`);
       } catch (err) {
         try {
           await client.query('ROLLBACK');
@@ -261,12 +261,10 @@ async function cleanupExpiredPendingTransactions() {
   }
 }
 
-// Run once on startup
 cleanupExpiredPendingTransactions().catch((err) => {
   console.error('INITIAL CLEANUP ERROR:', err?.message || err);
 });
 
-// Run every 60 seconds
 setInterval(() => {
   cleanupExpiredPendingTransactions().catch((err) => {
     console.error('INTERVAL CLEANUP ERROR:', err?.message || err);
@@ -1169,26 +1167,59 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
     if (!txRow?.id) return;
 
-    await pool.query(
-      `UPDATE wallets
-       SET balance = balance + $2,
-           updated_at = NOW()
-       WHERE user_id = $1`,
-      [userId, purchaseAmount]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'reversed',
-           description = $2,
-           meta = $3
-       WHERE id = $1`,
-      [
-        txRow.id,
-        reason,
-        JSON.stringify(extraMeta)
-      ]
-    );
+      const txCheck = await client.query(
+        `SELECT status
+         FROM transactions
+         WHERE id = $1
+         FOR UPDATE`,
+        [txRow.id]
+      );
+
+      if (!txCheck.rows.length) {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const currentStatus = String(txCheck.rows[0].status || '').toLowerCase();
+      if (currentStatus !== 'pending') {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'reversed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          reason,
+          JSON.stringify(extraMeta)
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   function withTimeout(promise, timeoutMs, timeoutMessage = 'Provider timeout') {
@@ -1517,7 +1548,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
   }
 }
-
 function requireDebugAccess(req, res, next) {
   const got = req.headers['x-debug-key'] || req.query.debug_key;
   const expected = process.env.DEBUG_KEY;
