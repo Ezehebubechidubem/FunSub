@@ -183,9 +183,9 @@ async function cleanupExpiredFundingIntents() {
       `
       SELECT tx_ref, user_id, amount
       FROM payment_intents
-      WHERE status = 'pending'
-        AND created_at < NOW() - INTERVAL '1 hour'
+      WHERE status IN ('initiated', 'pending')
         AND COALESCE(meta->>'purpose', '') = 'wallet_funding'
+        AND created_at < NOW() - INTERVAL '1 hour'
       ORDER BY created_at ASC
       `
     );
@@ -214,16 +214,23 @@ async function cleanupExpiredFundingIntents() {
         }
 
         const currentIntent = lockedIntent.rows[0];
-        if (String(currentIntent.status || '').toLowerCase() !== 'pending') {
+        const currentStatus = String(currentIntent.status || '').toLowerCase();
+        const purpose = String(currentIntent.meta?.purpose || '').toLowerCase();
+
+        if (!['initiated', 'pending'].includes(currentStatus)) {
           await client.query('ROLLBACK');
           continue;
         }
 
-        const purpose = String(currentIntent.meta?.purpose || '').toLowerCase();
         if (purpose !== 'wallet_funding') {
           await client.query('ROLLBACK');
           continue;
         }
+
+        const expiryMeta = {
+          expiredAt: new Date().toISOString(),
+          reason: 'funding_not_completed_within_1_hour'
+        };
 
         await client.query(
           `
@@ -235,10 +242,7 @@ async function cleanupExpiredFundingIntents() {
           `,
           [
             currentIntent.tx_ref,
-            JSON.stringify({
-              expiredAt: new Date().toISOString(),
-              reason: 'funding_not_completed_within_1_hour'
-            })
+            JSON.stringify(expiryMeta)
           ]
         );
 
@@ -251,14 +255,11 @@ async function cleanupExpiredFundingIntents() {
           WHERE reference = $1
             AND user_id = $3
             AND category = 'wallet'
-            AND status = 'pending'
+            AND status IN ('initiated', 'pending')
           `,
           [
             currentIntent.tx_ref,
-            JSON.stringify({
-              expiredAt: new Date().toISOString(),
-              reason: 'funding_not_completed_within_1_hour'
-            }),
+            JSON.stringify(expiryMeta),
             currentIntent.user_id
           ]
         );
