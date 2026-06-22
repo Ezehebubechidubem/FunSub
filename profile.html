@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -473,8 +473,7 @@
         <div class="toggle active"></div>
       </div>
     </div>
-
-    <div class="section-title">MORE</div>
+<div class="section-title">MORE</div>
     <div class="card">
       <div class="item" id="agentItem">
         <div class="left">
@@ -564,30 +563,12 @@
       Profile
     </a>
   </nav>
-<script>
+
+  <script>
     const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
     const userKey = 'funsub_user';
     const themeKey = 'funsub_theme';
-
-    const profileName = document.getElementById('profileName');
-    const profileEmail = document.getElementById('profileEmail');
-    const accountBadge = document.getElementById('accountBadge');
-    const kycBadge = document.getElementById('kycBadge');
-    const avatarImg = document.getElementById('avatarImg');
-    const avatarInitials = document.getElementById('avatarInitials');
-    const darkToggle = document.getElementById('darkToggle');
-
-    const logoutBtn = document.getElementById('logoutBtn');
-    const agentItem = document.getElementById('agentItem');
-    const resetPinItem = document.getElementById('resetPinItem');
-    const changePasswordItem = document.getElementById('changePasswordItem');
-    const transactionPinItem = document.getElementById('transactionPinItem');
-    const fundWalletItem = document.getElementById('fundWalletItem');
-    const referralItem = document.getElementById('referralItem');
-    const shareItem = document.getElementById('shareItem');
-    const policyItem = document.getElementById('policyItem');
-    const supportItem = document.getElementById('supportItem');
 
     function getToken() {
       return localStorage.getItem(tokenKey) || '';
@@ -620,19 +601,20 @@
     }
 
     function setTheme(theme) {
-      const t = theme === 'dark' ? 'dark' : 'light';
-      document.body.classList.toggle('dark', t === 'dark');
-      darkToggle.classList.toggle('active', t === 'dark');
-      localStorage.setItem(themeKey, t);
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark', isDark);
+
+      const darkToggle = document.getElementById('darkToggle');
+      if (darkToggle) {
+        darkToggle.classList.toggle('active', isDark);
+      }
+
+      localStorage.setItem(themeKey, isDark ? 'dark' : 'light');
     }
 
     function loadTheme() {
       const saved = localStorage.getItem(themeKey);
-      if (saved === 'dark') {
-        setTheme('dark');
-      } else {
-        setTheme('light');
-      }
+      setTheme(saved === 'dark' ? 'dark' : 'light');
     }
 
     function accountTypeFromUser(user) {
@@ -652,6 +634,9 @@
     }
 
     function setKycBadge(status) {
+      const kycBadge = document.getElementById('kycBadge');
+      if (!kycBadge) return;
+
       const s = normalizeStatus(status);
       kycBadge.textContent = kycLabel(status);
 
@@ -671,6 +656,9 @@
     }
 
     function setAccountBadge(user) {
+      const accountBadge = document.getElementById('accountBadge');
+      if (!accountBadge) return;
+
       const isAgent =
         user?.is_agent === true ||
         normalizeStatus(user?.agent_status) === 'active' ||
@@ -688,6 +676,10 @@
     }
 
     function setAvatar(user) {
+      const avatarImg = document.getElementById('avatarImg');
+      const avatarInitials = document.getElementById('avatarInitials');
+      if (!avatarImg || !avatarInitials) return;
+
       const avatarUrl = String(user?.avatar_url || '').trim();
       const name = user?.full_name || user?.name || 'User';
 
@@ -703,8 +695,13 @@
     }
 
     function setProfile(user) {
+      const profileName = document.getElementById('profileName');
+      const profileEmail = document.getElementById('profileEmail');
+      if (!profileName || !profileEmail) return;
+
       const name = user?.full_name || user?.name || 'User';
       const email = user?.email || 'No email';
+
       profileName.textContent = name;
       profileEmail.textContent = email;
       setAvatar(user);
@@ -713,14 +710,18 @@
     }
 
     async function loadProfile() {
+      const profileName = document.getElementById('profileName');
+      const profileEmail = document.getElementById('profileEmail');
+
       const token = getToken();
 
       if (!token) {
         const cached = getUserCache();
         if (cached) setProfile(cached);
-        profileName.textContent = 'Guest';
-        profileEmail.textContent = 'Please log in';
-        accountBadge.textContent = 'Subscriber Account';
+        if (profileName) profileName.textContent = 'Guest';
+        if (profileEmail) profileEmail.textContent = 'Please log in';
+        const accountBadge = document.getElementById('accountBadge');
+        if (accountBadge) accountBadge.textContent = 'Subscriber Account';
         setKycBadge('');
         return;
       }
@@ -751,84 +752,115 @@
       }
     }
 
-   document.addEventListener("DOMContentLoaded", function () {
-  const darkToggle = document.getElementById("darkToggle");
+    document.addEventListener('DOMContentLoaded', function () {
+      const darkToggle = document.getElementById('darkToggle');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const agentItem = document.getElementById('agentItem');
+      const resetPinItem = document.getElementById('resetPinItem');
+      const changePasswordItem = document.getElementById('changePasswordItem');
+      const transactionPinItem = document.getElementById('transactionPinItem');
+      const fundWalletItem = document.getElementById('fundWalletItem');
+      const referralItem = document.getElementById('referralItem');
+      const shareItem = document.getElementById('shareItem');
+      const policyItem = document.getElementById('policyItem');
+      const supportItem = document.getElementById('supportItem');
+      const profileTopbar = document.getElementById('profileTopbar');
 
-  if (!darkToggle) return;
-
-  darkToggle.addEventListener("click", function () {
-    darkToggle.classList.toggle("active");
-    toggleTheme();
-  });
-});
-
-    logoutBtn.addEventListener('click', function() {
-      const ok = window.confirm('Do you want to log out?');
-      if (!ok) return;
-
-      localStorage.removeItem(tokenKey);
-      localStorage.removeItem(userKey);
-      window.location.href = 'index.html';
-    });
-
-    agentItem.addEventListener('click', function() {
-      window.location.href = 'agent.html';
-    });
-
-    resetPinItem.addEventListener('click', function() {
-      window.location.href = 'frontpassword.html';
-    });
-
-    changePasswordItem.addEventListener('click', function() {
-      window.location.href = 'password.html';
-    });
-
-    transactionPinItem.addEventListener('click', function() {
-      window.location.href = 'transactionpin.html';
-    });
-
-    fundWalletItem.addEventListener('click', function() {
-      window.location.href = 'fund.html';
-    });
-
-    referralItem.addEventListener('click', function() {
-      window.location.href = 'referral.html';
-    });
-
-    shareItem.addEventListener('click', async function() {
-      const shareData = {
-        title: 'FunSub App',
-        text: 'Check out FunSub',
-        url: window.location.origin
-      };
-
-      try {
-        if (navigator.share) {
-          await navigator.share(shareData);
-        } else {
-          await navigator.clipboard.writeText(window.location.origin);
-          alert('App link copied');
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    });
-
-    policyItem.addEventListener('click', function() {
-      window.location.href = 'privacy.html';
-    });
-
-    supportItem.addEventListener('click', function() {
-      window.location.href = 'support.html';
-    });
-
-    document.getElementById('profileTopbar').addEventListener('click', function() {
-      window.location.href = 'profile.html';
-    });
-
-    document.addEventListener('DOMContentLoaded', function() {
       loadTheme();
       loadProfile();
+
+      if (darkToggle) {
+        darkToggle.addEventListener('click', function () {
+          const isDarkNow = document.body.classList.contains('dark');
+          setTheme(isDarkNow ? 'light' : 'dark');
+        });
+      }
+
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', function () {
+          const ok = window.confirm('Do you want to log out?');
+          if (!ok) return;
+
+          localStorage.removeItem(tokenKey);
+          localStorage.removeItem(userKey);
+          window.location.href = 'index.html';
+        });
+      }
+
+      if (agentItem) {
+        agentItem.addEventListener('click', function () {
+          window.location.href = 'agent.html';
+        });
+      }
+
+      if (resetPinItem) {
+        resetPinItem.addEventListener('click', function () {
+          window.location.href = 'frontpassword.html';
+        });
+      }
+
+      if (changePasswordItem) {
+        changePasswordItem.addEventListener('click', function () {
+          window.location.href = 'password.html';
+        });
+      }
+
+      if (transactionPinItem) {
+        transactionPinItem.addEventListener('click', function () {
+          window.location.href = 'transactionpin.html';
+        });
+      }
+
+      if (fundWalletItem) {
+        fundWalletItem.addEventListener('click', function () {
+          window.location.href = 'fund.html';
+        });
+      }
+
+      if (referralItem) {
+        referralItem.addEventListener('click', function () {
+          window.location.href = 'referral.html';
+        });
+      }
+
+      if (shareItem) {
+        shareItem.addEventListener('click', async function () {
+          const shareData = {
+            title: 'FunSub App',
+            text: 'Check out FunSub',
+            url: window.location.origin
+          };
+
+          try {
+            if (navigator.share) {
+              await navigator.share(shareData);
+            } else {
+              await navigator.clipboard.writeText(window.location.origin);
+              alert('App link copied');
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
+
+      if (policyItem) {
+        policyItem.addEventListener('click', function () {
+          window.location.href = 'privacy.html';
+        });
+      }
+
+      if (supportItem) {
+        supportItem.addEventListener('click', function () {
+          window.location.href = 'support.html';
+        });
+      }
+
+      if (profileTopbar) {
+        profileTopbar.addEventListener('click', function () {
+          window.location.href = 'profile.html';
+        });
+      }
     });
   </script>
 </body>
