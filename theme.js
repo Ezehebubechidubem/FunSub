@@ -1,22 +1,19 @@
-(function () {
-  function applyTheme(theme) {
-    if (theme === "dark") {
-      document.body.classList.add("dark");
-    } else {
-      document.body.classList.remove("dark");
-    }
-  }
+const themeKey = 'funsub_theme';
 
-  // Apply saved theme immediately
-  const savedTheme = localStorage.getItem("app_theme") || "light";
-  applyTheme(savedTheme);
+function setTheme(theme) {
+  const isDark = theme === 'dark';
+  document.body.classList.toggle('dark', isDark);
+  localStorage.setItem(themeKey, isDark ? 'dark' : 'light');
+}
 
-  // Make it available globally
-  window.toggleTheme = function () {
-    const isDark = document.body.classList.contains("dark");
-    const newTheme = isDark ? "light" : "dark";
+function loadTheme() {
+  const saved = localStorage.getItem(themeKey);
+  setTheme(saved === 'dark' ? 'dark' : 'light');
+}
 
-    localStorage.setItem("app_theme", newTheme);
-    applyTheme(newTheme);
-  };
-})();
+function toggleTheme() {
+  const isDarkNow = document.body.classList.contains('dark');
+  setTheme(isDarkNow ? 'light' : 'dark');
+}
+
+document.addEventListener('DOMContentLoaded', loadTheme);
