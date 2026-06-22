@@ -751,13 +751,12 @@
       }
     }
 
-    darkToggle.addEventListener("click", function(){
+     const darkToggle = document.getElementById("darkToggle");
 
- darkToggle.classList.toggle("active");
-
- toggleTheme();
-
-});
+  darkToggle.addEventListener("click", function () {
+    darkToggle.classList.toggle("active");
+    toggleTheme();
+  });
 
     logoutBtn.addEventListener('click', function() {
       const ok = window.confirm('Do you want to log out?');
