@@ -3,288 +3,425 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buy Airtime</title>
+  <title>Funsup | Buy Airtime</title>
 
- <style>
-  :root{
-    --bg:#ffffff;
-    --card:#ffffff;
-    --text:#111111;
-    --border:#dddddd;
-    --input-bg:#ffffff;
-    --modal-bg:#ffffff;
-    --muted:#666666;
-  }
-
-  body.dark{
-    --bg:#0f1115;
-    --card:#1a1d24;
-    --text:#ffffff;
-    --border:#2b2f38;
-    --input-bg:#232833;
-    --modal-bg:#1a1d24;
-    --muted:#b8c0cc;
-  }
-
-  *{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:Arial,sans-serif;
-  }
-
-  body{
-    background:var(--bg);
-    padding:20px;
-    color:var(--text);
-  }
-
-  h1{
-    color:var(--text);
-    display:flex;
-    justify-content:center;
-    margin-bottom:40px;
-    font-size:28px;
-    font-weight:700;
-  }
-
-  .container{
-    max-width:500px;
-    margin:auto;
-  }
-
-  .form-box{
-    background:var(--card);
-  }
-
-  label{
-    display:block;
-    margin-top:20px;
-    margin-bottom:8px;
-    font-weight:700;
-    font-size:15px;
-    color:var(--text);
-  }
-
-  input,
-  select{
-    width:100%;
-    height:55px;
-    border:1px solid var(--border);
-    border-radius:14px;
-    padding:0 15px;
-    font-size:15px;
-    outline:none;
-    background:var(--input-bg);
-    color:var(--text);
-  }
-
-  input::placeholder{
-    color:var(--muted);
-  }
-
-  input:focus,
-  select:focus{
-    border-color:#D4AF37;
-  }
-
-  .network-grid{
-    display:grid;
-    grid-template-columns:repeat(2,1fr);
-    gap:15px;
-    margin-top:10px;
-  }
-
-  .network-card{
-    border:2px solid var(--border);
-    border-radius:18px;
-    padding:18px;
-    cursor:pointer;
-    background:var(--card);
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:90px;
-    transition:.2s ease;
-  }
-
-  .network-card:hover{
-    transform:translateY(-1px);
-  }
-
-  .network-card img{
-    width:46px;
-    height:46px;
-    object-fit:contain;
-  }
-
-  .network-card.active{
-    border-color:#D4AF37;
-    background:#FFF9E6;
-  }
-
-  .buy-btn{
-    width:100%;
-    height:55px;
-    border:none;
-    border-radius:15px;
-    margin-top:25px;
-    background:#D4AF37;
-    color:white;
-    font-size:16px;
-    font-weight:700;
-    cursor:pointer;
-    transition:.2s ease;
-  }
-
-  .buy-btn:hover{
-    opacity:.95;
-  }
-
-  .buy-btn:disabled{
-    opacity:.7;
-    cursor:not-allowed;
-  }
-
-  .transaction-modal{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.65);
-    display:none;
-    justify-content:center;
-    align-items:center;
-    z-index:9999;
-    padding:16px;
-  }
-
-  .transaction-card{
-    width:95%;
-    max-width:430px;
-    background:var(--modal-bg);
-    color:var(--text);
-    border-radius:25px;
-    padding:25px;
-    box-shadow:0 15px 40px rgba(0,0,0,.2);
-    animation:pop .2s ease;
-  }
-
-  @keyframes pop{
-    from{
-      transform:scale(.92);
-      opacity:.4;
+  <style>
+    :root{
+      --bg:#ffffff;
+      --card:#ffffff;
+      --text:#111111;
+      --border:#dddddd;
+      --input-bg:#ffffff;
+      --modal-bg:#ffffff;
+      --muted:#666666;
+      --gold:#D4AF37;
+      --gold-soft:#FFF9E6;
+      --gold-border:#f0d98a;
+      --shadow:0 15px 40px rgba(0,0,0,.16);
     }
-    to{
-      transform:scale(1);
-      opacity:1;
+
+    body.dark{
+      --bg:#0f1115;
+      --card:#1a1d24;
+      --text:#ffffff;
+      --border:#2b2f38;
+      --input-bg:#232833;
+      --modal-bg:#1a1d24;
+      --muted:#b8c0cc;
+      --gold:#D4AF37;
+      --gold-soft:#2c2410;
+      --gold-border:#7b6522;
+      --shadow:0 15px 40px rgba(0,0,0,.28);
     }
-  }
 
-  .transaction-icon{
-    width:90px;
-    height:90px;
-    border-radius:50%;
-    margin:auto;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    font-size:45px;
-    background:#FFF8E1;
-  }
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    }
 
-  .transaction-card h2{
-    text-align:center;
-    margin-top:15px;
-    font-size:22px;
-    color:var(--text);
-  }
+    body{
+      background:var(--bg);
+      padding:20px;
+      color:var(--text);
+    }
 
-  .transaction-card p{
-    text-align:center;
-    color:var(--muted);
-    margin-top:10px;
-    font-size:14px;
-    line-height:1.5;
-  }
+    h1{
+      color:var(--text);
+      display:flex;
+      justify-content:center;
+      margin-bottom:10px;
+      font-size:28px;
+      font-weight:700;
+    }
 
-  .receipt-row{
-    display:flex;
-    justify-content:space-between;
-    gap:12px;
-    padding:12px 0;
-    border-bottom:1px solid var(--border);
-    font-size:14px;
-    color:var(--text);
-  }
+    .subtitle{
+      text-align:center;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:30px;
+    }
 
-  .receipt-row span:last-child{
-    text-align:right;
-    word-break:break-word;
-    font-weight:600;
-  }
+    .container{
+      max-width:500px;
+      margin:auto;
+    }
 
-  .close-btn,
-  .share-btn{
-    width:100%;
-    height:50px;
-    border:none;
-    border-radius:12px;
-    font-weight:700;
-    cursor:pointer;
-    font-size:15px;
-  }
+    .form-box{
+      background:var(--card);
+    }
 
-  .close-btn{
-    margin-top:14px;
-    background:#D4AF37;
-    color:white;
-  }
+    label{
+      display:block;
+      margin-top:20px;
+      margin-bottom:8px;
+      font-weight:700;
+      font-size:15px;
+      color:var(--text);
+    }
 
-  .share-btn{
-    margin-top:10px;
-    background:#111827;
-    color:white;
-  }
+    input,
+    select{
+      width:100%;
+      height:55px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:0 15px;
+      font-size:15px;
+      outline:none;
+      background:var(--input-bg);
+      color:var(--text);
+    }
 
-  .pending{
-    background:#FFF8E1;
-    color:#8a6d00;
-  }
+    input::placeholder{
+      color:var(--muted);
+    }
 
-  .success{
-    background:#ECFDF3;
-    color:#0f7a3b;
-  }
+    input:focus,
+    select:focus{
+      border-color:var(--gold);
+    }
 
-  .failed{
-    background:#FEE4E2;
-    color:#b42318;
-  }
+    .network-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:15px;
+      margin-top:10px;
+    }
 
-  #receiptNetworkBox{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    justify-content:flex-end;
-  }
+    .network-card{
+      border:2px solid var(--border);
+      border-radius:18px;
+      padding:18px;
+      cursor:pointer;
+      background:var(--card);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:90px;
+      transition:.2s ease;
+    }
 
-  #receiptNetworkLogo{
-    width:22px;
-    height:22px;
-    object-fit:contain;
-  }
+    .network-card:hover{
+      transform:translateY(-1px);
+    }
 
-  @media (max-width:420px){
     .network-card img{
-      width:40px;
-      height:40px;
+      width:46px;
+      height:46px;
+      object-fit:contain;
     }
-  }
-</style>
+
+    .network-card.active{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+    }
+
+    .buy-btn{
+      width:100%;
+      height:55px;
+      border:none;
+      border-radius:15px;
+      margin-top:25px;
+      background:var(--gold);
+      color:white;
+      font-size:16px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.2s ease;
+      box-shadow:0 10px 20px rgba(212,175,55,.18);
+    }
+
+    .buy-btn:hover{
+      opacity:.95;
+    }
+
+    .buy-btn:disabled{
+      opacity:.7;
+      cursor:not-allowed;
+    }
+
+    .transaction-modal{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      display:none;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+      padding:16px;
+    }
+
+    .transaction-card{
+      width:95%;
+      max-width:430px;
+      background:var(--modal-bg);
+      color:var(--text);
+      border-radius:25px;
+      padding:25px;
+      box-shadow:var(--shadow);
+      animation:pop .2s ease;
+    }
+
+    @keyframes pop{
+      from{
+        transform:scale(.92);
+        opacity:.4;
+      }
+      to{
+        transform:scale(1);
+        opacity:1;
+      }
+    }
+
+    .transaction-icon{
+      width:90px;
+      height:90px;
+      border-radius:50%;
+      margin:auto;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:45px;
+      background:#FFF8E1;
+    }
+
+    .transaction-card h2{
+      text-align:center;
+      margin-top:15px;
+      font-size:22px;
+      color:var(--text);
+    }
+
+    .transaction-card p{
+      text-align:center;
+      color:var(--muted);
+      margin-top:10px;
+      font-size:14px;
+      line-height:1.5;
+    }
+
+    .receipt-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 0;
+      border-bottom:1px solid var(--border);
+      font-size:14px;
+      color:var(--text);
+    }
+
+    .receipt-row span:last-child{
+      text-align:right;
+      word-break:break-word;
+      font-weight:600;
+    }
+
+    .close-btn,
+    .share-btn{
+      width:100%;
+      height:50px;
+      border:none;
+      border-radius:12px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:15px;
+    }
+
+    .close-btn{
+      margin-top:14px;
+      background:var(--gold);
+      color:white;
+    }
+
+    .share-btn{
+      margin-top:10px;
+      background:#111827;
+      color:white;
+    }
+
+    .pending{
+      background:#FFF8E1;
+      color:#8a6d00;
+    }
+
+    .success{
+      background:#ECFDF3;
+      color:#0f7a3b;
+    }
+
+    .failed{
+      background:#FEE4E2;
+      color:#b42318;
+    }
+
+    #receiptNetworkBox{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      justify-content:flex-end;
+    }
+
+    #receiptNetworkLogo{
+      width:22px;
+      height:22px;
+      object-fit:contain;
+    }
+
+    @media (max-width:420px){
+      .network-card img{
+        width:40px;
+        height:40px;
+      }
+    }
+
+    .pin-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      z-index:10000;
+      display:none;
+      justify-content:center;
+      align-items:flex-end;
+      padding:0;
+    }
+
+    .pin-sheet{
+      width:100%;
+      max-width:700px;
+      background:var(--modal-bg);
+      color:var(--text);
+      border-radius:24px 24px 0 0;
+      padding:18px 16px 24px;
+      box-shadow:0 -12px 40px rgba(0,0,0,.25);
+      animation:slideUp .18s ease;
+    }
+
+    @keyframes slideUp{
+      from{ transform:translateY(20px); opacity:.5; }
+      to{ transform:translateY(0); opacity:1; }
+    }
+
+    .pin-sheet-top{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      margin-bottom:4px;
+    }
+
+    .pin-close{
+      width:36px;
+      height:36px;
+      border:none;
+      border-radius:50%;
+      background:transparent;
+      font-size:28px;
+      color:var(--text);
+      cursor:pointer;
+      line-height:1;
+    }
+
+    .pin-title{
+      text-align:center;
+      font-size:22px;
+      font-weight:700;
+      margin:8px 0 8px;
+      color:var(--text);
+    }
+
+    .funsup-brand{
+      text-align:center;
+      font-size:14px;
+      color:var(--muted);
+      margin-bottom:18px;
+    }
+
+    .pin-boxes{
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .pin-box{
+      width:58px;
+      height:58px;
+      border-radius:16px;
+      border:1.8px solid var(--border);
+      background:var(--input-bg);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:26px;
+      font-weight:700;
+      color:var(--text);
+    }
+
+    .pin-box.filled{
+      border-color:#9fd8c8;
+      background:rgba(159,216,200,.15);
+    }
+
+    .pin-hint{
+      text-align:center;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:16px;
+    }
+
+    .pin-keypad{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+    }
+
+    .pin-key{
+      height:72px;
+      border:none;
+      border-radius:12px;
+      background:var(--card);
+      color:var(--text);
+      font-size:28px;
+      font-weight:500;
+      cursor:pointer;
+      box-shadow:0 0 0 1px var(--border) inset;
+    }
+
+    .pin-zero{
+      grid-column:1 / span 2;
+    }
+
+    .pin-back{
+      font-size:22px;
+    }
+  </style>
 </head>
 
 <body>
 
-  <h1>Buy Airtime</h1>
+  <h1>Funsup Airtime</h1>
+  <div class="subtitle">Buy airtime safely from your Funsup wallet</div>
 
   <div class="container">
     <div class="form-box">
@@ -383,358 +520,456 @@
       <button onclick="shareReceipt()" class="share-btn">Share</button>
     </div>
   </div>
+
+  <div id="pinOverlay" class="pin-overlay">
+    <div class="pin-sheet">
+      <div class="pin-sheet-top">
+        <button type="button" class="pin-close" onclick="closePinModal()">×</button>
+      </div>
+
+      <h2 class="pin-title">Enter Payment PIN</h2>
+      <div class="funsup-brand">Funsup Secure Keypad</div>
+
+      <div class="pin-boxes">
+        <div class="pin-box" id="pinBox0"></div>
+        <div class="pin-box" id="pinBox1"></div>
+        <div class="pin-box" id="pinBox2"></div>
+        <div class="pin-box" id="pinBox3"></div>
+      </div>
+
+      <p class="pin-hint">Secure numeric keypad</p>
+
+      <div class="pin-keypad">
+        <button type="button" class="pin-key" onclick="pressPin('1')">1</button>
+        <button type="button" class="pin-key" onclick="pressPin('2')">2</button>
+        <button type="button" class="pin-key" onclick="pressPin('3')">3</button>
+        <button type="button" class="pin-key" onclick="pressPin('4')">4</button>
+        <button type="button" class="pin-key" onclick="pressPin('5')">5</button>
+        <button type="button" class="pin-key" onclick="pressPin('6')">6</button>
+        <button type="button" class="pin-key" onclick="pressPin('7')">7</button>
+        <button type="button" class="pin-key" onclick="pressPin('8')">8</button>
+        <button type="button" class="pin-key" onclick="pressPin('9')">9</button>
+        <button type="button" class="pin-key pin-zero" onclick="pressPin('0')">0</button>
+        <button type="button" class="pin-key pin-back" onclick="backspacePin()">⌫</button>
+      </div>
+    </div>
+  </div>
 <script src="theme.js" defer></script>
-  <script>
-    const BUY_URL = "https://funsub.onrender.com/api/services/airtime";
-    let currentNetwork = "mtn";
-    let lastReceipt = null;
+<script>
+  const BUY_URL = "https://funsub.onrender.com/api/services/airtime";
+  let currentNetwork = "mtn";
+  let lastReceipt = null;
+  let enteredPin = "";
+  let pendingAirtimePayload = null;
 
-    function getToken() {
-      return localStorage.getItem("funsub_token") || "";
-    }
+  function getToken() {
+    return localStorage.getItem("funsub_token") || "";
+  }
 
-    function generateRequestId(prefix = "AIR") {
-      const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
-      return `${prefix}_${Date.now()}_${rand}`;
-    }
+  function generateRequestId(prefix = "AIR") {
+    const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+    return `${prefix}_${Date.now()}_${rand}`;
+  }
 
-    function getNetworkMeta(network) {
-      const n = String(network || "").trim().toLowerCase();
-      const map = {
-        mtn: {
-          name: "MTN",
-          logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg",
-          service_id: "mtn"
-        },
-        glo: {
-          name: "GLO",
-          logo: "https://i.postimg.cc/B64Y96DS/glo.png",
-          service_id: "glo"
-        },
-        airtel: {
-          name: "Airtel",
-          logo: "https://i.postimg.cc/FKZbSxf8/airtel.png",
-          service_id: "airtel"
-        },
-        "9mobile": {
-          name: "9mobile",
-          logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png",
-          service_id: "9mobile"
-        }
-      };
-
-      return map[n] || {
-        name: n.toUpperCase(),
-        logo: "",
-        service_id: n
-      };
-    }
-
-    function formatAmount(value) {
-      const num = Number(value);
-      if (Number.isNaN(num)) return "₦0";
-      return "₦" + num.toLocaleString("en-NG", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2
-      });
-    }
-
-    function buildReceiptText() {
-      if (!lastReceipt) return "";
-
-      const r = lastReceipt;
-      return [
-        "FunSub Airtime Receipt",
-        `Network: ${r.networkName || ""}`,
-        `Reference: ${r.reference || ""}`,
-        `Request ID: ${r.requestId || ""}`,
-        `Amount: ${r.amount || ""}`,
-        `Phone: ${r.phone || ""}`,
-        `Status: ${r.status || ""}`,
-        `Date: ${r.date || ""}`
-      ].join("\n");
-    }
-
-    async function shareReceipt() {
-      const text = buildReceiptText();
-      if (!text) return;
-
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: "Airtime Receipt",
-            text
-          });
-          return;
-        } catch (e) {
-          console.log(e);
-        }
+  function getNetworkMeta(network) {
+    const n = String(network || "").trim().toLowerCase();
+    const map = {
+      mtn: {
+        name: "MTN",
+        logo: "https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg",
+        service_id: "mtn"
+      },
+      glo: {
+        name: "GLO",
+        logo: "https://i.postimg.cc/B64Y96DS/glo.png",
+        service_id: "glo"
+      },
+      airtel: {
+        name: "Airtel",
+        logo: "https://i.postimg.cc/FKZbSxf8/airtel.png",
+        service_id: "airtel"
+      },
+      "9mobile": {
+        name: "9mobile",
+        logo: "https://i.postimg.cc/hhWQ6Jz3/9mobile.png",
+        service_id: "9mobile"
       }
+    };
 
-      alert("Sharing is not supported on this browser.");
-    }
+    return map[n] || {
+      name: n.toUpperCase(),
+      logo: "",
+      service_id: n
+    };
+  }
 
-    document.querySelectorAll(".network-card").forEach(card => {
-      card.addEventListener("click", () => {
-        document.querySelectorAll(".network-card").forEach(c => c.classList.remove("active"));
-        card.classList.add("active");
-        currentNetwork = card.dataset.network;
-      });
+  function formatAmount(value) {
+    const num = Number(value);
+    if (Number.isNaN(num)) return "₦0";
+    return "₦" + num.toLocaleString("en-NG", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
     });
+  }
 
-    const phoneInput = document.getElementById("phone");
-    phoneInput.addEventListener("input", function () {
-      let value = this.value.replace(/\D/g, "");
+  function buildReceiptText() {
+    if (!lastReceipt) return "";
 
-      if (value.length > 0 && value.charAt(0) !== "0") {
-        value = "";
-      }
+    const r = lastReceipt;
+    return [
+      "Funsup Airtime Receipt",
+      `Network: ${r.networkName || ""}`,
+      `Reference: ${r.reference || ""}`,
+      `Request ID: ${r.requestId || ""}`,
+      `Amount: ${r.amount || ""}`,
+      `Phone: ${r.phone || ""}`,
+      `Status: ${r.status || ""}`,
+      `Date: ${r.date || ""}`
+    ].join("\n");
+  }
 
-      value = value.slice(0, 11);
-      this.value = value;
-    });
+  async function shareReceipt() {
+    const text = buildReceiptText();
+    if (!text) return;
 
-    const amountInput = document.getElementById("amount");
-    amountInput.addEventListener("input", function () {
-      this.value = this.value.replace(/[^\d.]/g, "");
-      const parts = this.value.split(".");
-      if (parts.length > 2) {
-        this.value = parts[0] + "." + parts[1];
-      }
-    });
-
-    function showProcessingModal() {
-      document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "none";
-      document.getElementById("transactionIcon").className = "transaction-icon";
-      document.getElementById("transactionIcon").innerHTML = "⏳";
-      document.getElementById("transactionTitle").innerText = "Processing Transaction";
-      document.getElementById("transactionMessage").innerText = "Please wait...";
-    }
-
-    function showPendingModal(message) {
-      document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "block";
-      document.getElementById("transactionIcon").className = "transaction-icon pending";
-      document.getElementById("transactionIcon").innerHTML = "🟡";
-      document.getElementById("transactionTitle").innerText = "Transaction Pending";
-      document.getElementById("transactionMessage").innerText = message || "Your transaction is pending.";
-    }
-
-    function showFailedModal(message) {
-      document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "block";
-      document.getElementById("transactionIcon").className = "transaction-icon failed";
-      document.getElementById("transactionIcon").innerHTML = "❌";
-      document.getElementById("transactionTitle").innerText = "Transaction Failed";
-      document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
-    }
-
-    function showSuccessModal(message) {
-      document.getElementById("transactionModal").style.display = "flex";
-      document.getElementById("receiptSection").style.display = "block";
-      document.getElementById("transactionIcon").className = "transaction-icon success";
-      document.getElementById("transactionIcon").innerHTML = "✅";
-      document.getElementById("transactionTitle").innerText = "Transaction Successful";
-      document.getElementById("transactionMessage").innerText = message || "Transaction successful";
-    }
-
-    function closeModal() {
-      document.getElementById("transactionModal").style.display = "none";
-    }
-
-    function setReceiptValues({
-      networkMeta,
-      requestId,
-      reference,
-      amount,
-      phone,
-      status
-    }) {
-      document.getElementById("receiptNetworkLogo").src = networkMeta.logo || "";
-      document.getElementById("receiptNetworkName").innerText = networkMeta.name || "";
-      document.getElementById("receiptReference").innerText = reference || "";
-      document.getElementById("receiptRequestId").innerText = requestId || "";
-      document.getElementById("receiptAmount").innerText = formatAmount(amount);
-      document.getElementById("receiptPhone").innerText = phone || "";
-      document.getElementById("receiptStatus").innerText = status || "";
-      document.getElementById("receiptDate").innerText = new Date().toLocaleString();
-    }
-
-    async function buyAirtime() {
-      const token = getToken();
-
-      if (!token) {
-        alert("Please login first");
-        return;
-      }
-
-      const phone = document.getElementById("phone").value.trim();
-      const amountRaw = document.getElementById("amount").value.trim();
-      const networkMeta = getNetworkMeta(currentNetwork);
-      const request_id = generateRequestId("AIRTIME");
-      const amount = Number(amountRaw);
-
-      if (!/^0\d{10}$/.test(phone)) {
-        alert("Phone number must start with 0 and contain exactly 11 digits");
-        return;
-      }
-
-      if (!networkMeta.service_id) {
-        alert("Please choose a valid network");
-        return;
-      }
-
-      if (!amountRaw || Number.isNaN(amount) || amount <= 0) {
-        alert("Enter a valid amount");
-        return;
-      }
-
-      showProcessingModal();
-
-      const buyBtn = document.getElementById("buyBtn");
-      buyBtn.disabled = true;
-      buyBtn.innerText = "Processing...";
-
+    if (navigator.share) {
       try {
-        const response = await fetch(BUY_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            request_id,
-            phone,
-            service_id: networkMeta.service_id,
-            amount
-          })
+        await navigator.share({
+          title: "Funsup Airtime Receipt",
+          text
         });
-
-        const data = await response.json().catch(() => ({}));
-        console.log("AIRTIME RESPONSE:", data);
-
-        const tx = data.transaction || data.data?.transaction || data.result || {};
-        const statusText = String(tx.status || data.status || "").toLowerCase();
-
-        const reference =
-          tx.reference ||
-          tx.tx_ref ||
-          data.reference ||
-          request_id;
-
-        if (
-          response.ok &&
-          (
-            data.transaction ||
-            data.success === true ||
-            statusText === "success" ||
-            statusText === "successful" ||
-            statusText === "completed"
-          )
-        ) {
-          showSuccessModal(data.message || "Transaction successful");
-
-          setReceiptValues({
-            networkMeta,
-            requestId: request_id,
-            reference,
-            amount,
-            phone,
-            status: tx.status || data.status || "success"
-          });
-
-          lastReceipt = {
-            networkName: networkMeta.name,
-            reference,
-            requestId: request_id,
-            amount: formatAmount(amount),
-            phone,
-            status: tx.status || data.status || "success",
-            date: new Date().toLocaleString()
-          };
-
-          return;
-        }
-
-        if (
-          statusText === "pending" ||
-          data.status === "pending" ||
-          data.transaction?.status === "pending"
-        ) {
-          showPendingModal(data.message || "Transaction pending");
-
-          setReceiptValues({
-            networkMeta,
-            requestId: request_id,
-            reference,
-            amount,
-            phone,
-            status: "pending"
-          });
-
-          lastReceipt = {
-            networkName: networkMeta.name,
-            reference,
-            requestId: request_id,
-            amount: formatAmount(amount),
-            phone,
-            status: "pending",
-            date: new Date().toLocaleString()
-          };
-
-          return;
-        }
-
-        showFailedModal(data.message || "Transaction failed");
-
-        setReceiptValues({
-          networkMeta,
-          requestId: request_id,
-          reference,
-          amount,
-          phone,
-          status: "failed"
-        });
-
-        lastReceipt = {
-          networkName: networkMeta.name,
-          reference,
-          requestId: request_id,
-          amount: formatAmount(amount),
-          phone,
-          status: "failed",
-          date: new Date().toLocaleString()
-        };
-      } catch (error) {
-        console.error(error);
-        showFailedModal("Unable to complete transaction");
-
-        setReceiptValues({
-          networkMeta,
-          requestId: request_id,
-          reference: "",
-          amount,
-          phone,
-          status: "failed"
-        });
-
-        lastReceipt = {
-          networkName: networkMeta.name,
-          reference: "",
-          requestId: request_id,
-          amount: formatAmount(amount),
-          phone,
-          status: "failed",
-          date: new Date().toLocaleString()
-        };
-      } finally {
-        buyBtn.disabled = false;
-        buyBtn.innerText = "Buy Airtime";
+        return;
+      } catch (e) {
+        console.log(e);
       }
     }
 
-    document.getElementById("buyBtn").addEventListener("click", buyAirtime);
-  </script>
+    alert("Sharing is not supported on this browser.");
+  }
+
+  document.querySelectorAll(".network-card").forEach(card => {
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".network-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      currentNetwork = card.dataset.network;
+    });
+  });
+
+  const phoneInput = document.getElementById("phone");
+  phoneInput.addEventListener("input", function () {
+    let value = this.value.replace(/\D/g, "");
+
+    if (value.length > 0 && value.charAt(0) !== "0") {
+      value = "";
+    }
+
+    value = value.slice(0, 11);
+    this.value = value;
+  });
+
+  const amountInput = document.getElementById("amount");
+  amountInput.addEventListener("input", function () {
+    this.value = this.value.replace(/[^\d.]/g, "");
+    const parts = this.value.split(".");
+    if (parts.length > 2) {
+      this.value = parts[0] + "." + parts[1];
+    }
+  });
+
+  function showProcessingModal() {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "none";
+    document.getElementById("transactionIcon").className = "transaction-icon";
+    document.getElementById("transactionIcon").innerHTML = "⏳";
+    document.getElementById("transactionTitle").innerText = "Processing Transaction";
+    document.getElementById("transactionMessage").innerText = "Please wait...";
+  }
+
+  function showPendingModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "block";
+    document.getElementById("transactionIcon").className = "transaction-icon pending";
+    document.getElementById("transactionIcon").innerHTML = "🟡";
+    document.getElementById("transactionTitle").innerText = "Transaction Pending";
+    document.getElementById("transactionMessage").innerText = message || "Your transaction is pending.";
+  }
+
+  function showFailedModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "block";
+    document.getElementById("transactionIcon").className = "transaction-icon failed";
+    document.getElementById("transactionIcon").innerHTML = "❌";
+    document.getElementById("transactionTitle").innerText = "Transaction Failed";
+    document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
+  }
+
+  function showSuccessModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "block";
+    document.getElementById("transactionIcon").className = "transaction-icon success";
+    document.getElementById("transactionIcon").innerHTML = "✅";
+    document.getElementById("transactionTitle").innerText = "Transaction Successful";
+    document.getElementById("transactionMessage").innerText = message || "Transaction successful";
+  }
+
+  function closeModal() {
+    document.getElementById("transactionModal").style.display = "none";
+  }
+
+  function setReceiptValues({
+    networkMeta,
+    requestId,
+    reference,
+    amount,
+    phone,
+    status
+  }) {
+    document.getElementById("receiptNetworkLogo").src = networkMeta.logo || "";
+    document.getElementById("receiptNetworkName").innerText = networkMeta.name || "";
+    document.getElementById("receiptReference").innerText = reference || "";
+    document.getElementById("receiptRequestId").innerText = requestId || "";
+    document.getElementById("receiptAmount").innerText = formatAmount(amount);
+    document.getElementById("receiptPhone").innerText = phone || "";
+    document.getElementById("receiptStatus").innerText = status || "";
+    document.getElementById("receiptDate").innerText = new Date().toLocaleString();
+  }
+
+  function openPinModal(payload) {
+    enteredPin = "";
+    pendingAirtimePayload = payload;
+    renderPinBoxes();
+    document.getElementById("pinOverlay").style.display = "flex";
+  }
+
+  function closePinModal() {
+    document.getElementById("pinOverlay").style.display = "none";
+  }
+
+  function renderPinBoxes() {
+    for (let i = 0; i < 4; i++) {
+      const box = document.getElementById(`pinBox${i}`);
+      if (!box) continue;
+
+      const hasDigit = i < enteredPin.length;
+      box.textContent = hasDigit ? "•" : "";
+      box.classList.toggle("filled", hasDigit);
+    }
+  }
+
+  function pressPin(digit) {
+    if (enteredPin.length >= 4) return;
+
+    enteredPin += digit;
+    renderPinBoxes();
+
+    if (enteredPin.length === 4) {
+      const payload = pendingAirtimePayload;
+      closePinModal();
+      sendAirtimeRequest(payload, enteredPin);
+    }
+  }
+
+  function backspacePin() {
+    enteredPin = enteredPin.slice(0, -1);
+    renderPinBoxes();
+  }
+
+  async function buyAirtime() {
+    const token = getToken();
+
+    if (!token) {
+      alert("Please login first");
+      return;
+    }
+
+    const phone = document.getElementById("phone").value.trim();
+    const amountRaw = document.getElementById("amount").value.trim();
+    const networkMeta = getNetworkMeta(currentNetwork);
+    const request_id = generateRequestId("AIRTIME");
+    const amount = Number(amountRaw);
+
+    if (!/^0\d{10}$/.test(phone)) {
+      alert("Phone number must start with 0 and contain exactly 11 digits");
+      return;
+    }
+
+    if (!networkMeta.service_id) {
+      alert("Please choose a valid network");
+      return;
+    }
+
+    if (!amountRaw || Number.isNaN(amount) || amount <= 0) {
+      alert("Enter a valid amount");
+      return;
+    }
+
+    openPinModal({
+      token,
+      request_id,
+      phone,
+      service_id: networkMeta.service_id,
+      amount,
+      networkMeta
+    });
+  }
+
+  async function sendAirtimeRequest(payload, fundPin) {
+    const { token, request_id, phone, service_id, amount, networkMeta } = payload;
+
+    showProcessingModal();
+
+    const buyBtn = document.getElementById("buyBtn");
+    buyBtn.disabled = true;
+    buyBtn.innerText = "Processing...";
+
+    try {
+      const response = await fetch(BUY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          request_id,
+          phone,
+          service_id,
+          amount,
+          fundPin
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      console.log("AIRTIME RESPONSE:", data);
+
+      const tx = data.transaction || data.data?.transaction || data.result || {};
+      const statusText = String(tx.status || data.status || "").toLowerCase();
+
+      const reference =
+        tx.reference ||
+        tx.tx_ref ||
+        data.reference ||
+        request_id;
+
+      if (
+        response.ok &&
+        (
+          data.transaction ||
+          data.success === true ||
+          statusText === "success" ||
+          statusText === "successful" ||
+          statusText === "completed"
+        )
+      ) {
+        showSuccessModal(data.message || "Transaction successful");
+
+        setReceiptValues({
+          networkMeta,
+          requestId: request_id,
+          reference,
+          amount,
+          phone,
+          status: tx.status || data.status || "success"
+        });
+
+        lastReceipt = {
+          networkName: networkMeta.name,
+          reference,
+          requestId: request_id,
+          amount: formatAmount(amount),
+          phone,
+          status: tx.status || data.status || "success",
+          date: new Date().toLocaleString()
+        };
+
+        return;
+      }
+
+      if (
+        statusText === "pending" ||
+        data.status === "pending" ||
+        data.transaction?.status === "pending"
+      ) {
+        showPendingModal(data.message || "Transaction pending");
+
+        setReceiptValues({
+          networkMeta,
+          requestId: request_id,
+          reference,
+          amount,
+          phone,
+          status: "pending"
+        });
+
+        lastReceipt = {
+          networkName: networkMeta.name,
+          reference,
+          requestId: request_id,
+          amount: formatAmount(amount),
+          phone,
+          status: "pending",
+          date: new Date().toLocaleString()
+        };
+
+        return;
+      }
+
+      showFailedModal(data.message || "Transaction failed");
+
+      setReceiptValues({
+        networkMeta,
+        requestId: request_id,
+        reference,
+        amount,
+        phone,
+        status: "failed"
+      });
+
+      lastReceipt = {
+        networkName: networkMeta.name,
+        reference,
+        requestId: request_id,
+        amount: formatAmount(amount),
+        phone,
+        status: "failed",
+        date: new Date().toLocaleString()
+      };
+    } catch (error) {
+      console.error(error);
+      showFailedModal("Unable to complete transaction");
+
+      setReceiptValues({
+        networkMeta,
+        requestId: request_id,
+        reference: "",
+        amount,
+        phone,
+        status: "failed"
+      });
+
+      lastReceipt = {
+        networkName: networkMeta.name,
+        reference: "",
+        requestId: request_id,
+        amount: formatAmount(amount),
+        phone,
+        status: "failed",
+        date: new Date().toLocaleString()
+      };
+    } finally {
+      buyBtn.disabled = false;
+      buyBtn.innerText = "Buy Airtime";
+    }
+  }
+
+  document.getElementById("buyBtn").addEventListener("click", buyAirtime);
+
+  document.addEventListener("keydown", (e) => {
+    if (document.getElementById("pinOverlay").style.display === "flex") {
+      if (/^\d$/.test(e.key)) pressPin(e.key);
+      if (e.key === "Backspace") backspacePin();
+      if (e.key === "Escape") closePinModal();
+    }
+  });
+</script>
 </body>
 </html>
