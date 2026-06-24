@@ -681,7 +681,7 @@ async function initDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
-`);
+
 
     CREATE TABLE IF NOT EXISTS wallets (
       id TEXT PRIMARY KEY,
