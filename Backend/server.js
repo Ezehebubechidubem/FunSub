@@ -1645,26 +1645,32 @@ app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
 
     await client.query(
       `INSERT INTO transactions
-       (id, user_id, type, category, amount, currency, status, reference, description, meta, updated_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'NGN', 'success', $6, $7, $8, NOW(), NOW())`,
+       (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'NGN', 'success', $6, $7, $8, NOW())`,
       [
         uid('tx_'),
         req.user.id,
         'funding',
         'wallet',
         amt,
-        `temp-topup-${Date.now()}`,
+        `temp-topup-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
         'Temporary wallet top up',
-        JSON.stringify({ source: 'temporary_topup' })
+        JSON.stringify({
+          source: 'temporary_topup',
+          amount: amt
+        })
       ]
     );
 
     await client.query('COMMIT');
 
-    return respondOk(res, { amount: amt }, 'Wallet topped up');
+    return respondOk(res, {
+      amount: amt,
+      message: 'Wallet topped up successfully'
+    }, 'Wallet topped up');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('TEMP TOPUP ERROR:', err);
+    console.error('TEMP TOPUP ERROR:', err?.message || err);
     return respondError(res, 500, 'Unable to top up wallet');
   } finally {
     client.release();
