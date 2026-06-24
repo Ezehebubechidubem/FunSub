@@ -16,12 +16,10 @@
     :root{
       --gold:#d4af37;
       --gold-soft:#fff8e1;
-      --gold-border:#f0d98a;
       --text:#111827;
       --muted:#6b7280;
       --border:#e5e7eb;
       --bg:#ffffff;
-      --card:#ffffff;
       --shadow:0 18px 45px rgba(0,0,0,.08);
       --success:#0f7a3b;
       --danger:#b42318;
@@ -36,7 +34,7 @@
     }
 
     .wrap{
-      max-width:980px;
+      max-width:900px;
       margin:0 auto;
     }
 
@@ -44,7 +42,7 @@
       background:linear-gradient(180deg,#fffef9 0%,#ffffff 100%);
       border:1px solid var(--border);
       border-radius:28px;
-      padding:24px;
+      padding:26px;
       box-shadow:var(--shadow);
     }
 
@@ -64,7 +62,6 @@
       font-size:32px;
       margin-top:16px;
       line-height:1.15;
-      color:var(--text);
     }
 
     .sub{
@@ -72,7 +69,7 @@
       color:var(--muted);
       line-height:1.6;
       font-size:15px;
-      max-width:820px;
+      max-width:800px;
     }
 
     .grid{
@@ -85,22 +82,21 @@
     .card{
       border:1px solid var(--border);
       border-radius:22px;
-      background:var(--card);
+      background:#fff;
       padding:18px;
       box-shadow:0 10px 30px rgba(0,0,0,.04);
     }
 
     .card h3{
       font-size:18px;
-      margin-bottom:12px;
-      color:var(--text);
+      margin-bottom:10px;
     }
 
     .card p,
     .card li{
       color:var(--muted);
       font-size:14px;
-      line-height:1.65;
+      line-height:1.6;
     }
 
     .card ul{
@@ -108,7 +104,7 @@
     }
 
     .status-box{
-      margin-top:14px;
+      margin-top:18px;
       display:grid;
       gap:12px;
     }
@@ -132,7 +128,6 @@
     .row span:last-child{
       font-weight:700;
       text-align:right;
-      word-break:break-word;
     }
 
     .active{
@@ -575,8 +570,7 @@
       <p id="modalText">Please wait...</p>
     </div>
   </div>
-
-  <div id="pinOverlay" class="pin-overlay">
+<div id="pinOverlay" class="pin-overlay">
     <div class="pin-sheet">
       <div class="pin-sheet-top">
         <button type="button" class="pin-close" onclick="closePinModal()">×</button>
@@ -609,366 +603,372 @@
       </div>
     </div>
   </div>
-<script>
-  const API_ROOT = "https://funsub.onrender.com";
-  const tokenKey = "funsub_token";
 
-  const loader = document.getElementById("modal");
-  const notice = document.getElementById("notice");
-  const agentStatusTag = document.getElementById("agentStatusTag");
-  const walletBalanceTag = document.getElementById("walletBalanceTag");
-  const upgradeAmountTag = document.getElementById("upgradeAmountTag");
-  const upgradeBtn = document.getElementById("upgradeBtn");
-  const refreshBtn = document.getElementById("refreshBtn");
-  const modalText = document.getElementById("modalText");
-  const pageSubtitle = document.getElementById("pageSubtitle");
-  const detailsCard = document.getElementById("detailsCard");
-  const detailAmount = document.getElementById("detailAmount");
-  const detailWallet = document.getElementById("detailWallet");
-  const detailRemaining = document.getElementById("detailRemaining");
-  const countdownValue = document.getElementById("countdownValue");
-  const countdownNote = document.getElementById("countdownNote");
-  const benefitsList = document.getElementById("benefitsList");
-  const benefitBadges = document.getElementById("benefitBadges");
+  <script>
+    const API_ROOT = "https://funsub.onrender.com";
+    const tokenKey = "funsub_token";
 
-  let config = {
-    title: "Upgrade to Agent",
-    subtitle: "Unlock cheaper data plans and priority pricing.",
-    upgrade_amount: 4000,
-    benefits: []
-  };
+    const loader = document.getElementById("modal");
+    const notice = document.getElementById("notice");
+    const agentStatusTag = document.getElementById("agentStatusTag");
+    const walletBalanceTag = document.getElementById("walletBalanceTag");
+    const upgradeAmountTag = document.getElementById("upgradeAmountTag");
+    const upgradeBtn = document.getElementById("upgradeBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const modalText = document.getElementById("modalText");
+    const pageSubtitle = document.getElementById("pageSubtitle");
+    const detailsCard = document.getElementById("detailsCard");
+    const detailAmount = document.getElementById("detailAmount");
+    const detailWallet = document.getElementById("detailWallet");
+    const detailRemaining = document.getElementById("detailRemaining");
+    const countdownValue = document.getElementById("countdownValue");
+    const countdownNote = document.getElementById("countdownNote");
+    const benefitsList = document.getElementById("benefitsList");
+    const benefitBadges = document.getElementById("benefitBadges");
 
-  let currentAgentStatus = null;
-  let currentWalletBalance = 0;
-  let enteredPin = "";
-  let pendingUpgradePayload = null;
+    let config = {
+      title: "Upgrade to Agent",
+      subtitle: "Unlock cheaper data plans and priority pricing.",
+      upgrade_amount: 4000,
+      benefits: []
+    };
 
-  function getToken() {
-    return localStorage.getItem(tokenKey) || "";
-  }
+    let currentAgentStatus = null;
+    let currentWalletBalance = 0;
+    let enteredPin = "";
+    let pendingUpgradePayload = null;
 
-  function money(value) {
-    const num = Number(value || 0);
-    return `₦${num.toLocaleString("en-NG", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    })}`;
-  }
+    function getToken() {
+      return localStorage.getItem(tokenKey) || "";
+    }
 
-  function safe(v, fallback = "—") {
-    const s = String(v ?? "").trim();
-    return s || fallback;
-  }
+    function money(value) {
+      const num = Number(value || 0);
+      return `₦${num.toLocaleString("en-NG", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      })}`;
+    }
 
-  function showModal(message) {
-    modalText.textContent = message || "Please wait...";
-    loader.style.display = "flex";
-  }
+    function safe(v, fallback = "—") {
+      const s = String(v ?? "").trim();
+      return s || fallback;
+    }
 
-  function hideModal() {
-    loader.style.display = "none";
-  }
+    function showModal(message) {
+      modalText.textContent = message || "Please wait...";
+      loader.style.display = "flex";
+    }
 
-  function showNotice(message, type = "info") {
-    notice.textContent = message;
-    notice.className = `notice show ${type}`;
-  }
+    function hideModal() {
+      loader.style.display = "none";
+    }
 
-  function clearNotice() {
-    notice.textContent = "";
-    notice.className = "notice";
-  }
+    function showNotice(message, type = "info") {
+      notice.textContent = message;
+      notice.className = `notice show ${type}`;
+    }
 
-  function setAgentStatus(message, type = "info") {
-    agentStatusTag.className =
-      type === "success" ? "active" : type === "error" ? "inactive" : "pendingTag";
-    agentStatusTag.textContent = message;
-  }
+    function clearNotice() {
+      notice.textContent = "";
+      notice.className = "notice";
+    }
 
-  function setUpgradeButtonState() {
-    const isAgent = currentAgentStatus === "agent";
-    upgradeBtn.disabled = isAgent;
-    upgradeBtn.textContent = isAgent ? "Already an Agent" : "Upgrade to Agent";
-  }
+    function setAgentStatus(message, type = "info") {
+      agentStatusTag.className =
+        type === "success" ? "active" : type === "error" ? "inactive" : "pendingTag";
+      agentStatusTag.textContent = message;
+    }
 
-  function renderConfigToUI() {
-    pageSubtitle.textContent = safe(config.subtitle, "Upgrade your account to Agent.");
-    upgradeAmountTag.textContent = money(config.upgrade_amount);
-    detailAmount.textContent = money(config.upgrade_amount);
+    function setUpgradeButtonState() {
+      const isAgent = currentAgentStatus === "agent";
+      upgradeBtn.disabled = isAgent;
+      upgradeBtn.textContent = isAgent ? "Already an Agent" : "Upgrade to Agent";
+    }
 
-    const benefits = Array.isArray(config.benefits) ? config.benefits : [];
-    benefitsList.innerHTML = "";
-    benefitBadges.innerHTML = "";
+    function renderConfigToUI() {
+      pageSubtitle.textContent = safe(config.subtitle, "Upgrade your account to Agent.");
+      upgradeAmountTag.textContent = money(config.upgrade_amount);
+      detailAmount.textContent = money(config.upgrade_amount);
 
-    const defaultBenefits = benefits.length
-      ? benefits
-      : [
+      const benefits = Array.isArray(config.benefits) ? config.benefits : [];
+      benefitsList.innerHTML = "";
+      benefitBadges.innerHTML = "";
+
+      const defaultBenefits = benefits.length
+        ? benefits
+        : [
+            "Cheaper data plans",
+            "Better discount rates",
+            "Priority access to agent pricing",
+            "Automatic upgrade after PIN verification"
+          ];
+
+      defaultBenefits.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        benefitsList.appendChild(li);
+
+        const badge = document.createElement("span");
+        badge.className = "benefit";
+        badge.textContent = item;
+        benefitBadges.appendChild(badge);
+      });
+    }
+
+    function updateSummary() {
+      detailWallet.textContent = money(currentWalletBalance);
+
+      const remaining = Number(currentWalletBalance) - Number(config.upgrade_amount);
+      detailRemaining.textContent = remaining >= 0 ? money(remaining) : "Insufficient balance";
+    }
+
+    function openPinModal(payload) {
+      enteredPin = "";
+      pendingUpgradePayload = payload;
+      renderPinBoxes();
+      document.getElementById("pinOverlay").style.display = "flex";
+    }
+
+    function closePinModal() {
+      document.getElementById("pinOverlay").style.display = "none";
+    }
+
+    function renderPinBoxes() {
+      for (let i = 0; i < 4; i++) {
+        const box = document.getElementById(`pinBox${i}`);
+        if (!box) continue;
+
+        const hasDigit = i < enteredPin.length;
+        box.textContent = hasDigit ? "•" : "";
+        box.classList.toggle("filled", hasDigit);
+      }
+    }
+
+    function pressPin(digit) {
+      if (enteredPin.length >= 4) return;
+
+      enteredPin += digit;
+      renderPinBoxes();
+
+      if (enteredPin.length === 4) {
+        const payload = pendingUpgradePayload;
+        closePinModal();
+        sendUpgradeRequest(payload, enteredPin);
+      }
+    }
+
+    function backspacePin() {
+      enteredPin = enteredPin.slice(0, -1);
+      renderPinBoxes();
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = getToken();
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { rawResponse: text };
+      }
+
+      return { res, data };
+    }
+
+    async function loadConfig() {
+      const { res, data } = await apiFetch(`${API_ROOT}/api/agent/config`);
+      if (!res.ok) {
+        throw new Error(data?.message || "Unable to load agent config");
+      }
+
+      config = {
+        title: "Upgrade to Agent",
+        subtitle: "Unlock cheaper data plans, better discounts, and priority access.",
+        upgrade_amount: Number(data?.config?.upgrade_amount || config.upgrade_amount),
+        benefits: [
           "Cheaper data plans",
           "Better discount rates",
           "Priority access to agent pricing",
           "Automatic upgrade after PIN verification"
-        ];
+        ]
+      };
 
-    defaultBenefits.forEach((item) => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      benefitsList.appendChild(li);
-
-      const badge = document.createElement("span");
-      badge.className = "benefit";
-      badge.textContent = item;
-      benefitBadges.appendChild(badge);
-    });
-  }
-
-  function updateSummary() {
-    detailWallet.textContent = money(currentWalletBalance);
-
-    const remaining = Number(currentWalletBalance) - Number(config.upgrade_amount);
-    detailRemaining.textContent = remaining >= 0 ? money(remaining) : "Insufficient balance";
-  }
-
-  function openPinModal(payload) {
-    enteredPin = "";
-    pendingUpgradePayload = payload;
-    renderPinBoxes();
-    document.getElementById("pinOverlay").style.display = "flex";
-  }
-
-  function closePinModal() {
-    document.getElementById("pinOverlay").style.display = "none";
-  }
-
-  function renderPinBoxes() {
-    for (let i = 0; i < 4; i++) {
-      const box = document.getElementById(`pinBox${i}`);
-      if (!box) continue;
-
-      const hasDigit = i < enteredPin.length;
-      box.textContent = hasDigit ? "•" : "";
-      box.classList.toggle("filled", hasDigit);
-    }
-  }
-
-  function pressPin(digit) {
-    if (enteredPin.length >= 4) return;
-
-    enteredPin += digit;
-    renderPinBoxes();
-
-    if (enteredPin.length === 4) {
-      const payload = pendingUpgradePayload;
-      closePinModal();
-      sendUpgradeRequest(payload, enteredPin);
-    }
-  }
-
-  function backspacePin() {
-    enteredPin = enteredPin.slice(0, -1);
-    renderPinBoxes();
-  }
-
-  async function apiFetch(url, options = {}) {
-    const token = getToken();
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
-
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { rawResponse: text };
+      document.title = `Funsup | ${config.title}`;
+      document.querySelector("h1").textContent = config.title;
+      renderConfigToUI();
+      updateSummary();
     }
 
-    return { res, data };
-  }
+    async function loadStatus() {
+      clearNotice();
 
-  async function loadConfig() {
-    const { res, data } = await apiFetch(`${API_ROOT}/api/agent/config`);
-    if (!res.ok) {
-      throw new Error(data?.message || "Unable to load agent config");
-    }
-
-    config = {
-      title: data?.config?.title || config.title,
-      subtitle: data?.config?.subtitle || config.subtitle,
-      upgrade_amount: Number(data?.config?.upgrade_amount || config.upgrade_amount),
-      benefits: Array.isArray(data?.config?.benefits) ? data.config.benefits : config.benefits
-    };
-
-    document.title = `Funsup | ${config.title}`;
-    document.querySelector("h1").textContent = config.title;
-    renderConfigToUI();
-    updateSummary();
-  }
-
-  async function loadStatus() {
-    clearNotice();
-
-    const token = getToken();
-    if (!token) {
-      setAgentStatus("Please log in first", "error");
-      showNotice("Please log in first", "error");
-      upgradeBtn.disabled = true;
-      return;
-    }
-
-    try {
-      const { res, data } = await apiFetch(`${API_ROOT}/api/agent/status`);
-      if (!res.ok) {
-        setAgentStatus(data?.message || "Unable to load status", "error");
-        showNotice(data?.message || "Unable to load status", "error");
+      const token = getToken();
+      if (!token) {
+        setAgentStatus("Please log in first", "error");
+        showNotice("Please log in first", "error");
+        upgradeBtn.disabled = true;
         return;
       }
 
-      const agent = data?.agent || {};
-      currentAgentStatus = String(agent.role || "").toLowerCase() === "agent" ? "agent" : "subscriber";
-      currentWalletBalance = Number(agent.wallet_balance || 0);
+      try {
+        const { res, data } = await apiFetch(`${API_ROOT}/api/agent/status`);
+        if (!res.ok) {
+          setAgentStatus(data?.message || "Unable to load status", "error");
+          showNotice(data?.message || "Unable to load status", "error");
+          return;
+        }
 
-      walletBalanceTag.textContent = money(currentWalletBalance);
-      updateSummary();
+        const agent = data?.agent || {};
+        currentAgentStatus = String(agent.role || "").toLowerCase() === "agent" ? "agent" : "subscriber";
+        currentWalletBalance = Number(agent.wallet_balance || 0);
+
+        walletBalanceTag.textContent = money(currentWalletBalance);
+        updateSummary();
+
+        if (currentAgentStatus === "agent") {
+          setAgentStatus("Agent Active", "success");
+          showNotice("Your account is already upgraded to Agent.", "success");
+        } else {
+          setAgentStatus("Subscriber", "info");
+        }
+
+        setUpgradeButtonState();
+      } catch (err) {
+        console.error(err);
+        setAgentStatus("Unable to load status", "error");
+        showNotice("Network error while loading status", "error");
+      }
+    }
+
+    async function upgradeToAgent() {
+      clearNotice();
 
       if (currentAgentStatus === "agent") {
-        setAgentStatus("Agent Active", "success");
-        showNotice("Your account is already upgraded to Agent.", "success");
-      } else {
-        setAgentStatus("Subscriber", "info");
-      }
-
-      setUpgradeButtonState();
-    } catch (err) {
-      console.error(err);
-      setAgentStatus("Unable to load status", "error");
-      showNotice("Network error while loading status", "error");
-    }
-  }
-
-  async function upgradeToAgent() {
-    clearNotice();
-
-    if (currentAgentStatus === "agent") {
-      showNotice("Your account is already upgraded.", "info");
-      return;
-    }
-
-    const token = getToken();
-    if (!token) {
-      showNotice("Please log in first before upgrading to Agent.", "error");
-      return;
-    }
-
-    if (Number(currentWalletBalance) < Number(config.upgrade_amount)) {
-      showNotice(
-        `Insufficient wallet balance. You need at least ${money(config.upgrade_amount)}.`,
-        "error"
-      );
-      return;
-    }
-
-    openPinModal({
-      amount: config.upgrade_amount
-    });
-  }
-
-  async function sendUpgradeRequest(payload, fundPin) {
-    const token = getToken();
-    if (!token) {
-      showNotice("Please log in first.", "error");
-      return;
-    }
-
-    showModal("Verifying PIN and checking wallet balance...");
-
-    const upgradeButtonText = upgradeBtn.textContent;
-    upgradeBtn.disabled = true;
-    upgradeBtn.textContent = "Processing...";
-
-    try {
-      const { res, data } = await apiFetch(`${API_ROOT}/api/agent/upgrade`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fundPin,
-          amount: payload?.amount
-        })
-      });
-
-      hideModal();
-
-      if (!res.ok) {
-        showNotice(data?.message || "Unable to upgrade account.", "error");
-        await loadStatus();
+        showNotice("Your account is already upgraded.", "info");
         return;
       }
 
-      const upgradedAmount = Number(data?.transaction?.amount || config.upgrade_amount);
+      const token = getToken();
+      if (!token) {
+        showNotice("Please log in first before upgrading to Agent.", "error");
+        return;
+      }
 
-      currentAgentStatus = "agent";
-      currentWalletBalance = Number(data?.wallet?.balance || currentWalletBalance - upgradedAmount);
+      if (Number(currentWalletBalance) < Number(config.upgrade_amount)) {
+        showNotice(
+          `Insufficient wallet balance. You need at least ${money(config.upgrade_amount)}.`,
+          "error"
+        );
+        return;
+      }
 
-      walletBalanceTag.textContent = money(currentWalletBalance);
-      updateSummary();
-      setAgentStatus("Agent Active", "success");
-      setUpgradeButtonState();
-      showNotice(data?.message || "Agent upgrade successful.", "success");
-
-      setTimeout(() => {
-        window.location.href = "dashboard.html";
-      }, 1600);
-    } catch (err) {
-      console.error(err);
-      hideModal();
-      upgradeBtn.disabled = false;
-      upgradeBtn.textContent = upgradeButtonText;
-      showNotice("Network error while upgrading.", "error");
-    } finally {
-      upgradeBtn.disabled = currentAgentStatus === "agent";
-      upgradeBtn.textContent = currentAgentStatus === "agent" ? "Already an Agent" : "Upgrade to Agent";
+      openPinModal({
+        amount: config.upgrade_amount
+      });
     }
-  }
 
-  upgradeBtn.addEventListener("click", upgradeToAgent);
-  refreshBtn.addEventListener("click", async () => {
-    try {
-      await loadConfig();
-      await loadStatus();
-      showNotice("Status refreshed.", "success");
-    } catch (err) {
-      console.error(err);
-      showNotice("Unable to refresh status.", "error");
+    async function sendUpgradeRequest(payload, fundPin) {
+      const token = getToken();
+      if (!token) {
+        showNotice("Please log in first.", "error");
+        return;
+      }
+
+      showModal("Verifying PIN and checking wallet balance...");
+
+      const upgradeButtonText = upgradeBtn.textContent;
+      upgradeBtn.disabled = true;
+      upgradeBtn.textContent = "Processing...";
+
+      try {
+        const { res, data } = await apiFetch(`${API_ROOT}/api/agent/upgrade`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            fundPin,
+            amount: payload?.amount
+          })
+        });
+
+        hideModal();
+
+        if (!res.ok) {
+          showNotice(data?.message || "Unable to upgrade account.", "error");
+          await loadStatus();
+          return;
+        }
+
+        const upgradedAmount = Number(data?.transaction?.amount || config.upgrade_amount);
+
+        currentAgentStatus = "agent";
+        currentWalletBalance = Number(data?.wallet?.balance || currentWalletBalance - upgradedAmount);
+
+        walletBalanceTag.textContent = money(currentWalletBalance);
+        updateSummary();
+        setAgentStatus("Agent Active", "success");
+        setUpgradeButtonState();
+        showNotice(data?.message || "Agent upgrade successful.", "success");
+
+        setTimeout(() => {
+          window.location.href = "dashboard.html";
+        }, 1600);
+      } catch (err) {
+        console.error(err);
+        hideModal();
+        upgradeBtn.disabled = false;
+        upgradeBtn.textContent = upgradeButtonText;
+        showNotice("Network error while upgrading.", "error");
+      } finally {
+        upgradeBtn.disabled = currentAgentStatus === "agent";
+        upgradeBtn.textContent = currentAgentStatus === "agent" ? "Already an Agent" : "Upgrade to Agent";
+      }
     }
-  });
 
-  document.addEventListener("keydown", (e) => {
-    if (document.getElementById("pinOverlay").style.display === "flex") {
-      if (/^\d$/.test(e.key)) pressPin(e.key);
-      if (e.key === "Backspace") backspacePin();
-      if (e.key === "Escape") closePinModal();
-    }
-  });
+    upgradeBtn.addEventListener("click", upgradeToAgent);
+    refreshBtn.addEventListener("click", async () => {
+      try {
+        await loadConfig();
+        await loadStatus();
+        showNotice("Status refreshed.", "success");
+      } catch (err) {
+        console.error(err);
+        showNotice("Unable to refresh status.", "error");
+      }
+    });
 
-  window.addEventListener("DOMContentLoaded", async () => {
-    try {
-      renderConfigToUI();
-      await loadConfig();
-      await loadStatus();
-    } catch (err) {
-      console.error(err);
-      showNotice(err.message || "Unable to load page.", "error");
-    }
-  });
+    document.addEventListener("keydown", (e) => {
+      if (document.getElementById("pinOverlay").style.display === "flex") {
+        if (/^\d$/.test(e.key)) pressPin(e.key);
+        if (e.key === "Backspace") backspacePin();
+        if (e.key === "Escape") closePinModal();
+      }
+    });
 
-  window.addEventListener("beforeunload", () => {
-    closePinModal();
-  });
-</script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      try {
+        renderConfigToUI();
+        await loadConfig();
+        await loadStatus();
+      } catch (err) {
+        console.error(err);
+        showNotice(err.message || "Unable to load page.", "error");
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      closePinModal();
+    });
+  </script>
 </body>
 </html>
