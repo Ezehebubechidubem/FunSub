@@ -5,29 +5,6 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function parseList(value) {
-  return String(value || "")
-    .split("|")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function buildAgentConfig() {
-  return {
-    brand_name: process.env.AGENT_BRAND_NAME || "Funsup",
-    title: process.env.AGENT_TITLE || "Upgrade to Agent",
-    subtitle:
-      process.env.AGENT_SUBTITLE ||
-      "Unlock cheaper data plans, better discounts, and priority access.",
-    upgrade_amount: toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000),
-    currency: process.env.AGENT_CURRENCY || "NGN",
-    benefits: parseList(
-      process.env.AGENT_BENEFITS ||
-        "Cheaper data plans|Better discount rates|Priority access to agent pricing|Automatic upgrade after PIN verification"
-    )
-  };
-}
-
 function getUserId(reqUser) {
   return reqUser?.id || reqUser?.userId || null;
 }
@@ -49,9 +26,27 @@ function createAgentRouter({
   if (typeof verifyFundPin !== "function") throw new Error("verifyFundPin is required");
 
   const router = express.Router();
-router.get("/config", requireAuth, async (_req, res) => {
+
+  router.get("/config", requireAuth, async (_req, res) => {
     try {
-      return respondOk(res, { config: buildAgentConfig() }, "Agent config loaded");
+      return respondOk(
+        res,
+        {
+          config: {
+            title: "Upgrade to Agent",
+            subtitle: "Unlock cheaper data plans, better discounts, and priority access.",
+            upgrade_amount: toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000),
+            currency: "NGN",
+            benefits: [
+              "Cheaper data plans",
+              "Better discount rates",
+              "Priority access to agent pricing",
+              "Automatic upgrade after PIN verification"
+            ]
+          }
+        },
+        "Agent config loaded"
+      );
     } catch (err) {
       return respondError(res, 500, err?.message || "Unable to load agent config");
     }
@@ -80,13 +75,11 @@ router.get("/config", requireAuth, async (_req, res) => {
       const row = result.rows[0];
       if (!row) return respondError(res, 404, "User not found");
 
-      const config = buildAgentConfig();
       const isAgent = String(row.role || "").toLowerCase() === "agent";
 
       return respondOk(
         res,
         {
-          config,
           agent: {
             user_id: row.id,
             full_name: row.full_name,
@@ -103,16 +96,14 @@ router.get("/config", requireAuth, async (_req, res) => {
       return respondError(res, 500, err?.message || "Unable to load agent status");
     }
   });
-
-  router.post("/upgrade", requireAuth, async (req, res) => {
+router.post("/upgrade", requireAuth, async (req, res) => {
     const client = await pool.connect();
 
     try {
       const userId = getUserId(req.user);
       if (!userId) return respondError(res, 401, "Unauthorized");
 
-      const config = buildAgentConfig();
-      const amountToDeduct = toNumber(req.body?.amount, config.upgrade_amount);
+      const amountToDeduct = toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000);
       const fundPin = String(req.body?.fundPin || req.body?.fund_pin || "").trim();
 
       if (!fundPin) {
@@ -196,7 +187,7 @@ router.get("/config", requireAuth, async (_req, res) => {
           "debit",
           "agent_upgrade",
           amountToDeduct,
-          config.currency || "NGN",
+          "NGN",
           reference,
           "Agent upgrade",
           JSON.stringify({
@@ -239,7 +230,7 @@ router.get("/config", requireAuth, async (_req, res) => {
           },
           wallet: {
             balance: newBalance,
-            currency: config.currency || "NGN"
+            currency: "NGN"
           },
           transaction: insertedTx.rows[0]
         },
@@ -260,6 +251,5 @@ router.get("/config", requireAuth, async (_req, res) => {
 }
 
 module.exports = {
-  createAgentRouter,
-  buildAgentConfig
+  createAgentRouter
 };
