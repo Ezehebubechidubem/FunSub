@@ -1698,9 +1698,9 @@ app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
 /* AUTH */
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { fullName, email, phone, password, confirmPassword, state } = req.body || {};
+    const { fullName, email, phone, password, confirmPassword, state, fundPin } = req.body || {};
 
-    if (!fullName || !email || !phone || !password || !confirmPassword || !state) {
+    if (!fullName || !email || !phone || !password || !confirmPassword || !state || !fundPin) {
       return respondError(res, 400, 'All fields are required');
     }
 
@@ -1710,6 +1710,10 @@ app.post('/api/auth/register', async (req, res) => {
 
     if (String(password) !== String(confirmPassword)) {
       return respondError(res, 400, 'Passwords do not match');
+    }
+
+    if (!/^\d{4}$/.test(String(fundPin).trim())) {
+      return respondError(res, 400, 'Fund PIN must be exactly 4 digits');
     }
 
     const normalizedEmail = normalizeEmail(email);
@@ -1725,21 +1729,22 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(String(password), 10);
+    const fund_pin_hash = await bcrypt.hash(String(fundPin), 10);
     const userId = uid('usr_');
 
     const inserted = await query(
       `INSERT INTO users
-       (id, role, full_name, email, phone, password_hash, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at)
+       (id, role, full_name, email, phone, password_hash, fund_pin_hash, fund_pin_set, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at)
        VALUES
-       ($1, 'user', $2, $3, $4, $5, $6, NULL, 'unverified', false, false, NOW(), NOW())
-       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at`,
-      [userId, fullName.trim(), normalizedEmail, normalizedPhone, password_hash, state.trim()]
+       ($1, 'user', $2, $3, $4, $5, $6, true, $7, NULL, 'unverified', false, false, NOW(), NOW())
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, fund_pin_set`,
+      [userId, fullName.trim(), normalizedEmail, normalizedPhone, password_hash, fund_pin_hash, state.trim()]
     );
 
     await ensureWallet(userId);
     await addNotification(userId, 'Welcome to PhoneStop', 'Registration successful', { type: 'auth' }, true);
 
-    const token = signToken({ id: userId, role: 'user' });
+    const token = signToken({ id: userId, role: 'user', fundPinSet: true });
 
     return respondOk(res, {
       token,
