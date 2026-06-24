@@ -132,6 +132,22 @@ function respondError(res, status, message) {
 function normalizeStatus(value) {
   return String(value || '').trim().toLowerCase();
 }
+async function verifyFundPin(userId, fundPin) {
+  if (!fundPin) return false;
+
+  const result = await query(
+    `SELECT fund_pin_hash
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  const user = result.rows[0];
+  if (!user?.fund_pin_hash) return false;
+
+  return bcrypt.compare(String(fundPin), user.fund_pin_hash);
+}
 
 function extractProviderText(response) {
   const parts = [];
