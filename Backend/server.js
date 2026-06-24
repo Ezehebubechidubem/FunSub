@@ -647,22 +647,25 @@ const kycUpload = multer({
 
 async function initDb() {
   await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      role TEXT NOT NULL DEFAULT 'user',
-      full_name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      phone TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      state TEXT,
-      avatar_url TEXT,
-      kyc_status TEXT NOT NULL DEFAULT 'unverified',
-      profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
-      online BOOLEAN NOT NULL DEFAULT FALSE,
-      last_login_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL DEFAULT 'user',
+    full_name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    phone TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    fund_pin_hash TEXT,
+    fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
+    state TEXT,
+    avatar_url TEXT,
+    kyc_status TEXT NOT NULL DEFAULT 'unverified',
+    profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
+    online BOOLEAN NOT NULL DEFAULT FALSE,
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`);
 
     CREATE TABLE IF NOT EXISTS wallets (
       id TEXT PRIMARY KEY,
