@@ -691,7 +691,11 @@ async function initDb() {
       online BOOLEAN NOT NULL DEFAULT FALSE,
       last_login_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      fund_pin_hash TEXT,
+      fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
+      fund_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
+      fund_pin_locked_until TIMESTAMPTZ
     );
 
     CREATE TABLE IF NOT EXISTS wallets (
@@ -777,11 +781,12 @@ async function initDb() {
 
   await query(`
     ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS fund_pin_hash TEXT,
-    ADD COLUMN IF NOT EXISTS fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE;
+      ADD COLUMN IF NOT EXISTS fund_pin_hash TEXT,
+      ADD COLUMN IF NOT EXISTS fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS fund_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS fund_pin_locked_until TIMESTAMPTZ;
   `);
 }
-
 function flutterwaveHeaders() {
   if (!FLW_SECRET_KEY) {
     throw new Error('FLW_SECRET_KEY is missing');
