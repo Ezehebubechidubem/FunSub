@@ -1806,7 +1806,40 @@ app.post('/api/auth/login', async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+app.post('/api/auth/fund-pin', requireAuth, async (req, res) => {
+  try {
+    const { oldPin, newPin } = req.body || {};
 
+    if (!oldPin || !newPin) {
+      return respondError(res, 400, 'oldPin and newPin are required');
+    }
+
+    if (!/^\d{4}$/.test(String(newPin))) {
+      return respondError(res, 400, 'New fund PIN must be exactly 4 digits');
+    }
+
+    const ok = await verifyFundPin(req.user.id, oldPin);
+    if (!ok) {
+      return respondError(res, 400, 'Invalid current fund PIN');
+    }
+
+    const newHash = await bcrypt.hash(String(newPin), 10);
+
+    await query(
+      `UPDATE users
+       SET fund_pin_hash = $2,
+           fund_pin_set = true,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, newHash]
+    );
+
+    return respondOk(res, {}, 'Fund PIN updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to update fund PIN');
+  }
+});
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const result = await query(
