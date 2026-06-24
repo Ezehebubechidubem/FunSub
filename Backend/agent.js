@@ -9,6 +9,21 @@ function getUserId(reqUser) {
   return reqUser?.id || reqUser?.userId || null;
 }
 
+function buildAgentConfig() {
+  return {
+    title: "Upgrade to Agent",
+    subtitle: "Unlock cheaper data plans, better discounts, and priority access.",
+    upgrade_amount: toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000),
+    currency: "NGN",
+    benefits: [
+      "Cheaper data plans",
+      "Better discount rates",
+      "Priority access to agent pricing",
+      "Automatic upgrade after PIN verification",
+    ],
+  };
+}
+
 function createAgentRouter({
   pool,
   requireAuth,
@@ -16,7 +31,7 @@ function createAgentRouter({
   respondError,
   uid,
   addNotification,
-  verifyFundPin
+  verifyFundPin,
 }) {
   if (!pool) throw new Error("pool is required");
   if (typeof requireAuth !== "function") throw new Error("requireAuth is required");
@@ -29,24 +44,7 @@ function createAgentRouter({
 
   router.get("/config", requireAuth, async (_req, res) => {
     try {
-      return respondOk(
-        res,
-        {
-          config: {
-            title: "Upgrade to Agent",
-            subtitle: "Unlock cheaper data plans, better discounts, and priority access.",
-            upgrade_amount: toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000),
-            currency: "NGN",
-            benefits: [
-              "Cheaper data plans",
-              "Better discount rates",
-              "Priority access to agent pricing",
-              "Automatic upgrade after PIN verification"
-            ]
-          }
-        },
-        "Agent config loaded"
-      );
+      return respondOk(res, { config: buildAgentConfig() }, "Agent config loaded");
     } catch (err) {
       return respondError(res, 500, err?.message || "Unable to load agent config");
     }
@@ -57,38 +55,42 @@ function createAgentRouter({
       const userId = getUserId(req.user);
       if (!userId) return respondError(res, 401, "Unauthorized");
 
-      const result = await pool.query(
-        `SELECT
-           u.id,
-           u.role,
-           u.full_name,
-           u.email,
-           COALESCE(w.balance, 0) AS wallet_balance,
-           COALESCE(w.currency, 'NGN') AS wallet_currency
-         FROM users u
-         LEFT JOIN wallets w ON w.user_id = u.id
-         WHERE u.id = $1
+      const userResult = await pool.query(
+        `SELECT id, role, full_name, email
+         FROM users
+         WHERE id = $1
          LIMIT 1`,
         [userId]
       );
 
-      const row = result.rows[0];
-      if (!row) return respondError(res, 404, "User not found");
+      const userRow = userResult.rows[0];
+      if (!userRow) return respondError(res, 404, "User not found");
 
-      const isAgent = String(row.role || "").toLowerCase() === "agent";
+      const walletResult = await pool.query(
+        `SELECT balance, currency
+         FROM wallets
+         WHERE user_id = $1
+         LIMIT 1`,
+        [userId]
+      );
+
+      const walletRow = walletResult.rows[0] || null;
+
+      const isAgent = String(userRow.role || "").toLowerCase() === "agent";
 
       return respondOk(
         res,
         {
           agent: {
-            user_id: row.id,
-            full_name: row.full_name,
-            email: row.email,
-            role: row.role,
+            user_id: userRow.id,
+            full_name: userRow.full_name,
+            email: userRow.email,
+            role: userRow.role,
             is_agent: isAgent,
-            wallet_balance: Number(row.wallet_balance || 0),
-            wallet_currency: row.wallet_currency || "NGN"
-          }
+            wallet_balance: Number(walletRow?.balance || 0),
+            wallet_currency: walletRow?.currency || "NGN",
+          },
+          config: buildAgentConfig(),
         },
         "Agent status loaded"
       );
@@ -96,14 +98,16 @@ function createAgentRouter({
       return respondError(res, 500, err?.message || "Unable to load agent status");
     }
   });
-router.post("/upgrade", requireAuth, async (req, res) => {
+
+  router.post("/upgrade", requireAuth, async (req, res) => {
     const client = await pool.connect();
 
     try {
       const userId = getUserId(req.user);
       if (!userId) return respondError(res, 401, "Unauthorized");
 
-      const amountToDeduct = toNumber(process.env.AGENT_UPGRADE_AMOUNT, 4000);
+      const config = buildAgentConfig();
+      const amountToDeduct = toNumber(req.body?.amount, config.upgrade_amount);
       const fundPin = String(req.body?.fundPin || req.body?.fund_pin || "").trim();
 
       if (!fundPin) {
@@ -118,16 +122,9 @@ router.post("/upgrade", requireAuth, async (req, res) => {
       await client.query("BEGIN");
 
       const userResult = await client.query(
-        `SELECT
-           u.id,
-           u.role,
-           u.full_name,
-           u.email,
-           COALESCE(w.balance, 0) AS wallet_balance,
-           w.id AS wallet_id
-         FROM users u
-         LEFT JOIN wallets w ON w.user_id = u.id
-         WHERE u.id = $1
+        `SELECT id, role, full_name, email
+         FROM users
+         WHERE id = $1
          FOR UPDATE`,
         [userId]
       );
@@ -138,17 +135,26 @@ router.post("/upgrade", requireAuth, async (req, res) => {
         return respondError(res, 404, "User not found");
       }
 
+      const walletResult = await client.query(
+        `SELECT id, balance, currency
+         FROM wallets
+         WHERE user_id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const walletRow = walletResult.rows[0];
+      if (!walletRow) {
+        await client.query("ROLLBACK");
+        return respondError(res, 404, "Wallet not found");
+      }
+
       if (String(userRow.role || "").toLowerCase() === "agent") {
         await client.query("ROLLBACK");
         return respondOk(res, { already_agent: true }, "Account is already an Agent");
       }
 
-      if (!userRow.wallet_id) {
-        await client.query("ROLLBACK");
-        return respondError(res, 404, "Wallet not found");
-      }
-
-      const walletBalance = Number(userRow.wallet_balance || 0);
+      const walletBalance = Number(walletRow.balance || 0);
       if (walletBalance < amountToDeduct) {
         await client.query("ROLLBACK");
         return respondError(res, 400, "Insufficient wallet balance for agent upgrade");
@@ -187,15 +193,15 @@ router.post("/upgrade", requireAuth, async (req, res) => {
           "debit",
           "agent_upgrade",
           amountToDeduct,
-          "NGN",
+          walletRow.currency || config.currency || "NGN",
           reference,
           "Agent upgrade",
           JSON.stringify({
             service: "agent_upgrade",
             upgrade_amount: amountToDeduct,
             previous_role: userRow.role || "subscriber",
-            new_role: "agent"
-          })
+            new_role: "agent",
+          }),
         ]
       );
 
@@ -211,7 +217,7 @@ router.post("/upgrade", requireAuth, async (req, res) => {
               transactionId: txId,
               reference,
               amount: amountToDeduct,
-              newRole: "agent"
+              newRole: "agent",
             },
             true
           );
@@ -226,13 +232,13 @@ router.post("/upgrade", requireAuth, async (req, res) => {
           message: "Account upgraded to Agent successfully",
           agent: {
             role: "agent",
-            is_agent: true
+            is_agent: true,
           },
           wallet: {
             balance: newBalance,
-            currency: "NGN"
+            currency: walletRow.currency || config.currency || "NGN",
           },
-          transaction: insertedTx.rows[0]
+          transaction: insertedTx.rows[0],
         },
         "Account upgraded to Agent successfully"
       );
@@ -251,5 +257,6 @@ router.post("/upgrade", requireAuth, async (req, res) => {
 }
 
 module.exports = {
-  createAgentRouter
+  createAgentRouter,
+  buildAgentConfig,
 };
