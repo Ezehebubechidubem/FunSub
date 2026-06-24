@@ -1215,7 +1215,6 @@ function normalizeProviderPlan(plan) {
   };
 }
 
-
 async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const PROVIDER_TIMEOUT_MS = 60_000;
