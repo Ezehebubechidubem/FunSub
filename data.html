@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buy Data</title>
+  <title>FunSub | Buy Data</title>
 
 <style>
   :root{
@@ -14,6 +14,10 @@
     --input-bg:#ffffff;
     --modal-bg:#ffffff;
     --muted:#666666;
+    --gold:#D4AF37;
+    --gold-soft:#FFF9E6;
+    --gold-border:#f0d98a;
+    --shadow:0 15px 40px rgba(0,0,0,.16);
   }
 
   body.dark{
@@ -24,6 +28,10 @@
     --input-bg:#232833;
     --modal-bg:#1a1d24;
     --muted:#b8c0cc;
+    --gold:#D4AF37;
+    --gold-soft:#2c2410;
+    --gold-border:#7b6522;
+    --shadow:0 15px 40px rgba(0,0,0,.28);
   }
 
   *{
@@ -43,9 +51,16 @@
     color:var(--text);
     display:flex;
     justify-content:center;
-    margin-bottom:40px;
+    margin-bottom:10px;
     font-size:28px;
     font-weight:700;
+  }
+
+  .subtitle{
+    text-align:center;
+    color:var(--muted);
+    font-size:14px;
+    margin-bottom:30px;
   }
 
   .container{
@@ -85,7 +100,7 @@
 
   input:focus,
   select:focus{
-    border-color:#D4AF37;
+    border-color:var(--gold);
   }
 
   .network-grid{
@@ -119,8 +134,8 @@
   }
 
   .network-card.active{
-    border-color:#D4AF37;
-    background:#FFF9E6;
+    border-color:var(--gold);
+    background:var(--gold-soft);
   }
 
   .buy-btn{
@@ -129,12 +144,13 @@
     border:none;
     border-radius:15px;
     margin-top:25px;
-    background:#D4AF37;
+    background:var(--gold);
     color:white;
     font-size:16px;
     font-weight:700;
     cursor:pointer;
     transition:.2s ease;
+    box-shadow:0 10px 20px rgba(212,175,55,.18);
   }
 
   .buy-btn:hover{
@@ -164,7 +180,7 @@
     color:var(--text);
     border-radius:25px;
     padding:25px;
-    box-shadow:0 15px 40px rgba(0,0,0,.2);
+    box-shadow:var(--shadow);
     animation:pop .2s ease;
   }
 
@@ -235,7 +251,7 @@
 
   .close-btn{
     margin-top:14px;
-    background:#D4AF37;
+    background:var(--gold);
     color:white;
   }
 
@@ -279,11 +295,132 @@
       height:40px;
     }
   }
+
+  .pin-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.65);
+    z-index:10000;
+    display:none;
+    justify-content:center;
+    align-items:flex-end;
+    padding:0;
+  }
+
+  .pin-sheet{
+    width:100%;
+    max-width:700px;
+    background:var(--modal-bg);
+    color:var(--text);
+    border-radius:24px 24px 0 0;
+    padding:18px 16px 24px;
+    box-shadow:0 -12px 40px rgba(0,0,0,.25);
+    animation:slideUp .18s ease;
+  }
+
+  @keyframes slideUp{
+    from{ transform:translateY(20px); opacity:.5; }
+    to{ transform:translateY(0); opacity:1; }
+  }
+
+  .pin-sheet-top{
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    margin-bottom:4px;
+  }
+
+  .pin-close{
+    width:36px;
+    height:36px;
+    border:none;
+    border-radius:50%;
+    background:transparent;
+    font-size:28px;
+    color:var(--text);
+    cursor:pointer;
+    line-height:1;
+  }
+
+  .pin-title{
+    text-align:center;
+    font-size:22px;
+    font-weight:700;
+    margin:8px 0 8px;
+    color:var(--text);
+  }
+
+  .funsup-brand{
+    text-align:center;
+    font-size:14px;
+    color:var(--muted);
+    margin-bottom:18px;
+  }
+
+  .pin-boxes{
+    display:flex;
+    justify-content:center;
+    gap:12px;
+    margin-bottom:16px;
+  }
+
+  .pin-box{
+    width:58px;
+    height:58px;
+    border-radius:16px;
+    border:1.8px solid var(--border);
+    background:var(--input-bg);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:26px;
+    font-weight:700;
+    color:var(--text);
+  }
+
+  .pin-box.filled{
+    border-color:#9fd8c8;
+    background:rgba(159,216,200,.15);
+  }
+
+  .pin-hint{
+    text-align:center;
+    color:var(--muted);
+    font-size:14px;
+    margin-bottom:16px;
+  }
+
+  .pin-keypad{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+  }
+
+  .pin-key{
+    height:72px;
+    border:none;
+    border-radius:12px;
+    background:var(--card);
+    color:var(--text);
+    font-size:28px;
+    font-weight:500;
+    cursor:pointer;
+    box-shadow:0 0 0 1px var(--border) inset;
+  }
+
+  .pin-zero{
+    grid-column:1 / span 2;
+  }
+
+  .pin-back{
+    font-size:22px;
+  }
 </style>
 </head>
 
 <body>
-  <h1>Buy Data</h1>
+  <h1>FunSub Data</h1>
+  <div class="subtitle">Choose a live plan and pay securely from your wallet</div>
 
   <div class="container">
     <div class="form-box">
@@ -375,6 +512,40 @@
       <button onclick="shareReceipt()" class="share-btn">Share</button>
     </div>
   </div>
+
+  <div id="pinOverlay" class="pin-overlay">
+    <div class="pin-sheet">
+      <div class="pin-sheet-top">
+        <button type="button" class="pin-close" onclick="closePinModal()">×</button>
+      </div>
+
+      <h2 class="pin-title">Enter Payment PIN</h2>
+      <div class="funsup-brand">FunSub Secure Keypad</div>
+
+      <div class="pin-boxes">
+        <div class="pin-box" id="pinBox0"></div>
+        <div class="pin-box" id="pinBox1"></div>
+        <div class="pin-box" id="pinBox2"></div>
+        <div class="pin-box" id="pinBox3"></div>
+      </div>
+
+      <p class="pin-hint">Secure numeric keypad</p>
+
+      <div class="pin-keypad">
+        <button type="button" class="pin-key" onclick="pressPin('1')">1</button>
+        <button type="button" class="pin-key" onclick="pressPin('2')">2</button>
+        <button type="button" class="pin-key" onclick="pressPin('3')">3</button>
+        <button type="button" class="pin-key" onclick="pressPin('4')">4</button>
+        <button type="button" class="pin-key" onclick="pressPin('5')">5</button>
+        <button type="button" class="pin-key" onclick="pressPin('6')">6</button>
+        <button type="button" class="pin-key" onclick="pressPin('7')">7</button>
+        <button type="button" class="pin-key" onclick="pressPin('8')">8</button>
+        <button type="button" class="pin-key" onclick="pressPin('9')">9</button>
+        <button type="button" class="pin-key pin-zero" onclick="pressPin('0')">0</button>
+        <button type="button" class="pin-key pin-back" onclick="backspacePin()">⌫</button>
+      </div>
+    </div>
+  </div>
 <script src="theme.js" defer></script>
 <script>
   const BASE_URL = "https://funsub.onrender.com/api/services/data/plans";
@@ -383,9 +554,16 @@
   let currentNetwork = "mtn";
   let currentPlan = null;
   let lastReceipt = null;
+  let enteredPin = "";
+  let pendingDataPayload = null;
 
   function getToken() {
     return localStorage.getItem("funsub_token") || "";
+  }
+
+  function generateRequestId(prefix = "DATA") {
+    const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+    return `${prefix}_${Date.now()}_${rand}`;
   }
 
   function getNetworkMeta(network) {
@@ -441,7 +619,7 @@
 
     const r = lastReceipt;
     return [
-      "FunSub Data Receipt",
+      "Funsup Data Receipt",
       `Network: ${r.networkName || ""}`,
       `Reference: ${r.reference || ""}`,
       `Amount: ${r.amount || ""}`,
@@ -459,7 +637,7 @@
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Data Receipt",
+          title: "Funsup Data Receipt",
           text
         });
         return;
@@ -517,8 +695,75 @@
     document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
   }
 
+  function showSuccessModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "block";
+    document.getElementById("transactionIcon").className = "transaction-icon success";
+    document.getElementById("transactionIcon").innerHTML = "✅";
+    document.getElementById("transactionTitle").innerText = "Transaction Successful";
+    document.getElementById("transactionMessage").innerText = message || "Transaction successful";
+  }
+
   function closeModal() {
     document.getElementById("transactionModal").style.display = "none";
+  }
+
+  function setReceiptValues({
+    networkMeta,
+    reference,
+    amount,
+    phone,
+    status,
+    description
+  }) {
+    document.getElementById("receiptNetworkLogo").src = networkMeta.logo || "";
+    document.getElementById("receiptNetworkName").innerText = networkMeta.name || "";
+    document.getElementById("receiptReference").innerText = reference || "";
+    document.getElementById("receiptAmount").innerText = formatNaira(amount);
+    document.getElementById("receiptDescription").innerText = description || "";
+    document.getElementById("receiptPhone").innerText = phone || "";
+    document.getElementById("receiptStatus").innerText = status || "";
+    document.getElementById("receiptDate").innerText = new Date().toLocaleString();
+  }
+
+  function openPinModal(payload) {
+    enteredPin = "";
+    pendingDataPayload = payload;
+    renderPinBoxes();
+    document.getElementById("pinOverlay").style.display = "flex";
+  }
+
+  function closePinModal() {
+    document.getElementById("pinOverlay").style.display = "none";
+  }
+
+  function renderPinBoxes() {
+    for (let i = 0; i < 4; i++) {
+      const box = document.getElementById(`pinBox${i}`);
+      if (!box) continue;
+
+      const hasDigit = i < enteredPin.length;
+      box.textContent = hasDigit ? "•" : "";
+      box.classList.toggle("filled", hasDigit);
+    }
+  }
+
+  function pressPin(digit) {
+    if (enteredPin.length >= 4) return;
+
+    enteredPin += digit;
+    renderPinBoxes();
+
+    if (enteredPin.length === 4) {
+      const payload = pendingDataPayload;
+      closePinModal();
+      sendDataRequest(payload, enteredPin);
+    }
+  }
+
+  function backspacePin() {
+    enteredPin = enteredPin.slice(0, -1);
+    renderPinBoxes();
   }
 
   async function loadPlans(network) {
@@ -624,6 +869,42 @@
     const serviceID = getServiceID(currentNetwork);
     const network_id = getNetworkId(currentNetwork);
 
+    openPinModal({
+      token,
+      request_id: generateRequestId("DATA"),
+      phone,
+      serviceID,
+      service_id: serviceID,
+      variation_code,
+      plan_amount: rawPrice,
+      plan_name,
+      source,
+      plan_source: source,
+      purchase_route,
+      networkMeta,
+      finalPrice,
+      network_id
+    });
+  }
+
+  async function sendDataRequest(payload, fundPin) {
+    const {
+      token,
+      request_id,
+      phone,
+      serviceID,
+      service_id,
+      variation_code,
+      plan_amount,
+      plan_name,
+      source,
+      plan_source,
+      purchase_route,
+      networkMeta,
+      finalPrice,
+      network_id
+    } = payload;
+
     showProcessingModal();
 
     const buyBtn = document.getElementById("buyBtn");
@@ -638,78 +919,108 @@
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
+          request_id,
+          phone,
+          serviceID,
+          service_id,
+          serviceId: service_id,
+          variation_code,
+          plan_amount,
+          plan_name,
+          source,
+          plan_source,
+          purchase_route,
           network: currentNetwork,
           network_id,
-          serviceID,
-          service_id: serviceID,
-          serviceId: serviceID,
-          variation_code,
-          plan_amount: rawPrice,
-          plan_name,
-          phone,
-          source,
-          plan_source: source,
-          purchase_route
+          fundPin
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       console.log("PURCHASE RESPONSE:", data);
 
-      if (response.ok && data.transaction) {
-        const tx = data.providerResponse?.content?.transactions || {};
+      const tx = data.transaction || data.data?.transaction || data.result || {};
+      const statusText = String(tx.status || data.status || "").toLowerCase();
+      const reference = tx.reference || tx.tx_ref || data.reference || request_id;
 
-        document.getElementById("transactionIcon").className = "transaction-icon success";
-        document.getElementById("transactionIcon").innerHTML = "✅";
-        document.getElementById("transactionTitle").innerText = "Transaction Successful";
-        document.getElementById("transactionMessage").innerText = data.message || "Transaction successful";
+      if (
+        response.ok &&
+        (
+          data.transaction ||
+          data.success === true ||
+          statusText === "success" ||
+          statusText === "successful" ||
+          statusText === "completed"
+        )
+      ) {
+        showSuccessModal(data.message || "Transaction successful");
 
-        document.getElementById("receiptSection").style.display = "block";
-        document.getElementById("receiptNetworkLogo").src = networkMeta.logo;
-        document.getElementById("receiptNetworkName").innerText = networkMeta.name;
-
-        document.getElementById("receiptReference").innerText = data.transaction.reference || "";
-        document.getElementById("receiptAmount").innerText = formatNaira(data.transaction.amount || finalPrice);
-        document.getElementById("receiptDescription").innerText = data.transaction.description || plan_name || "Data Purchase";
-        document.getElementById("receiptPhone").innerText = tx.unique_element || phone;
-        document.getElementById("receiptStatus").innerText = tx.status || "success";
-        document.getElementById("receiptDate").innerText = new Date(data.transaction.created_at || Date.now()).toLocaleString();
+        setReceiptValues({
+          networkMeta,
+          reference,
+          amount: tx.amount || finalPrice || plan_amount,
+          phone,
+          status: tx.status || data.status || "success",
+          description: tx.description || plan_name || "Data Purchase"
+        });
 
         lastReceipt = {
           networkName: networkMeta.name,
-          reference: data.transaction.reference || "",
-          amount: formatNaira(data.transaction.amount || finalPrice),
-          description: data.transaction.description || plan_name || "Data Purchase",
-          phone: tx.unique_element || phone,
-          status: tx.status || "success",
-          date: new Date(data.transaction.created_at || Date.now()).toLocaleString()
+          reference,
+          amount: formatNaira(tx.amount || finalPrice || plan_amount),
+          description: tx.description || plan_name || "Data Purchase",
+          phone,
+          status: tx.status || data.status || "success",
+          date: new Date().toLocaleString()
         };
 
         return;
       }
 
       if (
-        String(data.status || "").toLowerCase() === "pending" ||
-        String(data.transaction?.status || "").toLowerCase() === "pending"
+        statusText === "pending" ||
+        data.status === "pending" ||
+        data.transaction?.status === "pending"
       ) {
         showPendingModal(data.message || "Transaction pending");
+
+        setReceiptValues({
+          networkMeta,
+          reference,
+          amount: finalPrice || plan_amount,
+          phone,
+          status: "pending",
+          description: plan_name || "Data Purchase"
+        });
+
         lastReceipt = {
           networkName: networkMeta.name,
-          reference: data.transaction?.reference || "",
-          amount: formatNaira(rawPrice),
+          reference,
+          amount: formatNaira(finalPrice || plan_amount),
           description: plan_name || "Data Purchase",
           phone,
           status: "pending",
           date: new Date().toLocaleString()
         };
+
         return;
       }
 
       showFailedModal(data.message || "Transaction failed");
+
+      setReceiptValues({
+        networkMeta,
+        reference,
+        amount: finalPrice || plan_amount,
+        phone,
+        status: "failed",
+        description: plan_name || "Data Purchase"
+      });
+
       lastReceipt = {
         networkName: networkMeta.name,
-        reference: data.transaction?.reference || "",
-        amount: formatNaira(rawPrice),
+        reference,
+        amount: formatNaira(finalPrice || plan_amount),
         description: plan_name || "Data Purchase",
         phone,
         status: "failed",
@@ -718,10 +1029,20 @@
     } catch (error) {
       console.error(error);
       showFailedModal("Unable to complete transaction");
+
+      setReceiptValues({
+        networkMeta,
+        reference: "",
+        amount: finalPrice || plan_amount,
+        phone,
+        status: "failed",
+        description: plan_name || "Data Purchase"
+      });
+
       lastReceipt = {
         networkName: networkMeta.name,
         reference: "",
-        amount: formatNaira(rawPrice),
+        amount: formatNaira(finalPrice || plan_amount),
         description: plan_name || "Data Purchase",
         phone,
         status: "failed",
@@ -737,6 +1058,14 @@
 
   window.addEventListener("DOMContentLoaded", () => {
     loadPlans("mtn");
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (document.getElementById("pinOverlay").style.display === "flex") {
+      if (/^\d$/.test(e.key)) pressPin(e.key);
+      if (e.key === "Backspace") backspacePin();
+      if (e.key === "Escape") closePinModal();
+    }
   });
 </script>
 </body>
