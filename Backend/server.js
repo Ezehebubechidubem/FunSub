@@ -1224,7 +1224,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const PROVIDER_TIMEOUT_MS = 60_000;
   const PIN_MAX_ATTEMPTS = 4;
-  const PIN_LOCK_MINUTES = 15;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
 
   async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
     if (!txRow?.id) return;
@@ -1315,26 +1315,30 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         [userId]
       );
 
-      const state = stateResult.rows[0];
-      if (!state) {
+      const row = stateResult.rows[0];
+      if (!row) {
         await client.query('ROLLBACK');
-        return {
-          ok: false,
-          status: 404,
-          message: 'User not found'
-        };
+        return { ok: false, status: 404, message: 'User not found' };
       }
 
-      const failedAttempts = Number(state.failed_attempts || 0);
-      const lockedUntil = state.fund_pin_locked_until ? new Date(state.fund_pin_locked_until) : null;
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until ? new Date(row.fund_pin_locked_until) : null;
       const now = Date.now();
 
-      if (lockedUntil && lockedUntil.getTime() > now) {
-        const minutesLeft = Math.max(
-          1,
-          Math.ceil((lockedUntil.getTime() - now) / 60000)
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
         );
+        failedAttempts = 0;
+      }
 
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
         await client.query('ROLLBACK');
         return {
           ok: false,
@@ -1345,24 +1349,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         };
       }
 
-      if (lockedUntil && lockedUntil.getTime() <= now && failedAttempts >= PIN_MAX_ATTEMPTS) {
-        await client.query(
-          `UPDATE users
-           SET fund_pin_failed_attempts = 0,
-               fund_pin_locked_until = NULL,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [userId]
-        );
-      }
-
       const pinOk = await verifyFundPin(userId, fundPin);
 
       if (!pinOk) {
         const nextAttempts = failedAttempts + 1;
         const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
         const lockUntil = shouldLock
-          ? new Date(Date.now() + PIN_LOCK_MINUTES * 60 * 1000)
+          ? new Date(Date.now() + PIN_LOCK_MS)
           : null;
 
         await client.query(
@@ -1380,11 +1373,11 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           ok: false,
           status: shouldLock ? 423 : 401,
           message: shouldLock
-            ? `Invalid PIN. Your account has been locked for ${PIN_LOCK_MINUTES} minutes after ${PIN_MAX_ATTEMPTS} failed attempts.`
+            ? 'Invalid PIN. Your account has been locked for 1 hour after 4 failed attempts.'
             : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left before lock.`,
           attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
           locked: shouldLock,
-          minutesLeft: shouldLock ? PIN_LOCK_MINUTES : 0
+          minutesLeft: shouldLock ? 60 : 0
         };
       }
 
@@ -1398,7 +1391,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       );
 
       await client.query('COMMIT');
-
       return { ok: true };
     } catch (err) {
       try {
