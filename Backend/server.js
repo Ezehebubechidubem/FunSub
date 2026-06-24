@@ -1219,6 +1219,8 @@ function normalizeProviderPlan(plan) {
 async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MINUTES = 15;
 
   async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
     if (!txRow?.id) return;
@@ -1293,6 +1295,117 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     ]);
   }
 
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const stateResult = await client.query(
+        `SELECT
+           COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts,
+           fund_pin_locked_until
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const state = stateResult.rows[0];
+      if (!state) {
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          status: 404,
+          message: 'User not found'
+        };
+      }
+
+      const failedAttempts = Number(state.failed_attempts || 0);
+      const lockedUntil = state.fund_pin_locked_until ? new Date(state.fund_pin_locked_until) : null;
+      const now = Date.now();
+
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(
+          1,
+          Math.ceil((lockedUntil.getTime() - now) / 60000)
+        );
+
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          status: 423,
+          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
+          locked: true,
+          minutesLeft
+        };
+      }
+
+      if (lockedUntil && lockedUntil.getTime() <= now && failedAttempts >= PIN_MAX_ATTEMPTS) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+      }
+
+      const pinOk = await verifyFundPin(userId, fundPin);
+
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1;
+        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock
+          ? new Date(Date.now() + PIN_LOCK_MINUTES * 60 * 1000)
+          : null;
+
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = $2,
+               fund_pin_locked_until = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
+        );
+
+        await client.query('COMMIT');
+
+        return {
+          ok: false,
+          status: shouldLock ? 423 : 401,
+          message: shouldLock
+            ? `Invalid PIN. Your account has been locked for ${PIN_LOCK_MINUTES} minutes after ${PIN_MAX_ATTEMPTS} failed attempts.`
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left before lock.`,
+          attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
+          locked: shouldLock,
+          minutesLeft: shouldLock ? PIN_LOCK_MINUTES : 0
+        };
+      }
+
+      await client.query(
+        `UPDATE users
+         SET fund_pin_failed_attempts = 0,
+             fund_pin_locked_until = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await client.query('COMMIT');
+
+      return { ok: true };
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   try {
     const body = req.body || {};
     const userId = req.user?.id || req.user?.userId;
@@ -1302,10 +1415,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     }
 
     const fundPin = String(body.fundPin || body.fund_pin || '').trim();
-    const pinOk = await verifyFundPin(userId, fundPin);
+    if (!fundPin) {
+      return respondError(res, 400, 'Transaction PIN is required');
+    }
 
-    if (!pinOk) {
-      return respondError(res, 401, 'Invalid fund PIN');
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) {
+      return respondError(res, pinCheck.status || 401, pinCheck.message || 'Invalid fund PIN');
     }
 
     let pricing = null;
