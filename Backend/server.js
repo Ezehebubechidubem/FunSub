@@ -1614,6 +1614,62 @@ app.get('/health', async (req, res) => {
     return respondError(res, 500, 'Database error');
   }
 });
+
+app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { amount } = req.body || {};
+    const amt = Number(amount || 0);
+
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return respondError(res, 400, 'amount must be greater than 0');
+    }
+
+    await client.query('BEGIN');
+
+    await client.query(
+      `INSERT INTO wallets (id, user_id, balance, currency)
+       VALUES ($1, $2, 0, 'NGN')
+       ON CONFLICT (user_id) DO NOTHING`,
+      [uid('wal_'), req.user.id]
+    );
+
+    await client.query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [req.user.id, amt]
+    );
+
+    await client.query(
+      `INSERT INTO transactions
+       (id, user_id, type, category, amount, currency, status, reference, description, meta, updated_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'NGN', 'success', $6, $7, $8, NOW(), NOW())`,
+      [
+        uid('tx_'),
+        req.user.id,
+        'funding',
+        'wallet',
+        amt,
+        `temp-topup-${Date.now()}`,
+        'Temporary wallet top up',
+        JSON.stringify({ source: 'temporary_topup' })
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return respondOk(res, { amount: amt }, 'Wallet topped up');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('TEMP TOPUP ERROR:', err);
+    return respondError(res, 500, 'Unable to top up wallet');
+  } finally {
+    client.release();
+  }
+});
 /* AUTH */
 app.post('/api/auth/register', async (req, res) => {
   try {
