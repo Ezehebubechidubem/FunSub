@@ -1705,7 +1705,15 @@ app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
 /* AUTH */
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { fullName, email, phone, password, confirmPassword, state, fundPin } = req.body || {};
+    const {
+      fullName,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      state,
+      fundPin
+    } = req.body || {};
 
     if (!fullName || !email || !phone || !password || !confirmPassword || !state || !fundPin) {
       return respondError(res, 400, 'All fields are required');
@@ -1719,7 +1727,8 @@ app.post('/api/auth/register', async (req, res) => {
       return respondError(res, 400, 'Passwords do not match');
     }
 
-    if (!/^\d{4}$/.test(String(fundPin).trim())) {
+    const cleanFundPin = String(fundPin).trim();
+    if (!/^\d{4}$/.test(cleanFundPin)) {
       return respondError(res, 400, 'Fund PIN must be exactly 4 digits');
     }
 
@@ -1736,7 +1745,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(String(password), 10);
-    const fund_pin_hash = await bcrypt.hash(String(fundPin), 10);
+    const fund_pin_hash = await bcrypt.hash(cleanFundPin, 10);
     const userId = uid('usr_');
 
     const inserted = await query(
@@ -1745,7 +1754,15 @@ app.post('/api/auth/register', async (req, res) => {
        VALUES
        ($1, 'user', $2, $3, $4, $5, $6, true, $7, NULL, 'unverified', false, false, NOW(), NOW())
        RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, fund_pin_set`,
-      [userId, fullName.trim(), normalizedEmail, normalizedPhone, password_hash, fund_pin_hash, state.trim()]
+      [
+        userId,
+        fullName.trim(),
+        normalizedEmail,
+        normalizedPhone,
+        password_hash,
+        fund_pin_hash,
+        state.trim()
+      ]
     );
 
     await ensureWallet(userId);
