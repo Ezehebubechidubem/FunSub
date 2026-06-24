@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Upgrade to Agent</title>
+  <title>Funsup | Upgrade to Agent</title>
+
   <style>
     *{
       box-sizing:border-box;
@@ -15,10 +16,12 @@
     :root{
       --gold:#d4af37;
       --gold-soft:#fff8e1;
+      --gold-border:#f0d98a;
       --text:#111827;
       --muted:#6b7280;
       --border:#e5e7eb;
       --bg:#ffffff;
+      --card:#ffffff;
       --shadow:0 18px 45px rgba(0,0,0,.08);
       --success:#0f7a3b;
       --danger:#b42318;
@@ -33,7 +36,7 @@
     }
 
     .wrap{
-      max-width:900px;
+      max-width:980px;
       margin:0 auto;
     }
 
@@ -41,7 +44,7 @@
       background:linear-gradient(180deg,#fffef9 0%,#ffffff 100%);
       border:1px solid var(--border);
       border-radius:28px;
-      padding:26px;
+      padding:24px;
       box-shadow:var(--shadow);
     }
 
@@ -61,6 +64,7 @@
       font-size:32px;
       margin-top:16px;
       line-height:1.15;
+      color:var(--text);
     }
 
     .sub{
@@ -68,7 +72,7 @@
       color:var(--muted);
       line-height:1.6;
       font-size:15px;
-      max-width:800px;
+      max-width:820px;
     }
 
     .grid{
@@ -81,21 +85,22 @@
     .card{
       border:1px solid var(--border);
       border-radius:22px;
-      background:#fff;
+      background:var(--card);
       padding:18px;
       box-shadow:0 10px 30px rgba(0,0,0,.04);
     }
 
     .card h3{
       font-size:18px;
-      margin-bottom:10px;
+      margin-bottom:12px;
+      color:var(--text);
     }
 
     .card p,
     .card li{
       color:var(--muted);
       font-size:14px;
-      line-height:1.6;
+      line-height:1.65;
     }
 
     .card ul{
@@ -103,7 +108,7 @@
     }
 
     .status-box{
-      margin-top:18px;
+      margin-top:14px;
       display:grid;
       gap:12px;
     }
@@ -127,6 +132,7 @@
     .row span:last-child{
       font-weight:700;
       text-align:right;
+      word-break:break-word;
     }
 
     .active{
@@ -221,6 +227,56 @@
       color:var(--info);
     }
 
+    .detailsCard{
+      display:none;
+      margin-top:18px;
+    }
+
+    .detail-box{
+      display:grid;
+      gap:12px;
+      margin-top:12px;
+    }
+
+    .detail-row{
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px 16px;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      background:#fff;
+    }
+
+    .detail-row span:first-child{
+      color:var(--muted);
+      font-size:14px;
+      min-width:120px;
+    }
+
+    .detail-row span:last-child{
+      font-weight:700;
+      text-align:right;
+      word-break:break-word;
+    }
+
+    .benefit-badges{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    .benefit{
+      padding:9px 12px;
+      border-radius:999px;
+      background:var(--gold-soft);
+      color:#8a6d00;
+      border:1px solid #f3df9d;
+      font-size:13px;
+      font-weight:700;
+    }
+
     .modal{
       position:fixed;
       inset:0;
@@ -260,6 +316,7 @@
       text-align:center;
       font-size:22px;
       margin-bottom:8px;
+      color:var(--text);
     }
 
     .modal-card p{
@@ -267,39 +324,6 @@
       color:var(--muted);
       line-height:1.6;
       font-size:14px;
-    }
-
-    .detailsCard{
-      display:none;
-      margin-top:18px;
-    }
-
-    .detail-box{
-      display:grid;
-      gap:12px;
-      margin-top:12px;
-    }
-
-    .detail-row{
-      border:1px solid var(--border);
-      border-radius:16px;
-      padding:14px 16px;
-      display:flex;
-      justify-content:space-between;
-      gap:12px;
-      background:#fff;
-    }
-
-    .detail-row span:first-child{
-      color:var(--muted);
-      font-size:14px;
-      min-width:120px;
-    }
-
-    .detail-row span:last-child{
-      font-weight:700;
-      text-align:right;
-      word-break:break-word;
     }
 
     .countdown{
@@ -323,16 +347,124 @@
       font-size:13px;
     }
 
-    .copy-btn{
+    .pin-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      z-index:10000;
+      display:none;
+      justify-content:center;
+      align-items:flex-end;
+      padding:0;
+    }
+
+    .pin-sheet{
+      width:100%;
+      max-width:700px;
+      background:#fff;
+      color:var(--text);
+      border-radius:24px 24px 0 0;
+      padding:18px 16px 24px;
+      box-shadow:0 -12px 40px rgba(0,0,0,.25);
+      animation:slideUp .18s ease;
+    }
+
+    @keyframes slideUp{
+      from{ transform:translateY(20px); opacity:.5; }
+      to{ transform:translateY(0); opacity:1; }
+    }
+
+    .pin-sheet-top{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      margin-bottom:4px;
+    }
+
+    .pin-close{
+      width:36px;
+      height:36px;
+      border:none;
+      border-radius:50%;
+      background:transparent;
+      font-size:28px;
+      color:var(--text);
+      cursor:pointer;
+      line-height:1;
+    }
+
+    .pin-title{
+      text-align:center;
+      font-size:22px;
+      font-weight:700;
+      margin:8px 0 8px;
+      color:var(--text);
+    }
+
+    .funsup-brand{
+      text-align:center;
+      font-size:14px;
+      color:var(--muted);
+      margin-bottom:18px;
+    }
+
+    .pin-boxes{
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .pin-box{
+      width:58px;
+      height:58px;
+      border-radius:16px;
+      border:1.8px solid var(--border);
+      background:#fff;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:26px;
+      font-weight:700;
+      color:var(--text);
+    }
+
+    .pin-box.filled{
+      border-color:#9fd8c8;
+      background:rgba(159,216,200,.15);
+    }
+
+    .pin-hint{
+      text-align:center;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:16px;
+    }
+
+    .pin-keypad{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+    }
+
+    .pin-key{
+      height:72px;
       border:none;
       border-radius:12px;
-      padding:10px 12px;
-      font-weight:700;
+      background:#f9fafb;
+      color:var(--text);
+      font-size:28px;
+      font-weight:500;
       cursor:pointer;
-      background:#111827;
-      color:#fff;
-      font-size:13px;
-      margin-left:10px;
+      box-shadow:0 0 0 1px var(--border) inset;
+    }
+
+    .pin-zero{
+      grid-column:1 / span 2;
+    }
+
+    .pin-back{
+      font-size:22px;
     }
 
     @media (max-width:720px){
@@ -365,19 +497,20 @@
     <div class="hero">
       <div class="badge">Agent Upgrade</div>
       <h1>Unlock cheaper data plans with Agent access</h1>
-      <p class="sub">
-        Upgrade your account to Agent for <strong>₦4,000</strong>. Payment status and upgrade status will appear below.
+      <p class="sub" id="pageSubtitle">
+        Upgrade your account to Agent for the amount set by Funsup. Your wallet balance will be checked automatically before upgrade.
       </p>
 
       <div class="grid">
         <div class="card">
           <h3>What you get</h3>
-          <ul>
+          <ul id="benefitsList">
             <li>Cheaper data plans</li>
             <li>Better discount rates</li>
             <li>Priority access to agent pricing</li>
-            <li>Automatic account upgrade after payment</li>
+            <li>Automatic upgrade after PIN verification</li>
           </ul>
+          <div class="benefit-badges" id="benefitBadges"></div>
         </div>
 
         <div class="card">
@@ -385,15 +518,15 @@
           <div class="status-box">
             <div class="row">
               <span>Upgrade status</span>
-              <span id="agentStatusTag" class="inactive">Loading...</span>
+              <span id="agentStatusTag" class="pendingTag">Loading...</span>
             </div>
             <div class="row">
-              <span>Payment amount</span>
-              <span>₦4,000</span>
+              <span>Wallet balance</span>
+              <span id="walletBalanceTag">—</span>
             </div>
             <div class="row">
-              <span>Payment status</span>
-              <span id="paymentStatusTag" class="pendingTag">Waiting</span>
+              <span>Upgrade amount</span>
+              <span id="upgradeAmountTag">—</span>
             </div>
           </div>
         </div>
@@ -407,39 +540,29 @@
       </div>
 
       <div id="detailsCard" class="card detailsCard">
-        <h3>Payment details</h3>
+        <h3>Upgrade summary</h3>
         <div class="detail-box">
           <div class="detail-row">
-            <span>Amount</span>
-            <span id="detailAmount">₦4,000</span>
+            <span>Amount to deduct</span>
+            <span id="detailAmount">—</span>
           </div>
           <div class="detail-row">
-            <span>Account name</span>
-            <span id="detailAccountName">—</span>
+            <span>Current wallet</span>
+            <span id="detailWallet">—</span>
           </div>
           <div class="detail-row">
-            <span>Account number</span>
-            <span>
-              <span id="detailAccountNumber">—</span>
-              <button id="copyAccountBtn" class="copy-btn">Copy</button>
-            </span>
+            <span>Remaining after upgrade</span>
+            <span id="detailRemaining">—</span>
           </div>
           <div class="detail-row">
-            <span>Reference</span>
-            <span id="detailReferenceNote">—</span>
+            <span>Upgrade type</span>
+            <span id="detailType">Subscriber → Agent</span>
           </div>
         </div>
 
-        <div class="countdown">
-          <strong id="countdownValue">--:--:--</strong>
-          <small id="countdownNote">Waiting for payment</small>
-        </div>
-
-        <div id="verifyBox" style="margin-top:16px;">
-          <div class="row">
-            <span>Payment status</span>
-            <span id="verifyText" class="pendingTag">Waiting for payment confirmation...</span>
-          </div>
+        <div class="countdown" id="upgradeHintBox">
+          <strong id="countdownValue">PIN Required</strong>
+          <small id="countdownNote">Tap upgrade to enter your transaction PIN</small>
         </div>
       </div>
     </div>
@@ -448,417 +571,404 @@
   <div id="modal" class="modal">
     <div class="modal-card">
       <div class="spinner"></div>
-      <h2>Preparing payment</h2>
-      <p id="modalText">Please wait while we prepare your payment.</p>
+      <h2>Processing</h2>
+      <p id="modalText">Please wait...</p>
     </div>
   </div>
 
-  <script>
-    const API_ROOT = 'https://funsub.onrender.com';
-    const tokenKey = 'funsub_token';
-    const userKey = 'funsub_user';
+  <div id="pinOverlay" class="pin-overlay">
+    <div class="pin-sheet">
+      <div class="pin-sheet-top">
+        <button type="button" class="pin-close" onclick="closePinModal()">×</button>
+      </div>
 
-    const loader = document.getElementById('modal');
-    const notice = document.getElementById('notice');
-    const agentStatusTag = document.getElementById('agentStatusTag');
-    const paymentStatusTag = document.getElementById('paymentStatusTag');
-    const upgradeBtn = document.getElementById('upgradeBtn');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const modalText = document.getElementById('modalText');
+      <h2 class="pin-title">Enter Payment PIN</h2>
+      <div class="funsup-brand">Funsup Secure Keypad</div>
 
-    const detailsCard = document.getElementById('detailsCard');
-    const detailAmount = document.getElementById('detailAmount');
-    const detailAccountName = document.getElementById('detailAccountName');
-    const detailAccountNumber = document.getElementById('detailAccountNumber');
-    const detailReferenceNote = document.getElementById('detailReferenceNote');
-    const copyAccountBtn = document.getElementById('copyAccountBtn');
-    const verifyBox = document.getElementById('verifyBox');
-    const verifyText = document.getElementById('verifyText');
-    const countdownValue = document.getElementById('countdownValue');
-    const countdownNote = document.getElementById('countdownNote');
+      <div class="pin-boxes">
+        <div class="pin-box" id="pinBox0"></div>
+        <div class="pin-box" id="pinBox1"></div>
+        <div class="pin-box" id="pinBox2"></div>
+        <div class="pin-box" id="pinBox3"></div>
+      </div>
 
-    let currentFundingSession = null;
-    let fundingPollTimer = null;
-    let countdownTimer = null;
-    let countdownEndsAt = null;
+      <p class="pin-hint">Secure numeric keypad</p>
 
-    function getToken() {
-      return localStorage.getItem(tokenKey) || '';
+      <div class="pin-keypad">
+        <button type="button" class="pin-key" onclick="pressPin('1')">1</button>
+        <button type="button" class="pin-key" onclick="pressPin('2')">2</button>
+        <button type="button" class="pin-key" onclick="pressPin('3')">3</button>
+        <button type="button" class="pin-key" onclick="pressPin('4')">4</button>
+        <button type="button" class="pin-key" onclick="pressPin('5')">5</button>
+        <button type="button" class="pin-key" onclick="pressPin('6')">6</button>
+        <button type="button" class="pin-key" onclick="pressPin('7')">7</button>
+        <button type="button" class="pin-key" onclick="pressPin('8')">8</button>
+        <button type="button" class="pin-key" onclick="pressPin('9')">9</button>
+        <button type="button" class="pin-key pin-zero" onclick="pressPin('0')">0</button>
+        <button type="button" class="pin-key pin-back" onclick="backspacePin()">⌫</button>
+      </div>
+    </div>
+  </div>
+<script>
+  const API_ROOT = "https://funsub.onrender.com";
+  const tokenKey = "funsub_token";
+
+  const loader = document.getElementById("modal");
+  const notice = document.getElementById("notice");
+  const agentStatusTag = document.getElementById("agentStatusTag");
+  const walletBalanceTag = document.getElementById("walletBalanceTag");
+  const upgradeAmountTag = document.getElementById("upgradeAmountTag");
+  const upgradeBtn = document.getElementById("upgradeBtn");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const modalText = document.getElementById("modalText");
+  const pageSubtitle = document.getElementById("pageSubtitle");
+  const detailsCard = document.getElementById("detailsCard");
+  const detailAmount = document.getElementById("detailAmount");
+  const detailWallet = document.getElementById("detailWallet");
+  const detailRemaining = document.getElementById("detailRemaining");
+  const countdownValue = document.getElementById("countdownValue");
+  const countdownNote = document.getElementById("countdownNote");
+  const benefitsList = document.getElementById("benefitsList");
+  const benefitBadges = document.getElementById("benefitBadges");
+
+  let config = {
+    title: "Upgrade to Agent",
+    subtitle: "Unlock cheaper data plans and priority pricing.",
+    upgrade_amount: 4000,
+    benefits: []
+  };
+
+  let currentAgentStatus = null;
+  let currentWalletBalance = 0;
+  let enteredPin = "";
+  let pendingUpgradePayload = null;
+
+  function getToken() {
+    return localStorage.getItem(tokenKey) || "";
+  }
+
+  function money(value) {
+    const num = Number(value || 0);
+    return `₦${num.toLocaleString("en-NG", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    })}`;
+  }
+
+  function safe(v, fallback = "—") {
+    const s = String(v ?? "").trim();
+    return s || fallback;
+  }
+
+  function showModal(message) {
+    modalText.textContent = message || "Please wait...";
+    loader.style.display = "flex";
+  }
+
+  function hideModal() {
+    loader.style.display = "none";
+  }
+
+  function showNotice(message, type = "info") {
+    notice.textContent = message;
+    notice.className = `notice show ${type}`;
+  }
+
+  function clearNotice() {
+    notice.textContent = "";
+    notice.className = "notice";
+  }
+
+  function setAgentStatus(message, type = "info") {
+    agentStatusTag.className =
+      type === "success" ? "active" : type === "error" ? "inactive" : "pendingTag";
+    agentStatusTag.textContent = message;
+  }
+
+  function setUpgradeButtonState() {
+    const isAgent = currentAgentStatus === "agent";
+    upgradeBtn.disabled = isAgent;
+    upgradeBtn.textContent = isAgent ? "Already an Agent" : "Upgrade to Agent";
+  }
+
+  function renderConfigToUI() {
+    pageSubtitle.textContent = safe(config.subtitle, "Upgrade your account to Agent.");
+    upgradeAmountTag.textContent = money(config.upgrade_amount);
+    detailAmount.textContent = money(config.upgrade_amount);
+
+    const benefits = Array.isArray(config.benefits) ? config.benefits : [];
+    benefitsList.innerHTML = "";
+    benefitBadges.innerHTML = "";
+
+    const defaultBenefits = benefits.length
+      ? benefits
+      : [
+          "Cheaper data plans",
+          "Better discount rates",
+          "Priority access to agent pricing",
+          "Automatic upgrade after PIN verification"
+        ];
+
+    defaultBenefits.forEach((item) => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      benefitsList.appendChild(li);
+
+      const badge = document.createElement("span");
+      badge.className = "benefit";
+      badge.textContent = item;
+      benefitBadges.appendChild(badge);
+    });
+  }
+
+  function updateSummary() {
+    detailWallet.textContent = money(currentWalletBalance);
+
+    const remaining = Number(currentWalletBalance) - Number(config.upgrade_amount);
+    detailRemaining.textContent = remaining >= 0 ? money(remaining) : "Insufficient balance";
+  }
+
+  function openPinModal(payload) {
+    enteredPin = "";
+    pendingUpgradePayload = payload;
+    renderPinBoxes();
+    document.getElementById("pinOverlay").style.display = "flex";
+  }
+
+  function closePinModal() {
+    document.getElementById("pinOverlay").style.display = "none";
+  }
+
+  function renderPinBoxes() {
+    for (let i = 0; i < 4; i++) {
+      const box = document.getElementById(`pinBox${i}`);
+      if (!box) continue;
+
+      const hasDigit = i < enteredPin.length;
+      box.textContent = hasDigit ? "•" : "";
+      box.classList.toggle("filled", hasDigit);
     }
+  }
 
-    function showModal(message) {
-      modalText.textContent = message || 'Please wait...';
-      loader.style.display = 'flex';
+  function pressPin(digit) {
+    if (enteredPin.length >= 4) return;
+
+    enteredPin += digit;
+    renderPinBoxes();
+
+    if (enteredPin.length === 4) {
+      const payload = pendingUpgradePayload;
+      closePinModal();
+      sendUpgradeRequest(payload, enteredPin);
     }
+  }
 
-    function hideModal() {
-      loader.style.display = 'none';
-    }
+  function backspacePin() {
+    enteredPin = enteredPin.slice(0, -1);
+    renderPinBoxes();
+  }
 
-    function showNotice(message, type = 'info') {
-      notice.textContent = message;
-      notice.className = `notice show ${type}`;
-    }
-
-    function clearNotice() {
-      notice.textContent = '';
-      notice.className = 'notice';
-    }
-
-    function setUpgradeStatus(message, type = 'info') {
-      agentStatusTag.className =
-        type === 'success' ? 'active' : type === 'error' ? 'inactive' : 'pendingTag';
-      agentStatusTag.textContent = message;
-    }
-
-    function setPaymentStatus(message, type = 'info') {
-      paymentStatusTag.className =
-        type === 'success' ? 'active' : type === 'error' ? 'inactive' : 'pendingTag';
-      paymentStatusTag.textContent = message;
-    }
-
-    function money(value) {
-      const num = Number(value || 0);
-      return `₦${num.toLocaleString('en-NG', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      })}`;
-    }
-
-    function safe(v, fallback = '—') {
-      const s = String(v ?? '').trim();
-      return s || fallback;
-    }
-
-    async function copyText(text, label = 'Copied') {
-      try {
-        await navigator.clipboard.writeText(String(text || ''));
-        showNotice(`${label} to clipboard`, 'success');
-      } catch {
-        showNotice('Unable to copy', 'error');
+  async function apiFetch(url, options = {}) {
+    const token = getToken();
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { rawResponse: text };
     }
 
-    function stopCountdown() {
-      if (countdownTimer) clearInterval(countdownTimer);
-      countdownTimer = null;
+    return { res, data };
+  }
+
+  async function loadConfig() {
+    const { res, data } = await apiFetch(`${API_ROOT}/api/agent/config`);
+    if (!res.ok) {
+      throw new Error(data?.message || "Unable to load agent config");
     }
 
-    function stopPolling() {
-      if (fundingPollTimer) clearInterval(fundingPollTimer);
-      fundingPollTimer = null;
+    config = {
+      title: data?.config?.title || config.title,
+      subtitle: data?.config?.subtitle || config.subtitle,
+      upgrade_amount: Number(data?.config?.upgrade_amount || config.upgrade_amount),
+      benefits: Array.isArray(data?.config?.benefits) ? data.config.benefits : config.benefits
+    };
+
+    document.title = `Funsup | ${config.title}`;
+    document.querySelector("h1").textContent = config.title;
+    renderConfigToUI();
+    updateSummary();
+  }
+
+  async function loadStatus() {
+    clearNotice();
+
+    const token = getToken();
+    if (!token) {
+      setAgentStatus("Please log in first", "error");
+      showNotice("Please log in first", "error");
+      upgradeBtn.disabled = true;
+      return;
     }
 
-    function updateCountdown() {
-      if (!countdownEndsAt) {
-        countdownValue.textContent = '--:--:--';
-        countdownNote.textContent = 'Waiting for payment';
+    try {
+      const { res, data } = await apiFetch(`${API_ROOT}/api/agent/status`);
+      if (!res.ok) {
+        setAgentStatus(data?.message || "Unable to load status", "error");
+        showNotice(data?.message || "Unable to load status", "error");
         return;
       }
 
-      const remaining = Math.max(0, countdownEndsAt - Date.now());
-      const totalSeconds = Math.floor(remaining / 1000);
-      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      const agent = data?.agent || {};
+      currentAgentStatus = String(agent.role || "").toLowerCase() === "agent" ? "agent" : "subscriber";
+      currentWalletBalance = Number(agent.wallet_balance || 0);
 
-      countdownValue.textContent = `${hours}:${minutes}:${seconds}`;
+      walletBalanceTag.textContent = money(currentWalletBalance);
+      updateSummary();
 
-      if (remaining <= 0) {
-        countdownNote.textContent = 'This payment session has expired';
-        stopPolling();
-        stopCountdown();
+      if (currentAgentStatus === "agent") {
+        setAgentStatus("Agent Active", "success");
+        showNotice("Your account is already upgraded to Agent.", "success");
       } else {
-        countdownNote.textContent = 'Payment session active';
+        setAgentStatus("Subscriber", "info");
       }
+
+      setUpgradeButtonState();
+    } catch (err) {
+      console.error(err);
+      setAgentStatus("Unable to load status", "error");
+      showNotice("Network error while loading status", "error");
+    }
+  }
+
+  async function upgradeToAgent() {
+    clearNotice();
+
+    if (currentAgentStatus === "agent") {
+      showNotice("Your account is already upgraded.", "info");
+      return;
     }
 
-    function startCountdown() {
-      stopCountdown();
-      updateCountdown();
-      countdownTimer = setInterval(updateCountdown, 1000);
+    const token = getToken();
+    if (!token) {
+      showNotice("Please log in first before upgrading to Agent.", "error");
+      return;
     }
 
-    function renderPaymentDetails(details = {}) {
-      const hasAny = Boolean(
-        details.account_number ||
-        details.account_name ||
-        details.reference ||
-        details.expires_at ||
-        details.payment_link
+    if (Number(currentWalletBalance) < Number(config.upgrade_amount)) {
+      showNotice(
+        `Insufficient wallet balance. You need at least ${money(config.upgrade_amount)}.`,
+        "error"
       );
-
-      if (!hasAny) {
-        detailsCard.style.display = 'none';
-        return;
-      }
-
-      detailsCard.style.display = 'block';
-
-      detailAmount.textContent = money(details.gross_amount || details.amount || 4000);
-      detailAccountName.textContent = safe(details.account_name || details.accountName || 'Agent Upgrade');
-      detailAccountNumber.textContent = safe(details.account_number || details.accountNumber || '—');
-      detailReferenceNote.textContent = `Reference: ${safe(details.reference || details.tx_ref || details.txRef)}`;
-
-      verifyBox.style.display = 'block';
-      verifyText.textContent = 'Waiting for payment confirmation...';
-      verifyText.className = 'pendingTag';
-      setPaymentStatus('Waiting', 'info');
-
-      if (details.expires_at) {
-        countdownEndsAt = new Date(details.expires_at).getTime();
-      } else {
-        countdownEndsAt = Date.now() + (60 * 60 * 1000);
-      }
-
-      startCountdown();
+      return;
     }
 
-    async function apiFetch(url, options = {}) {
-      const token = getToken();
-      const res = await fetch(url, {
-        ...options,
+    openPinModal({
+      amount: config.upgrade_amount
+    });
+  }
+
+  async function sendUpgradeRequest(payload, fundPin) {
+    const token = getToken();
+    if (!token) {
+      showNotice("Please log in first.", "error");
+      return;
+    }
+
+    showModal("Verifying PIN and checking wallet balance...");
+
+    const upgradeButtonText = upgradeBtn.textContent;
+    upgradeBtn.disabled = true;
+    upgradeBtn.textContent = "Processing...";
+
+    try {
+      const { res, data } = await apiFetch(`${API_ROOT}/api/agent/upgrade`, {
+        method: "POST",
         headers: {
-          ...(options.headers || {}),
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fundPin,
+          amount: payload?.amount
+        })
       });
 
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { rawResponse: text };
-      }
+      hideModal();
 
-      return { res, data };
-    }
-
-    async function loadStatus() {
-      clearNotice();
-      const token = getToken();
-      if (!token) {
-        setUpgradeStatus('Please log in first', 'error');
-        showNotice('Please log in first', 'error');
+      if (!res.ok) {
+        showNotice(data?.message || "Unable to upgrade account.", "error");
+        await loadStatus();
         return;
       }
 
-      try {
-        const { res, data } = await apiFetch(`${API_ROOT}/api/agent/status`);
-        if (!res.ok) {
-          setUpgradeStatus(data?.message || 'Unable to load status', 'error');
-          showNotice(data?.message || 'Unable to load status', 'error');
-          return;
-        }
+      const upgradedAmount = Number(data?.transaction?.amount || config.upgrade_amount);
 
-        const agent = data?.agent || {};
-        const active = agent.is_agent || String(agent.agent_status || '').toLowerCase() === 'active';
+      currentAgentStatus = "agent";
+      currentWalletBalance = Number(data?.wallet?.balance || currentWalletBalance - upgradedAmount);
 
-        if (active) {
-          setUpgradeStatus('Agent Active', 'success');
-          upgradeBtn.disabled = true;
-          upgradeBtn.textContent = 'Already an Agent';
-        } else {
-          setUpgradeStatus('Not an Agent', 'info');
-          upgradeBtn.disabled = false;
-          upgradeBtn.textContent = 'Upgrade to Agent';
-        }
-      } catch (err) {
-        console.error(err);
-        setUpgradeStatus('Unable to load status', 'error');
-        showNotice('Network error while loading status', 'error');
-      }
+      walletBalanceTag.textContent = money(currentWalletBalance);
+      updateSummary();
+      setAgentStatus("Agent Active", "success");
+      setUpgradeButtonState();
+      showNotice(data?.message || "Agent upgrade successful.", "success");
+
+      setTimeout(() => {
+        window.location.href = "dashboard.html";
+      }, 1600);
+    } catch (err) {
+      console.error(err);
+      hideModal();
+      upgradeBtn.disabled = false;
+      upgradeBtn.textContent = upgradeButtonText;
+      showNotice("Network error while upgrading.", "error");
+    } finally {
+      upgradeBtn.disabled = currentAgentStatus === "agent";
+      upgradeBtn.textContent = currentAgentStatus === "agent" ? "Already an Agent" : "Upgrade to Agent";
     }
+  }
 
-    async function pollFundingStatus(reference) {
-      stopPolling();
-
-      const token = getToken();
-      if (!token || !reference) return;
-
-      fundingPollTimer = setInterval(async () => {
-        try {
-          const { res, data } = await apiFetch(
-            `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`
-          );
-
-          if (!res.ok) return;
-
-          const intentStatus = String(data?.intent?.status || '').toLowerCase();
-          const txStatus = String(data?.transaction?.status || '').toLowerCase();
-
-          if (intentStatus === 'successful' || txStatus === 'success') {
-            stopPolling();
-            stopCountdown();
-
-            const fundedAmount = Number(data?.transaction?.amount || 4000 || 0);
-            const amountText = Number.isFinite(fundedAmount)
-              ? `₦${fundedAmount.toLocaleString('en-NG')}`
-              : 'Payment';
-
-            verifyText.textContent = 'Payment confirmed';
-            verifyText.className = 'active';
-            setPaymentStatus('Confirmed', 'success');
-            setUpgradeStatus('Agent Active', 'success');
-            showNotice(`${amountText} funded successfully`, 'success');
-
-            setTimeout(() => {
-              window.location.href = 'dashboard.html';
-            }, 1800);
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }, 3000);
+  upgradeBtn.addEventListener("click", upgradeToAgent);
+  refreshBtn.addEventListener("click", async () => {
+    try {
+      await loadConfig();
+      await loadStatus();
+      showNotice("Status refreshed.", "success");
+    } catch (err) {
+      console.error(err);
+      showNotice("Unable to refresh status.", "error");
     }
-async function upgradeToAgent() {
-      clearNotice();
+  });
 
-      const token = getToken();
-      if (!token) {
-        showNotice('Please log in first before upgrading to Agent.', 'error');
-        return;
-      }
-
-      upgradeBtn.disabled = true;
-      upgradeBtn.textContent = 'Preparing...';
-      showModal('Preparing payment of ₦4,000...');
-
-      try {
-        const { res, data } = await apiFetch(`${API_ROOT}/api/wallet/fund/initiate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            amount: 4000,
-            purpose: 'agent_upgrade'
-          })
-        });
-
-        if (!res.ok) {
-          hideModal();
-          upgradeBtn.disabled = false;
-          upgradeBtn.textContent = 'Upgrade to Agent';
-          showNotice(data?.message || 'Unable to start upgrade payment.', 'error');
-          return;
-        }
-
-        currentFundingSession = {
-          amount: Number(data?.amount || 4000),
-          fee_amount: Number(data?.fee_amount || 0),
-          gross_amount: Number(data?.gross_amount || 4000),
-          net_amount: Number(data?.net_amount || 0),
-          reference: data?.reference || data?.tx_ref || data?.txRef || null,
-          account_name: data?.account_name || data?.accountName || data?.customer_name || null,
-          account_number: data?.account_number || data?.accountNumber || data?.virtual_account_number || null,
-          expires_at: data?.expires_at || data?.expiry_date || null,
-          raw: data
-        };
-
-        renderPaymentDetails(currentFundingSession);
-        setPaymentStatus('Pending', 'info');
-        setUpgradeStatus('Pending', 'info');
-        showNotice('Payment details created', 'success');
-
-        if (currentFundingSession.reference) {
-          pollFundingStatus(currentFundingSession.reference);
-        }
-
-        hideModal();
-        upgradeBtn.disabled = false;
-        upgradeBtn.textContent = 'Upgrade to Agent';
-      } catch (err) {
-        console.error(err);
-        hideModal();
-        upgradeBtn.disabled = false;
-        upgradeBtn.textContent = 'Upgrade to Agent';
-        setUpgradeStatus('Unable to prepare payment', 'error');
-        setPaymentStatus('Failed', 'error');
-        showNotice('Unable to prepare payment', 'error');
-      }
+  document.addEventListener("keydown", (e) => {
+    if (document.getElementById("pinOverlay").style.display === "flex") {
+      if (/^\d$/.test(e.key)) pressPin(e.key);
+      if (e.key === "Backspace") backspacePin();
+      if (e.key === "Escape") closePinModal();
     }
+  });
 
-    function clearAgentUI() {
-      currentFundingSession = null;
-      detailsCard.style.display = 'none';
-      verifyBox.style.display = 'none';
-      countdownValue.textContent = '--:--:--';
-      countdownNote.textContent = 'Waiting for payment';
-      countdownEndsAt = null;
-      stopCountdown();
-      stopPolling();
-      clearNotice();
-      setUpgradeStatus('Ready', 'info');
-      setPaymentStatus('Waiting', 'info');
+  window.addEventListener("DOMContentLoaded", async () => {
+    try {
+      renderConfigToUI();
+      await loadConfig();
+      await loadStatus();
+    } catch (err) {
+      console.error(err);
+      showNotice(err.message || "Unable to load page.", "error");
     }
+  });
 
-    async function verifyAfterReturn() {
-      const params = new URLSearchParams(window.location.search);
-      const txRef = params.get('tx_ref') || params.get('reference') || params.get('txref');
-      const status = String(params.get('status') || '').toLowerCase();
-
-      if (!txRef && status !== 'successful' && status !== 'success') {
-        return;
-      }
-
-      const token = getToken();
-      if (!token || !txRef) return;
-
-      showModal('Verifying payment...');
-      try {
-        const { res, data } = await apiFetch(
-          `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(txRef)}`
-        );
-
-        hideModal();
-
-        if (res.ok) {
-          const intentStatus = String(data?.intent?.status || '').toLowerCase();
-          const txStatus = String(data?.transaction?.status || '').toLowerCase();
-
-          if (intentStatus === 'successful' || txStatus === 'success') {
-            setUpgradeStatus('Agent Active', 'success');
-            setPaymentStatus('Confirmed', 'success');
-            showNotice('Agent upgrade successful.', 'success');
-            clearAgentUI();
-            window.history.replaceState({}, document.title, window.location.pathname);
-            await loadStatus();
-            return;
-          }
-        }
-
-        showNotice('Payment verification failed.', 'error');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (err) {
-        console.error(err);
-        hideModal();
-        showNotice('Network error while verifying payment.', 'error');
-      }
-    }
-
-    upgradeBtn.addEventListener('click', upgradeToAgent);
-    refreshBtn.addEventListener('click', loadStatus);
-
-    copyAccountBtn.addEventListener('click', () => {
-      if (!currentFundingSession) return;
-      const value = currentFundingSession.account_number || currentFundingSession.reference || '';
-      copyText(
-        value,
-        currentFundingSession.account_number ? 'Account number copied' : 'Reference copied'
-      );
-    });
-
-    window.addEventListener('DOMContentLoaded', () => {
-      loadStatus();
-      verifyAfterReturn();
-    });
-
-    window.addEventListener('beforeunload', () => {
-      stopPolling();
-      stopCountdown();
-    });
-  </script>
+  window.addEventListener("beforeunload", () => {
+    closePinModal();
+  });
+</script>
 </body>
 </html>
