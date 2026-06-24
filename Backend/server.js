@@ -98,6 +98,19 @@ app.use(
   })
 );
 
+//agent panel
+app.use(
+  "/api/agent",
+  createAgentRouter({
+    pool,
+    requireAuth,
+    respondOk,
+    respondError,
+    uid,
+    addNotification,
+    verifyFundPin
+  })
+);
 // Changed for Render: always use SSL for Postgres
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
