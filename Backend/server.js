@@ -1284,6 +1284,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       return respondError(res, 401, 'Unauthorized');
     }
 
+    const fundPin = String(body.fundPin || body.fund_pin || '').trim();
+    const pinOk = await verifyFundPin(userId, fundPin);
+
+    if (!pinOk) {
+      return respondError(res, 401, 'Invalid fund PIN');
+    }
+
     let pricing = null;
     let selectedPlan = null;
     let description = `${serviceName} purchase`;
