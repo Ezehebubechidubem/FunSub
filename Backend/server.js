@@ -718,7 +718,8 @@ async function initDb() {
       reference TEXT NOT NULL UNIQUE,
       description TEXT,
       meta JSONB DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS notifications (
@@ -758,7 +759,8 @@ async function initDb() {
       status TEXT NOT NULL DEFAULT 'initiated',
       meta JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      verified_at TIMESTAMPTZ
+      verified_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS admin_logs (
@@ -785,6 +787,16 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS fund_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS fund_pin_locked_until TIMESTAMPTZ;
+  `);
+
+  await query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   `);
 }
 function flutterwaveHeaders() {
