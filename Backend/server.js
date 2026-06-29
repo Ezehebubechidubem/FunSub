@@ -213,9 +213,9 @@ async function cleanupExpiredFundingIntents() {
       `
       SELECT tx_ref, user_id, amount
       FROM payment_intents
-      WHERE status IN ('initiated', 'pending')
-        AND COALESCE(meta->>'purpose', '') = 'wallet_funding'
-        AND created_at < NOW() - INTERVAL '1 hour'
+      WHERE COALESCE(meta->>'purpose', '') = 'wallet_funding'
+        AND status IN ('expired', 'transaction funding timeout')
+        AND created_at < NOW() - INTERVAL '3 days'
       ORDER BY created_at ASC
       `
     );
@@ -230,7 +230,7 @@ async function cleanupExpiredFundingIntents() {
 
         const lockedIntent = await client.query(
           `
-          SELECT tx_ref, user_id, amount, status, meta
+          SELECT tx_ref, user_id, amount, status, meta, created_at
           FROM payment_intents
           WHERE tx_ref = $1
           FOR UPDATE
@@ -247,79 +247,63 @@ async function cleanupExpiredFundingIntents() {
         const currentStatus = String(currentIntent.status || '').toLowerCase();
         const purpose = String(currentIntent.meta?.purpose || '').toLowerCase();
 
-        if (!['initiated', 'pending'].includes(currentStatus)) {
-          await client.query('ROLLBACK');
-          continue;
-        }
-
         if (purpose !== 'wallet_funding') {
           await client.query('ROLLBACK');
           continue;
         }
 
-        const expiryMeta = {
-          expiredAt: new Date().toISOString(),
-          reason: 'funding_not_completed_within_1_hour'
-        };
+        if (!['expired', 'transaction funding timeout'].includes(currentStatus)) {
+          await client.query('ROLLBACK');
+          continue;
+        }
 
         await client.query(
           `
-          UPDATE payment_intents
-          SET status = 'expired',
-              verified_at = NOW(),
-              meta = COALESCE(meta, '{}'::jsonb) || $2::jsonb
-          WHERE tx_ref = $1
+          DELETE FROM transactions
+          WHERE reference = $1
+            AND user_id = $2
+            AND category = 'wallet'
+            AND status IN ('expired', 'transaction funding timeout')
           `,
-          [
-            currentIntent.tx_ref,
-            JSON.stringify(expiryMeta)
-          ]
+          [currentIntent.tx_ref, currentIntent.user_id]
         );
 
         await client.query(
           `
-          UPDATE transactions
-          SET status = 'expired',
-              updated_at = NOW(),
-              meta = $2
-          WHERE reference = $1
-            AND user_id = $3
-            AND category = 'wallet'
-            AND status IN ('initiated', 'pending')
+          DELETE FROM payment_intents
+          WHERE tx_ref = $1
           `,
-          [
-            currentIntent.tx_ref,
-            JSON.stringify(expiryMeta),
-            currentIntent.user_id
-          ]
+          [currentIntent.tx_ref]
         );
 
         await client.query('COMMIT');
 
-        console.log(`Expired funding intent ${currentIntent.tx_ref}`);
+        console.log(`Cleaned expired funding intent ${currentIntent.tx_ref}`);
       } catch (err) {
         try {
           await client.query('ROLLBACK');
         } catch (_) {}
-        console.error('FUNDING EXPIRE ERROR:', err?.message || err);
+        console.error('FUNDING CLEANUP ERROR:', err?.message || err);
       } finally {
         client.release();
       }
     }
   } catch (err) {
-    console.error('FUNDING CLEANUP ERROR:', err?.message || err);
+    console.error('FUNDING CLEANUP JOB ERROR:', err?.message || err);
   }
 }
 
 cleanupExpiredFundingIntents().catch((err) => {
-  console.error('INITIAL FUNDING EXPIRE ERROR:', err?.message || err);
+  console.error('INITIAL FUNDING CLEANUP ERROR:', err?.message || err);
 });
 
 setInterval(() => {
   cleanupExpiredFundingIntents().catch((err) => {
-    console.error('INTERVAL FUNDING EXPIRE ERROR:', err?.message || err);
+    console.error('INTERVAL FUNDING CLEANUP ERROR:', err?.message || err);
   });
-}, 60_000);
+}, 60 * 60 * 1000); // every 1 hour
+
+
 function providerResponseState(response) {
   if (!response) return 'failed';
 
