@@ -607,7 +607,7 @@
 
   function formatNaira(value) {
     const num = Number(value);
-    if (Number.isNaN(num)) return "N/A";
+    if (!Number.isFinite(num)) return "N/A";
     return "₦" + num.toLocaleString("en-NG", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
@@ -778,8 +778,10 @@
       const networkId = getNetworkId(network);
 
       const response = await fetch(
-        `${BASE_URL}?network_id=${encodeURIComponent(networkId)}&network=${encodeURIComponent(network)}&service_id=${encodeURIComponent(serviceID)}&serviceId=${encodeURIComponent(serviceID)}`,
+        `${BASE_URL}?network_id=${encodeURIComponent(networkId)}&network=${encodeURIComponent(network)}&service_id=${encodeURIComponent(serviceID)}&serviceId=${encodeURIComponent(serviceID)}&_=${Date.now()}`,
         {
+          method: "GET",
+          cache: "no-store",
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -799,15 +801,27 @@
       planSelect.innerHTML = "<option value=\"\">Select a plan</option>";
 
       plans.forEach(plan => {
-        const finalPrice = Number(plan.pricing?.finalPrice ?? plan.rawPrice ?? 0);
-        const option = document.createElement("option");
+        const rawPrice = Number(plan.rawPrice ?? 0);
+        const finalPrice = Number(plan.pricing?.finalPrice ?? rawPrice ?? 0);
 
+        console.log("PLAN DEBUG:", {
+          name: plan.name,
+          source: plan.source,
+          rawPrice,
+          markupPercent: plan.pricing?.markupPercent,
+          markupFee: plan.pricing?.markupFee,
+          finalPrice
+        });
+
+        const option = document.createElement("option");
         option.value = plan.id;
         option.textContent = `${plan.name} - ${formatNaira(finalPrice)}`;
 
         option.dataset.planName = plan.name || "";
-        option.dataset.rawPrice = plan.rawPrice ?? "";
-        option.dataset.finalPrice = finalPrice;
+        option.dataset.rawPrice = String(rawPrice);
+        option.dataset.finalPrice = String(finalPrice);
+        option.dataset.markupPercent = String(plan.pricing?.markupPercent ?? "");
+        option.dataset.markupFee = String(plan.pricing?.markupFee ?? "");
         option.dataset.source = plan.source || "";
         option.dataset.purchaseRoute = plan.purchase_route || "";
         option.dataset.serviceType = data.serviceType || "data";
@@ -830,8 +844,10 @@
     currentPlan = {
       id: selected.value,
       name: selected.dataset.planName || selected.textContent,
-      rawPrice: selected.dataset.rawPrice || "",
-      finalPrice: selected.dataset.finalPrice || "",
+      rawPrice: Number(selected.dataset.rawPrice || 0),
+      finalPrice: Number(selected.dataset.finalPrice || 0),
+      markupPercent: Number(selected.dataset.markupPercent || 0),
+      markupFee: Number(selected.dataset.markupFee || 0),
       source: selected.dataset.source || "",
       purchaseRoute: selected.dataset.purchaseRoute || "",
       serviceType: selected.dataset.serviceType || "data"
@@ -862,8 +878,8 @@
 
     const variation_code = selectedPlan.value;
     const plan_name = selectedPlan.dataset.planName || "";
-    const rawPrice = selectedPlan.dataset.rawPrice || "";
-    const finalPrice = selectedPlan.dataset.finalPrice || rawPrice || "";
+    const rawPrice = Number(selectedPlan.dataset.rawPrice || 0);
+    const finalPrice = Number(selectedPlan.dataset.finalPrice || rawPrice || 0);
     const source = selectedPlan.dataset.source || "";
     const purchase_route = selectedPlan.dataset.purchaseRoute || "";
     const serviceID = getServiceID(currentNetwork);
