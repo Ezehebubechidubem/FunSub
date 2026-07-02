@@ -14,6 +14,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { createAgentRouter } = require("./agent");
 const { createIacafeGateway } = require("./services/vtuGateway");
+const { applyMarkup, getMarkupPercent } = require("./markup");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
