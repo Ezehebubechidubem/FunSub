@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basic Information</title>
+  <script src="theme.js" defer></script>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --text:#f1f5f9;
+      --muted:#d1d5db;
+      --line:transparent;
+      --title:#ffffff;
+    }
+
+    body.dark{
+      --bg:#0b0f16;
+      --text:#f1f5f9;
+      --muted:#d1d5db;
+      --line:transparent;
+      --title:#ffffff;
+    }
+
+    *{
+      box-sizing:border-box;
+      margin:0;
+      padding:0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    html,body{
+      height:100%;
+    }
+
+    body{
+      background:var(--bg);
+      color:var(--text);
+      padding:0;
+    }
+
+    .page{
+      min-height:100vh;
+      padding:24px 22px 28px;
+      max-width:430px;
+      margin:0 auto;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      margin-top:8px;
+    }
+
+    .back{
+      width:44px;
+      height:44px;
+      display:grid;
+      place-items:center;
+      color:#fff;
+      text-decoration:none;
+      font-size:40px;
+      line-height:1;
+      flex:0 0 auto;
+      transform:translateY(-1px);
+    }
+
+    .title{
+      font-size:21px;
+      font-weight:700;
+      color:var(--title);
+      letter-spacing:-0.01em;
+    }
+
+    .content{
+      margin-top:64px;
+      display:flex;
+      flex-direction:column;
+      gap:54px;
+    }
+
+    .row{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      line-height:1.5;
+    }
+
+    .label{
+      min-width:122px;
+      font-size:19px;
+      font-weight:400;
+      color:#f3f4f6;
+      white-space:nowrap;
+    }
+
+    .value{
+      font-size:19px;
+      font-weight:400;
+      color:#f3f4f6;
+      word-break:break-word;
+      flex:1;
+    }
+
+    @media (max-width:380px){
+      .page{
+        padding-left:18px;
+        padding-right:18px;
+      }
+
+      .content{
+        gap:48px;
+        margin-top:58px;
+      }
+
+      .label,
+      .value{
+        font-size:18px;
+      }
+
+      .label{
+        min-width:115px;
+      }
+
+      .title{
+        font-size:20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="topbar">
+      <a href="javascript:history.back()" class="back" aria-label="Back">←</a>
+      <div class="title">Basic Information</div>
+    </div>
+
+    <section class="content" aria-label="Profile details">
+      <div class="row">
+        <div class="label">Name:</div>
+        <div class="value" id="nameValue">—</div>
+      </div>
+
+      <div class="row">
+        <div class="label">Email:</div>
+        <div class="value" id="emailValue">—</div>
+      </div>
+
+      <div class="row">
+        <div class="label">Phone Number:</div>
+        <div class="value" id="phoneValue">—</div>
+      </div>
+
+      <div class="row">
+        <div class="label">State:</div>
+        <div class="value" id="stateValue">—</div>
+      </div>
+
+      <div class="row">
+        <div class="label">Account Type:</div>
+        <div class="value" id="roleValue">—</div>
+      </div>
+
+      <div class="row">
+        <div class="label">KYC Status:</div>
+        <div class="value" id="kycValue">—</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE_URL = 'https://funsub.onrender.com';
+    const tokenKey = 'funsub_token';
+
+    const nameValue = document.getElementById('nameValue');
+    const emailValue = document.getElementById('emailValue');
+    const phoneValue = document.getElementById('phoneValue');
+    const stateValue = document.getElementById('stateValue');
+    const roleValue = document.getElementById('roleValue');
+    const kycValue = document.getElementById('kycValue');
+
+    function getToken() {
+      return localStorage.getItem(tokenKey) || '';
+    }
+
+    function safeText(value, fallback = '—') {
+      const s = String(value ?? '').trim();
+      return s || fallback;
+    }
+
+    async function loadProfile() {
+      const token = getToken();
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem(tokenKey);
+            window.location.href = 'login.html';
+            return;
+          }
+          return;
+        }
+
+        const user = data?.user || {};
+
+        nameValue.textContent = safeText(user.full_name || user.fullName || user.name);
+        emailValue.textContent = safeText(user.email);
+        phoneValue.textContent = safeText(user.phone);
+        stateValue.textContent = safeText(user.state);
+        roleValue.textContent = safeText(
+          user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Subscriber'
+        );
+        kycValue.textContent = safeText(
+          user.kyc_status ? user.kyc_status.charAt(0).toUpperCase() + user.kyc_status.slice(1) : 'Unverified'
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', loadProfile);
+  </script>
+</body>
+</html>
