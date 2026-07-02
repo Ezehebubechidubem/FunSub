@@ -68,8 +68,9 @@ function normalizeDataNetwork(value) {
     mtn: 'MTN',
     glo: 'GLO',
     airtel: 'AIRTEL',
-    '9mobile': '9MOBILE',
-    etisalat: '9MOBILE'
+    '9mobile': 'MOBILE',
+    mobile: 'MOBILE',
+    etisalat: 'MOBILE'
   };
 
   return map[s] || null;
@@ -127,6 +128,10 @@ function getTieredMarkupPercent(serviceType, baseAmount, options = {}) {
 
     if (network) {
       candidates.push(`${network}_DATA_MARKUP_${bandKey}`);
+
+      if (network === 'MOBILE') {
+        candidates.push(`9MOBILE_DATA_MARKUP_${bandKey}`);
+      }
     }
 
     candidates.push(
