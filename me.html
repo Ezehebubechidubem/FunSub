@@ -8,15 +8,15 @@
   <style>
     :root{
       --bg:#ffffff;
-      --text:#f1f5f9;
-      --muted:#d1d5db;
+      --text:#111827;
+      --muted:#6b7280;
       --line:transparent;
-      --title:#ffffff;
+      --title:#111827;
     }
 
     body.dark{
       --bg:#0b0f16;
-      --text:#f1f5f9;
+      --text:#f3f4f6;
       --muted:#d1d5db;
       --line:transparent;
       --title:#ffffff;
@@ -58,7 +58,7 @@
       height:44px;
       display:grid;
       place-items:center;
-      color:#fff;
+      color:var(--title);
       text-decoration:none;
       font-size:40px;
       line-height:1;
@@ -91,14 +91,14 @@
       min-width:122px;
       font-size:19px;
       font-weight:400;
-      color:#f3f4f6;
+      color:var(--text);
       white-space:nowrap;
     }
 
     .value{
       font-size:19px;
       font-weight:400;
-      color:#f3f4f6;
+      color:var(--text);
       word-break:break-word;
       flex:1;
     }
