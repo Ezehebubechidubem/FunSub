@@ -88,17 +88,30 @@ function normalizeCableProvider(value) {
   return map[s] || null;
 }
 
-function readPercent(keys, fallbackPercent = DEFAULT_MARKUP_PERCENT) {
+function readPercentDetail(keys, fallbackPercent = DEFAULT_MARKUP_PERCENT) {
   for (const key of keys) {
     const raw = process.env[key];
     const num = Number(raw);
 
-    if (raw !== undefined && raw !== null && String(raw).trim() !== '' && Number.isFinite(num)) {
-      return num;
+    if (
+      raw !== undefined &&
+      raw !== null &&
+      String(raw).trim() !== '' &&
+      Number.isFinite(num)
+    ) {
+      return {
+        key,
+        percent: num,
+        source: 'env'
+      };
     }
   }
 
-  return toNumber(fallbackPercent, DEFAULT_MARKUP_PERCENT);
+  return {
+    key: null,
+    percent: toNumber(fallbackPercent, DEFAULT_MARKUP_PERCENT),
+    source: 'fallback'
+  };
 }
 
 function getTieredMarkupPercent(serviceType, baseAmount, options = {}) {
@@ -121,7 +134,20 @@ function getTieredMarkupPercent(serviceType, baseAmount, options = {}) {
       `DATA_MARKUP_PERCENT`
     );
 
-    return readPercent(candidates, SERVICE_MARKUP_DEFAULTS.data);
+    const result = readPercentDetail(candidates, SERVICE_MARKUP_DEFAULTS.data);
+
+    console.log('MARKUP DEBUG:', {
+      serviceType: normalized,
+      baseAmount: toNumber(baseAmount, 0),
+      bandKey,
+      network,
+      candidates,
+      selectedKey: result.key,
+      selectedPercent: result.percent,
+      source: result.source
+    });
+
+    return result.percent;
   }
 
   if (normalized === 'cable_tv') {
@@ -140,10 +166,35 @@ function getTieredMarkupPercent(serviceType, baseAmount, options = {}) {
       `CABLE_TV_MARKUP_PERCENT`
     );
 
-    return readPercent(candidates, SERVICE_MARKUP_DEFAULTS.cable_tv);
+    const result = readPercentDetail(candidates, SERVICE_MARKUP_DEFAULTS.cable_tv);
+
+    console.log('MARKUP DEBUG:', {
+      serviceType: normalized,
+      baseAmount: toNumber(baseAmount, 0),
+      bandKey,
+      provider,
+      candidates,
+      selectedKey: result.key,
+      selectedPercent: result.percent,
+      source: result.source
+    });
+
+    return result.percent;
   }
 
-  return SERVICE_MARKUP_DEFAULTS[normalized] ?? DEFAULT_MARKUP_PERCENT;
+  const percent = SERVICE_MARKUP_DEFAULTS[normalized] ?? DEFAULT_MARKUP_PERCENT;
+
+  console.log('MARKUP DEBUG:', {
+    serviceType: normalized,
+    baseAmount: toNumber(baseAmount, 0),
+    bandKey: null,
+    candidates: [],
+    selectedKey: null,
+    selectedPercent: percent,
+    source: 'service_default'
+  });
+
+  return percent;
 }
 
 function getMarkupPercent(serviceType, baseAmount, options = {}) {
@@ -156,13 +207,23 @@ function applyMarkup(serviceType, baseAmount, options = {}) {
   const fee = (base * markupPercent) / 100;
   const finalPrice = base + fee;
 
-  return {
+  const result = {
     serviceType: normalizeServiceType(serviceType),
     basePrice: Number(base.toFixed(2)),
     markupPercent: Number(markupPercent.toFixed(2)),
     markupFee: Number(fee.toFixed(2)),
     finalPrice: Number(finalPrice.toFixed(2))
   };
+
+  console.log('APPLY MARKUP:', {
+    serviceType: result.serviceType,
+    basePrice: result.basePrice,
+    markupPercent: result.markupPercent,
+    markupFee: result.markupFee,
+    finalPrice: result.finalPrice
+  });
+
+  return result;
 }
 
 module.exports = {
