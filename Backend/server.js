@@ -2655,7 +2655,10 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
       const withPricing = [];
       for (const plan of allPlans) {
-        const pricing = await applyMarkup('data', plan.rawPrice);
+        const pricing = applyMarkup('data', plan.rawPrice, {
+          network: service_id
+        });
+
         withPricing.push({
           ...plan,
           pricing: {
@@ -2714,7 +2717,10 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
       const withPricing = [];
       for (const plan of plans) {
-        const pricing = await applyMarkup('cable_tv', plan.rawPrice);
+        const pricing = applyMarkup('cable_tv', plan.rawPrice, {
+          provider: service_id
+        });
+
         withPricing.push({
           ...plan,
           pricing: {
