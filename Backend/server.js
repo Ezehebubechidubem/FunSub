@@ -58,17 +58,6 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
 const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
 
-const SERVICE_MARKUP_DEFAULTS = {
-  airtime: envNumber(process.env.AIRTIME_MARKUP_PERCENT, 1),
-  data: envNumber(process.env.DATA_MARKUP_PERCENT, 1.5),
-  cable_tv: envNumber(process.env.CABLE_TV_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
-  electricity: envNumber(process.env.ELECTRICITY_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
-  betting: envNumber(process.env.BETTING_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
-  recharge_pin: envNumber(process.env.RECHARGE_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
-  data_pin: envNumber(process.env.DATA_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT),
-  exam_pin: envNumber(process.env.EXAM_PIN_MARKUP_PERCENT, DEFAULT_MARKUP_PERCENT)
-};
-
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
