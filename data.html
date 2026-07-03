@@ -804,15 +804,6 @@
         const rawPrice = Number(plan.rawPrice ?? 0);
         const finalPrice = Number(plan.pricing?.finalPrice ?? rawPrice ?? 0);
 
-        console.log("PLAN DEBUG:", {
-          name: plan.name,
-          source: plan.source,
-          rawPrice,
-          markupPercent: plan.pricing?.markupPercent,
-          markupFee: plan.pricing?.markupFee,
-          finalPrice
-        });
-
         const option = document.createElement("option");
         option.value = plan.id;
         option.textContent = `${plan.name} - ${formatNaira(finalPrice)}`;
@@ -892,7 +883,8 @@
       serviceID,
       service_id: serviceID,
       variation_code,
-      plan_amount: rawPrice,
+      plan_amount: finalPrice,
+      base_price: rawPrice,
       plan_name,
       source,
       plan_source: source,
@@ -912,6 +904,7 @@
       service_id,
       variation_code,
       plan_amount,
+      base_price,
       plan_name,
       source,
       plan_source,
@@ -941,7 +934,8 @@
           service_id,
           serviceId: service_id,
           variation_code,
-          plan_amount,
+          plan_amount,          // this is now the marked-up amount
+          base_price,           // optional, for reference only
           plan_name,
           source,
           plan_source,
