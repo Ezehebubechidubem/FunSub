@@ -1859,6 +1859,167 @@ app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
     client.release();
   }
 });
+
+
+
+/* BETTING */
+
+/**
+ * Step 1: Load betting providers/options
+ * This matches the same pattern as your plans/options loader for data and airtime.
+ */
+app.get('/api/services/betting/plans', requireAuth, async (req, res) => {
+  try {
+    const providersRes = await iacafe.getProviders().catch((err) => {
+      console.error('BETTING PROVIDERS ERROR:', err?.response?.data || err?.message);
+      return null;
+    });
+
+    const providers = providersRes?.data || {};
+    const bettingOptions = (providers.betting || []).map((x) => ({
+      id: x,
+      name: x
+    }));
+
+    return respondOk(
+      res,
+      {
+        serviceType: 'betting',
+        options: bettingOptions
+      },
+      'Betting options loaded'
+    );
+  } catch (err) {
+    console.error('LOAD BETTING OPTIONS ERROR:', err);
+    console.error('MESSAGE:', err?.message);
+    console.error('STACK:', err?.stack);
+    console.error('RESPONSE DATA:', err?.response?.data);
+
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.message || 'Unable to load betting options'
+    );
+  }
+});
+
+/**
+ * Step 2: Verify betting customer before funding
+ * If customer_not_found, stop here.
+ */
+app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
+  try {
+    const { customer_id, service_id } = req.body || {};
+
+    if (!customer_id || !service_id) {
+      return respondError(res, 400, 'customer_id and service_id are required');
+    }
+
+    const result = await iacafe.verifyBettingCustomer({
+      customer_id: String(customer_id).trim(),
+      service_id: String(service_id).trim()
+    });
+
+    const customerName =
+      result?.customer_name ||
+      result?.data?.customer_name ||
+      result?.name ||
+      result?.data?.name ||
+      result?.customer?.name ||
+      null;
+
+    return respondOk(
+      res,
+      {
+        customer_name: customerName,
+        customer_id: String(customer_id).trim(),
+        service_id: String(service_id).trim(),
+        raw: result
+      },
+      'Customer verified'
+    );
+  } catch (err) {
+    const code =
+      err?.code ||
+      err?.response?.data?.error?.code ||
+      err?.response?.data?.code ||
+      '';
+
+    const message =
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Unable to verify customer';
+
+    return respondError(
+      res,
+      code === 'customer_not_found' ? 404 : 400,
+      message
+    );
+  }
+});
+
+/**
+ * Step 3: Fund betting account only after verification succeeds
+ */
+app.post('/api/services/betting', requireAuth, async (req, res) => {
+  try {
+    const { customer_id, service_id, amount, request_id, fundPin } = req.body || {};
+
+    if (!customer_id || !service_id || !amount) {
+      return respondError(res, 400, 'customer_id, service_id and amount are required');
+    }
+
+    const pin = String(fundPin || '').trim();
+    if (!pin) {
+      return respondError(res, 400, 'fundPin is required');
+    }
+
+    const userId = req.user?.id || req.user?.userId;
+    if (!userId) {
+      return respondError(res, 401, 'Unauthorized');
+    }
+
+    const pinOk = await verifyFundPin(userId, pin);
+    if (!pinOk) {
+      return respondError(res, 401, 'Invalid fund PIN');
+    }
+
+    const result = await iacafe.buyBetting({
+      request_id: request_id || makeRequestId('BETTING'),
+      customer_id: String(customer_id).trim(),
+      service_id: String(service_id).trim(),
+      amount: Number(amount),
+      skip_verify: true
+    });
+
+    return respondOk(
+      res,
+      {
+        result
+      },
+      'Betting funded successfully'
+    );
+  } catch (err) {
+    const code =
+      err?.code ||
+      err?.response?.data?.error?.code ||
+      err?.response?.data?.code ||
+      '';
+
+    const message =
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Betting funding failed';
+
+    return respondError(
+      res,
+      code === 'customer_not_found' ? 404 : 400,
+      message
+    );
+  }
+});
 /* AUTH */
 app.post('/api/auth/register', async (req, res) => {
   try {
