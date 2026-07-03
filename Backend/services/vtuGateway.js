@@ -34,6 +34,56 @@ function pickArray(data) {
   return [];
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSuccessfulResponse(data) {
+  if (!data) return false;
+
+  if (data.success === true) return true;
+
+  const status = normalizeText(data.status || data.response_status || data.state);
+  const code = normalizeText(data.code || data.response_code || data.responseCode);
+  const message = normalizeText(data.message || data.response_description || data.description);
+
+  if (
+    status === "success" ||
+    status === "successful" ||
+    status === "completed" ||
+    status === "complete" ||
+    status === "paid" ||
+    status === "ok"
+  ) {
+    return true;
+  }
+
+  if (code === "000" || code === "00" || code === "0") return true;
+  if (message.includes("success")) return true;
+
+  return false;
+}
+
+function getErrorCode(data) {
+  return normalizeText(
+    data?.error?.code ||
+      data?.code ||
+      data?.error_code ||
+      data?.response_code ||
+      data?.responseCode
+  );
+}
+
+function getErrorMessage(data) {
+  return String(
+    data?.error?.message ||
+      data?.message ||
+      data?.response_description ||
+      data?.description ||
+      "Request failed"
+  ).trim();
+}
+
 class ProviderClient {
   constructor({ name, baseURL, apiKey, authType = "bearer", timeout = 30000 }) {
     if (!name) throw new Error("Provider name is required");
@@ -71,6 +121,12 @@ class ProviderClient {
 function createVtuGateway({ primary, fallback }) {
   const p = new ProviderClient(primary);
   const f = fallback ? new ProviderClient(fallback) : null;
+
+  const primaryBettingVerifyPath = primary?.bettingVerifyPath || "/betting/verify";
+  const primaryBettingBuyPath = primary?.bettingBuyPath || "/betting";
+
+  const fallbackBettingVerifyPath = fallback?.bettingVerifyPath || "/betting/verify";
+  const fallbackBettingBuyPath = fallback?.bettingBuyPath || "/betting";
 
   async function withFallback(primaryFn, fallbackFn) {
     try {
@@ -249,7 +305,40 @@ function createVtuGateway({ primary, fallback }) {
     );
   }
 
-  async function buyBetting({ request_id, customer_id, service_id, amount }) {
+  async function buyBetting({
+    request_id,
+    customer_id,
+    service_id,
+    amount,
+    skip_verify = false,
+  }) {
+    const verifyPayload = {
+      customer_id,
+      service_id,
+    };
+
+    if (!skip_verify) {
+      const verification = await withFallback(
+        () => p.post(primaryBettingVerifyPath, verifyPayload),
+        () => f.post(fallbackBettingVerifyPath, verifyPayload)
+      );
+
+      if (!isSuccessfulResponse(verification)) {
+        const code = getErrorCode(verification);
+        const message = getErrorMessage(verification);
+
+        const err = new Error(message || "Betting verification failed");
+        err.response = { data: verification };
+
+        if (code === "customer_not_found") {
+          err.code = "customer_not_found";
+          throw err;
+        }
+
+        throw err;
+      }
+    }
+
     const body = {
       request_id: request_id || makeRequestId("BETTING"),
       customer_id,
@@ -258,9 +347,32 @@ function createVtuGateway({ primary, fallback }) {
     };
 
     return withFallback(
-      () => p.post("/betting", body),
-      () => f.post("/betting", body)
+      () => p.post(primaryBettingBuyPath, body),
+      () => f.post(fallbackBettingBuyPath, body)
     );
+  }
+
+  async function verifyBettingCustomer({ customer_id, service_id }) {
+    const body = {
+      customer_id,
+      service_id,
+    };
+
+    const verification = await withFallback(
+      () => p.post(primaryBettingVerifyPath, body),
+      () => f.post(fallbackBettingVerifyPath, body)
+    );
+
+    if (!isSuccessfulResponse(verification)) {
+      const code = getErrorCode(verification);
+      const message = getErrorMessage(verification);
+      const err = new Error(message || "Betting verification failed");
+      err.response = { data: verification };
+      if (code) err.code = code;
+      throw err;
+    }
+
+    return verification;
   }
 
   async function requery(request_id) {
@@ -283,6 +395,7 @@ function createVtuGateway({ primary, fallback }) {
     buyCable,
     buyElectricity,
     buyBetting,
+    verifyBettingCustomer,
     requery,
   };
 }
@@ -295,6 +408,8 @@ function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 3
       apiKey,
       authType,
       timeout,
+      bettingVerifyPath: "/betting/verify",
+      bettingBuyPath: "/betting",
     },
     fallback: fallback
       ? {
@@ -303,6 +418,8 @@ function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 3
           apiKey: fallback.apiKey,
           authType: fallback.authType || "bearer",
           timeout: fallback.timeout || timeout,
+          bettingVerifyPath: fallback.bettingVerifyPath || "/betting/verify",
+          bettingBuyPath: fallback.bettingBuyPath || "/betting",
         }
       : null,
   });
