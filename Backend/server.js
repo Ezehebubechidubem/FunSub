@@ -1174,6 +1174,25 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   const PIN_MAX_ATTEMPTS = 4;
   const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
 
+  function buildPricing(baseAmount, finalAmount) {
+    const base = toNumber(baseAmount, 0);
+    const final = toNumber(finalAmount, 0);
+
+    const safeBase = base > 0 ? base : final;
+    const safeFinal = final > 0 ? final : safeBase;
+
+    const markupFee = Math.max(0, safeFinal - safeBase);
+    const markupPercent = safeBase > 0 ? (markupFee / safeBase) * 100 : 0;
+
+    return {
+      serviceType: normalizedServiceType,
+      basePrice: Number(safeBase.toFixed(2)),
+      markupPercent: Number(markupPercent.toFixed(2)),
+      markupFee: Number(markupFee.toFixed(2)),
+      finalPrice: Number(safeFinal.toFixed(2))
+    };
+  }
+
   async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
     if (!txRow?.id) return;
 
@@ -1383,14 +1402,33 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
     const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
 
-    if (normalizedServiceType === 'airtime') {
-      const amount = toNumber(body.amount, 0);
+    let providerAmount = 0;
+    let purchaseAmount = 0;
 
-      if (amount <= 0 || !destination) {
+    if (normalizedServiceType === 'airtime') {
+      providerAmount = toNumber(body.amount, 0);
+
+      purchaseAmount = toNumber(
+        body.plan_amount ||
+        body.finalPrice ||
+        body.final_price ||
+        body.amount,
+        0
+      );
+
+      if (providerAmount <= 0 || !destination) {
         return respondError(res, 400, 'amount and phone are required');
       }
 
-      pricing = await applyMarkup('airtime', amount);
+      if (purchaseAmount <= 0) {
+        purchaseAmount = providerAmount;
+      }
+
+      if (purchaseAmount < providerAmount) {
+        return respondError(res, 400, 'Invalid purchase amount');
+      }
+
+      pricing = buildPricing(providerAmount, purchaseAmount);
     } else {
       const variationCode = String(
         body.variation_code ||
@@ -1401,20 +1439,43 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         ''
       ).trim();
 
-      const planAmount = toNumber(body.plan_amount || body.amount, 0);
+      providerAmount = toNumber(
+        body.base_price ||
+        body.rawPrice ||
+        body.raw_price ||
+        body.amount,
+        0
+      );
+
+      purchaseAmount = toNumber(
+        body.plan_amount ||
+        body.finalPrice ||
+        body.final_price ||
+        body.amount,
+        0
+      );
 
       if (!variationCode) {
         return respondError(res, 400, 'variation_code is required');
       }
 
-      if (planAmount <= 0) {
+      if (purchaseAmount <= 0) {
         return respondError(res, 400, 'plan_amount is required');
+      }
+
+      if (providerAmount <= 0) {
+        providerAmount = purchaseAmount;
+      }
+
+      if (purchaseAmount < providerAmount) {
+        return respondError(res, 400, 'Invalid purchase amount');
       }
 
       selectedPlan = {
         id: variationCode,
         name: body.plan_name || `${serviceName} Plan`,
-        rawPrice: planAmount,
+        rawPrice: providerAmount,
+        purchase_amount: purchaseAmount,
         purchase_route:
           String(body.purchase_route || body.plan_source || body.source || '').toLowerCase() === 'budget-data'
             ? '/budget-data'
@@ -1427,15 +1488,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         }
       };
 
-      pricing = await applyMarkup(normalizedServiceType, selectedPlan.rawPrice);
+      pricing = buildPricing(providerAmount, purchaseAmount);
       description = `${serviceName} - ${selectedPlan.name}`;
     }
 
     if (!pricing) {
       return respondError(res, 400, 'Unable to prepare purchase');
     }
-
-    const purchaseAmount = Number(pricing.finalPrice);
 
     const client = await pool.connect();
     let txRow = null;
@@ -1487,6 +1546,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             serviceName,
             selectedPlan,
             pricing,
+            providerAmount,
+            purchaseAmount,
             expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
           })
         ]
@@ -1504,13 +1565,21 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       client.release();
     }
 
+    const providerBody = {
+      ...body,
+      amount: providerAmount,
+      plan_amount: providerAmount,
+      base_price: providerAmount,
+      final_amount: purchaseAmount
+    };
+
     let providerResponse;
 
     try {
       providerResponse = await withTimeout(
         buyServiceThroughGateway({
           serviceType: normalizedServiceType,
-          body,
+          body: providerBody,
           selectedPlan,
           requestId: txRow.reference
         }),
@@ -1530,6 +1599,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           serviceName,
           selectedPlan,
           pricing,
+          providerAmount,
+          purchaseAmount,
           reverseReason: err?.message || 'Provider timeout'
         }
       );
@@ -1561,6 +1632,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             serviceName,
             selectedPlan,
             pricing,
+            providerAmount,
+            purchaseAmount,
             providerResponse,
             expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
           })
@@ -1602,6 +1675,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
             serviceName,
             selectedPlan,
             pricing,
+            providerAmount,
+            purchaseAmount,
             providerResponse
           })
         ]
@@ -1628,6 +1703,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           serviceName,
           selectedPlan,
           pricing,
+          providerAmount,
+          purchaseAmount,
           providerResponse
         })
       ]
@@ -1641,6 +1718,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         transactionId: txRow.id,
         serviceType: normalizedServiceType,
         pricing,
+        providerAmount,
+        purchaseAmount,
         providerResponse
       },
       true
@@ -1651,7 +1730,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       {
         transaction: {
           ...txRow,
-          status: 'success'
+          status: 'success',
+          amount: purchaseAmount
         },
         pricing,
         providerResponse
