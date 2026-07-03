@@ -122,10 +122,12 @@ function createVtuGateway({ primary, fallback }) {
   const p = new ProviderClient(primary);
   const f = fallback ? new ProviderClient(fallback) : null;
 
-  const primaryBettingVerifyPath = primary?.bettingVerifyPath || "/betting/verify";
+  // Updated defaults for betting to match the provider endpoints you showed.
+  // If your provider docs say /verify instead of /verify-customer, change these two lines only.
+  const primaryBettingVerifyPath = primary?.bettingVerifyPath || "/verify-customer";
   const primaryBettingBuyPath = primary?.bettingBuyPath || "/betting";
 
-  const fallbackBettingVerifyPath = fallback?.bettingVerifyPath || "/betting/verify";
+  const fallbackBettingVerifyPath = fallback?.bettingVerifyPath || "/verify-customer";
   const fallbackBettingBuyPath = fallback?.bettingBuyPath || "/betting";
 
   async function withFallback(primaryFn, fallbackFn) {
@@ -408,7 +410,7 @@ function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 3
       apiKey,
       authType,
       timeout,
-      bettingVerifyPath: "/betting/verify",
+      bettingVerifyPath: "/verify-customer",
       bettingBuyPath: "/betting",
     },
     fallback: fallback
@@ -418,7 +420,7 @@ function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 3
           apiKey: fallback.apiKey,
           authType: fallback.authType || "bearer",
           timeout: fallback.timeout || timeout,
-          bettingVerifyPath: fallback.bettingVerifyPath || "/betting/verify",
+          bettingVerifyPath: fallback.bettingVerifyPath || "/verify-customer",
           bettingBuyPath: fallback.bettingBuyPath || "/betting",
         }
       : null,
