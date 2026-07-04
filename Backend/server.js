@@ -448,12 +448,17 @@ async function buyServiceThroughGateway({
       });
 
     case 'betting':
-      return iacafe.buyBetting({
-        request_id: requestId,
-        customer_id: body.customer_id || body.accountNumber || body.phone,
-        service_id: body.service_id || body.serviceId,
-        amount: body.amount
-      });
+  if (!body.customer_id || !body.service_id) {
+    throw new Error('customer_id and service_id are required');
+  }
+  
+  return iacafe.buyBetting({
+    request_id: requestId,
+    customer_id: String(body.customer_id).trim(),
+    service_id: String(body.service_id).trim(),
+    amount: toNumber(body.plan_amount || body.amount, 0),
+    skip_verify: true // important so we don't double verify
+  });
 
     default:
       throw new Error(`${normalizedServiceType} is not supported yet`);
