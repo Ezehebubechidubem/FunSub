@@ -1817,7 +1817,7 @@ async function processBettingPayment(req, res) {
     const request_id = body.request_id || uid('BET_');
 
     if (!customer_id ||!service_id) return respondError(res, 400, 'customer_id and service_id are required');
-    if (amount <= 0) return respondError(res, 400, 'amount is required');
+    if (amount < 100) return respondError(res, 400, 'Minimum betting amount is ₦100'); // Min 100
 
     const description = `Betting Funding - ${service_id}`;
 
@@ -1831,8 +1831,10 @@ async function processBettingPayment(req, res) {
       const currentBalance = Number(wallet.balance || 0);
       if (currentBalance < amount) { await client.query('ROLLBACK'); return respondError(res, 400, 'Insufficient wallet balance'); }
 
+      // 1. DEDUCT FIRST - Same as data
       await client.query(`UPDATE wallets SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
 
+      // 2. CREATE PENDING TX - Same as data
       const inserted = await client.query(
         `INSERT INTO transactions (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
          VALUES ($1, $2, 'purchase', 'betting', $3, 'NGN', 'pending', $4, $5, $6, NOW()) RETURNING *`,
@@ -1842,6 +1844,7 @@ async function processBettingPayment(req, res) {
       await client.query('COMMIT');
     } catch (err) { try { await client.query('ROLLBACK'); } catch (_) {} throw err; } finally { client.release(); }
 
+    // 3. CALL PROVIDER - Same as data
     let providerResponse;
     try {
       providerResponse = await Promise.race([
@@ -1855,7 +1858,7 @@ async function processBettingPayment(req, res) {
         new Promise((_, reject) => setTimeout(() => reject(new Error('Provider timeout')), PROVIDER_TIMEOUT_MS))
       ]);
     } catch (err) {
-      // REFUND ON FAIL
+      // REFUND ON FAIL - Same as data
       await pool.query(`UPDATE wallets SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
       await pool.query(`UPDATE transactions SET status = 'failed', description = $2 WHERE id = $1`, [txRow.id, `${description} failed`]);
       return respondError(res, 504, err?.message || 'Provider timeout. Wallet reversed.');
@@ -1863,13 +1866,15 @@ async function processBettingPayment(req, res) {
 
     const providerState = providerRequestLooksSuccessful(providerResponse);
     if (!providerState) {
+      // REFUND ON FAIL - Same as data
       await pool.query(`UPDATE wallets SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
       await pool.query(`UPDATE transactions SET status = 'failed', description = $2 WHERE id = $1`, [txRow.id, `${description} failed`]);
       return respondError(res, 400, providerResponse?.message || 'Betting funding failed');
     }
 
+    // 4. UPDATE TO SUCCESS - Same as data. Webhook will handle final update too
     await pool.query(`UPDATE transactions SET status = 'success' WHERE id = $1`, [txRow.id]);
-    await addNotification(userId, `Betting Funded`, `${description} of ${formatNaira(amount)} was successful`, { transactionId: txRow.id }, true);
+    await addNotification(userId, `Betting Funded`, `${description} of ₦${amount.toLocaleString('en-NG')} was successful`, { transactionId: txRow.id }, true);
 
     return respondOk(res, { transaction: {...txRow, status: 'success' }, providerResponse }, 'Betting funded successfully');
 
@@ -1878,7 +1883,6 @@ async function processBettingPayment(req, res) {
     return respondError(res, 500, err?.message || 'Unable to process betting purchase');
   }
 }
-
 
 function requireDebugAccess(req, res, next) {
   const got = req.headers['x-debug-key'] || req.query.debug_key;
