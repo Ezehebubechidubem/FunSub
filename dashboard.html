@@ -504,50 +504,59 @@
     margin-left:10px;
   }
 
-  .bottom-nav{
-    position:fixed;
-    left:50%;
-    transform:translateX(-50%);
-    bottom:0;
-    width:min(430px, 100%);
-    background:var(--card);
-    border-top:1px solid var(--line);
-    display:flex;
-    justify-content:space-around;
-    padding:10px 10px 14px;
-    z-index:50;
-    backdrop-filter:blur(10px);
-  }
+ .bottom-nav{
+  position:fixed;
+  bottom:0;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(430px,100%);
+  background:var(--card);
+  border-top:1px solid var(--line);
+  display:flex;
+  justify-content:space-around;
+  padding:12px 0;
+  box-shadow:0 -4px 15px rgba(0,0,0,0.05);
+  z-index:50;
+}
 
-  .nav-item{
-    text-align:center;
-    color:var(--muted);
-    font-size:12px;
-    min-width:64px;
-    cursor:pointer;
-    text-decoration:none;
-  }
+.nav-item{
+  text-align:center;
+  font-size:13px;
+  color:#888;
+  cursor:pointer;
+  transition:0.3s;
+  min-width:64px;
+  text-decoration:none;
+  background:none;
+  border:none;
+  outline:none;
+  display:block;
+}
 
-  .nav-item.active{
-    color:var(--gold-dark);
-    font-weight:700;
-  }
+.nav-item.active{
+  color:var(--gold-dark);
+  font-weight:bold;
+}
 
-  .nav-icon{
-    width:24px;
-    height:24px;
-    margin:0 auto 5px;
-  }
+.nav-icon{
+  width:24px;
+  height:24px;
+  margin:0 auto 5px;
+}
 
-  .nav-icon svg{
-    width:24px;
-    height:24px;
-    stroke:currentColor;
-    fill:none;
-    stroke-width:2;
-    stroke-linecap:round;
-    stroke-linejoin:round;
-  }
+.nav-icon svg{
+  width:24px;
+  height:24px;
+  stroke:currentColor;
+  fill:none;
+  stroke-width:2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+
+.nav-item:hover{
+  color:goldenrod;
+}
 
   .clickable{
     cursor:pointer;
