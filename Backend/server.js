@@ -2896,13 +2896,18 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
           network: service_id
         });
 
+        const agentDiscount = applyAgentDiscount(pricing.finalPrice, 'data', req.user?.role);
+
         withPricing.push({
           ...plan,
           pricing: {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
             markupFee: pricing.markupFee,
-            finalPrice: pricing.finalPrice
+            finalPriceBeforeAgentDiscount: pricing.finalPrice,
+            agentDiscountPercent: agentDiscount.discountPercent,
+            agentDiscountAmount: agentDiscount.discountAmount,
+            finalPrice: agentDiscount.discountedFinalPrice
           }
         });
       }
@@ -2958,13 +2963,18 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
           provider: service_id
         });
 
+        const agentDiscount = applyAgentDiscount(pricing.finalPrice, 'cable_tv', req.user?.role);
+
         withPricing.push({
           ...plan,
           pricing: {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
             markupFee: pricing.markupFee,
-            finalPrice: pricing.finalPrice
+            finalPriceBeforeAgentDiscount: pricing.finalPrice,
+            agentDiscountPercent: agentDiscount.discountPercent,
+            agentDiscountAmount: agentDiscount.discountAmount,
+            finalPrice: agentDiscount.discountedFinalPrice
           }
         });
       }
