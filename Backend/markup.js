@@ -287,10 +287,27 @@ function applyMarkup(serviceType, baseAmount, options = {}) {
   return result;
 }
 
+function buildRolePricing(serviceType, baseAmount, role, options = {}) {
+  const basePricing = applyMarkup(serviceType, baseAmount, options);
+  const roleDiscount = applyAgentDiscount(basePricing, serviceType, role);
+
+  return {
+    serviceType: normalizeServiceType(serviceType),
+    basePrice: Number(basePricing.basePrice.toFixed(2)),
+    markupPercent: Number(basePricing.markupPercent.toFixed(2)),
+    markupFee: Number(basePricing.markupFee.toFixed(2)),
+    finalPriceBeforeAgentDiscount: Number(basePricing.finalPrice.toFixed(2)),
+    agentDiscountPercent: Number(roleDiscount.discountPercent.toFixed(2)),
+    agentDiscountAmount: Number(roleDiscount.discountAmount.toFixed(2)),
+    finalPrice: Number(roleDiscount.finalPrice.toFixed(2))
+  };
+}
+
 module.exports = {
   normalizeServiceType,
   getAmountBandKey,
   getMarkupPercent,
   applyMarkup,
-  applyAgentDiscount
+  applyAgentDiscount,
+  buildRolePricing
 };
