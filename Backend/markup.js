@@ -96,7 +96,8 @@ function applyAgentDiscount(pricingOrFinalPrice, serviceType, role) {
       discountPercent: 0,
       discountAmount: 0,
       discountedMarkupFee: Number(markupFee.toFixed(2)),
-      discountedFinalPrice: Number(finalPrice.toFixed(2))
+      discountedFinalPrice: Number(finalPrice.toFixed(2)),
+      finalPrice: Number(finalPrice.toFixed(2))
     };
   }
 
@@ -111,7 +112,8 @@ function applyAgentDiscount(pricingOrFinalPrice, serviceType, role) {
     discountPercent,
     discountAmount: Number(discountAmount.toFixed(2)),
     discountedMarkupFee: Number(discountedMarkupFee.toFixed(2)),
-    discountedFinalPrice: Number(discountedFinalPrice.toFixed(2))
+    discountedFinalPrice: Number(discountedFinalPrice.toFixed(2)),
+    finalPrice: Number(discountedFinalPrice.toFixed(2))
   };
 }
 
