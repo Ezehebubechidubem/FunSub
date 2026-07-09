@@ -1216,25 +1216,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   const PIN_MAX_ATTEMPTS = 4;
   const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
 
-  function buildPricing(baseAmount, finalAmount) {
-    const base = toNumber(baseAmount, 0);
-    const final = toNumber(finalAmount, 0);
-
-    const safeBase = base > 0 ? base : final;
-    const safeFinal = final > 0 ? final : safeBase;
-
-    const markupFee = Math.max(0, safeFinal - safeBase);
-    const markupPercent = safeBase > 0 ? (markupFee / safeBase) * 100 : 0;
-
-    return {
-      serviceType: normalizedServiceType,
-      basePrice: Number(safeBase.toFixed(2)),
-      markupPercent: Number(markupPercent.toFixed(2)),
-      markupFee: Number(markupFee.toFixed(2)),
-      finalPrice: Number(safeFinal.toFixed(2))
-    };
-  }
-
   async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
     if (!txRow?.id) return;
 
@@ -1447,6 +1428,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     let providerAmount = 0;
     let purchaseAmount = 0;
 
+    const role = req.user?.role;
+
     if (normalizedServiceType === 'airtime') {
       providerAmount = toNumber(body.amount, 0);
 
@@ -1462,15 +1445,15 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, 'amount and phone are required');
       }
 
+      // Full role-aware pricing:
+      // user = normal markup
+      // agent = discount on markup profit only
+      pricing = buildRolePricing('airtime', providerAmount, role);
+      purchaseAmount = pricing.finalPrice;
+
       if (purchaseAmount <= 0) {
         purchaseAmount = providerAmount;
       }
-
-      if (purchaseAmount < providerAmount) {
-        return respondError(res, 400, 'Invalid purchase amount');
-      }
-
-      pricing = buildPricing(providerAmount, purchaseAmount);
     } else {
       const variationCode = String(
         body.variation_code ||
@@ -1501,17 +1484,18 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, 'variation_code is required');
       }
 
-      if (purchaseAmount <= 0) {
-        return respondError(res, 400, 'plan_amount is required');
-      }
-
       if (providerAmount <= 0) {
-        providerAmount = purchaseAmount;
+        return respondError(res, 400, 'base_price is required');
       }
 
-      if (purchaseAmount < providerAmount) {
-        return respondError(res, 400, 'Invalid purchase amount');
-      }
+      const pricingOptions = {
+        network: body.network || body.service_id || body.serviceId,
+        provider: body.provider,
+        service_id: body.service_id || body.serviceId
+      };
+
+      pricing = buildRolePricing(normalizedServiceType, providerAmount, role, pricingOptions);
+      purchaseAmount = pricing.finalPrice;
 
       selectedPlan = {
         id: variationCode,
@@ -1530,7 +1514,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         }
       };
 
-      pricing = buildPricing(providerAmount, purchaseAmount);
       description = `${serviceName} - ${selectedPlan.name}`;
     }
 
@@ -1793,7 +1776,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     );
   }
 }
-
 async function processBettingPayment(req, res) {
   const PROVIDER_TIMEOUT_MS = 60_000;
   const PIN_MAX_ATTEMPTS = 4;
@@ -2864,7 +2846,7 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
     // DATA PLANS
     if (serviceType === 'data') {
-      const networkId = toNetworkId(req.query.network_id || req.query.networkId);
+      const networkId = toNumber(req.query.network_id || req.query.networkId, 0) || null;
       const provider = req.query.provider || undefined;
 
       const explicitServiceId = String(
@@ -2928,11 +2910,9 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
       const withPricing = [];
       for (const plan of allPlans) {
-        const pricing = applyMarkup('data', plan.rawPrice, {
+        const pricing = buildRolePricing('data', plan.rawPrice, req.user?.role, {
           network: service_id
         });
-
-        const agentDiscount = applyAgentDiscount(pricing.finalPrice, 'data', req.user?.role);
 
         withPricing.push({
           ...plan,
@@ -2940,10 +2920,10 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
             markupFee: pricing.markupFee,
-            finalPriceBeforeAgentDiscount: pricing.finalPrice,
-            agentDiscountPercent: agentDiscount.discountPercent,
-            agentDiscountAmount: agentDiscount.discountAmount,
-            finalPrice: agentDiscount.discountedFinalPrice
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
           }
         });
       }
@@ -2995,11 +2975,9 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
 
       const withPricing = [];
       for (const plan of plans) {
-        const pricing = applyMarkup('cable_tv', plan.rawPrice, {
+        const pricing = buildRolePricing('cable_tv', plan.rawPrice, req.user?.role, {
           provider: service_id
         });
-
-        const agentDiscount = applyAgentDiscount(pricing.finalPrice, 'cable_tv', req.user?.role);
 
         withPricing.push({
           ...plan,
@@ -3007,10 +2985,10 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
             markupFee: pricing.markupFee,
-            finalPriceBeforeAgentDiscount: pricing.finalPrice,
-            agentDiscountPercent: agentDiscount.discountPercent,
-            agentDiscountAmount: agentDiscount.discountAmount,
-            finalPrice: agentDiscount.discountedFinalPrice
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
           }
         });
       }
