@@ -1757,7 +1757,6 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   }
 }
 
-
 async function processBettingPayment(req, res) {
   const PROVIDER_TIMEOUT_MS = 60_000;
   const PIN_MAX_ATTEMPTS = 4;
