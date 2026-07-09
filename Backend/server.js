@@ -564,7 +564,7 @@ async function addTransaction({
   return inserted.rows[0];
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   try {
     console.log('================ AUTH DEBUG ================');
 
@@ -592,11 +592,49 @@ function requireAuth(req, res, next) {
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    console.log('DECODED USER:', decoded);
+    console.log('DECODED TOKEN USER:', decoded);
 
-    req.user = decoded;
+    const userResult = await query(
+      `SELECT
+         id,
+         role,
+         full_name,
+         email,
+         phone,
+         state,
+         avatar_url,
+         kyc_status,
+         profile_complete,
+         online,
+         last_login_at,
+         created_at,
+         updated_at,
+         fund_pin_hash,
+         fund_pin_set,
+         fund_pin_failed_attempts,
+         fund_pin_locked_until
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [decoded.id]
+    );
+
+    const dbUser = userResult.rows[0];
+
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      ...dbUser
+    };
 
     console.log('AUTH SUCCESS');
+    console.log('CURRENT USER FROM DB:', req.user);
     console.log('============================================');
 
     next();
@@ -611,7 +649,6 @@ function requireAuth(req, res, next) {
     });
   }
 }
-
 function requireAdmin(req, res, next) {
   try {
     const token = authHeader(req);
