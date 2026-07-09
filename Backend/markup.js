@@ -60,8 +60,8 @@ function getAmountBandKey(amount) {
 
   return '300001_ABOVE';
 }
-function applyAgentDiscount(finalPrice, serviceType, role) {
-  const amount = toNumber(finalPrice, 0);
+
+function applyAgentDiscount(pricingOrFinalPrice, serviceType, role) {
   const userRole = String(role || '').trim().toLowerCase();
   const normalizedService = normalizeServiceType(serviceType);
 
@@ -75,24 +75,46 @@ function applyAgentDiscount(finalPrice, serviceType, role) {
     'exam_pin'
   ]);
 
+  const pricing = (
+    pricingOrFinalPrice &&
+    typeof pricingOrFinalPrice === 'object' &&
+    !Array.isArray(pricingOrFinalPrice)
+  )
+    ? pricingOrFinalPrice
+    : {
+        basePrice: 0,
+        markupFee: 0,
+        finalPrice: toNumber(pricingOrFinalPrice, 0)
+      };
+
+  const basePrice = toNumber(pricing.basePrice, 0);
+  const markupFee = toNumber(pricing.markupFee, 0);
+  const finalPrice = toNumber(pricing.finalPrice, 0);
+
   if (userRole !== 'agent' || !eligibleServices.has(normalizedService)) {
     return {
       discountPercent: 0,
       discountAmount: 0,
-      discountedFinalPrice: Number(amount.toFixed(2))
+      discountedMarkupFee: Number(markupFee.toFixed(2)),
+      discountedFinalPrice: Number(finalPrice.toFixed(2))
     };
   }
 
   const discountPercent = normalizedService === 'data' ? 5 : 1;
-  const discountAmount = (amount * discountPercent) / 100;
-  const discountedFinalPrice = amount - discountAmount;
+
+  // Discount is applied to the markup profit only, not the total final price.
+  const discountAmount = (markupFee * discountPercent) / 100;
+  const discountedMarkupFee = markupFee - discountAmount;
+  const discountedFinalPrice = basePrice + discountedMarkupFee;
 
   return {
     discountPercent,
     discountAmount: Number(discountAmount.toFixed(2)),
+    discountedMarkupFee: Number(discountedMarkupFee.toFixed(2)),
     discountedFinalPrice: Number(discountedFinalPrice.toFixed(2))
   };
 }
+
 function normalizeDataNetwork(value) {
   const s = String(value || '').trim().toLowerCase();
 
