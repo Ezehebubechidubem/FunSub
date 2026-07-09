@@ -60,7 +60,39 @@ function getAmountBandKey(amount) {
 
   return '300001_ABOVE';
 }
+function applyAgentDiscount(finalPrice, serviceType, role) {
+  const amount = toNumber(finalPrice, 0);
+  const userRole = String(role || '').trim().toLowerCase();
+  const normalizedService = normalizeServiceType(serviceType);
 
+  const eligibleServices = new Set([
+    'data',
+    'airtime',
+    'cable_tv',
+    'electricity',
+    'recharge_pin',
+    'data_pin',
+    'exam_pin'
+  ]);
+
+  if (userRole !== 'agent' || !eligibleServices.has(normalizedService)) {
+    return {
+      discountPercent: 0,
+      discountAmount: 0,
+      discountedFinalPrice: Number(amount.toFixed(2))
+    };
+  }
+
+  const discountPercent = normalizedService === 'data' ? 5 : 1;
+  const discountAmount = (amount * discountPercent) / 100;
+  const discountedFinalPrice = amount - discountAmount;
+
+  return {
+    discountPercent,
+    discountAmount: Number(discountAmount.toFixed(2)),
+    discountedFinalPrice: Number(discountedFinalPrice.toFixed(2))
+  };
+}
 function normalizeDataNetwork(value) {
   const s = String(value || '').trim().toLowerCase();
 
@@ -235,5 +267,6 @@ module.exports = {
   normalizeServiceType,
   getAmountBandKey,
   getMarkupPercent,
-  applyMarkup
+  applyMarkup,
+  applyAgentDiscount
 };
