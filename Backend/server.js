@@ -916,66 +916,98 @@ async function pollFundingStatus(reference, amount) {
 }
 
 function extractProviderText(response) {
+  const payload =
+    response?.data &&
+    typeof response.data === "object" &&
+    !Array.isArray(response.data)
+      ? response.data
+      : response;
+
   const parts = [
     response?.message,
     response?.response_description,
     response?.description,
-    response?.data?.message,
-    response?.data?.response_description,
-    response?.data?.description,
+    response?.status,
+    response?.state,
+    response?.response_status,
+    response?.responseState,
+    payload?.message,
+    payload?.response_description,
+    payload?.description,
+    payload?.status,
+    payload?.state,
+    payload?.response_status,
+    payload?.responseState,
     response?.error?.message,
+    payload?.error?.message,
   ];
 
   return parts
-    .filter(Boolean)
-    .map((x) => String(x).trim())
+    .filter((v) => v !== undefined && v !== null && String(v).trim() !== "")
+    .map((v) => String(v).trim())
     .join(" ")
     .trim()
     .toLowerCase();
 }
 
 function classifyProviderResponse(response) {
-  const text = extractProviderText(response);
-  const status = String(
+  const status = normalizeStatusValue(
     response?.status ||
-    response?.state ||
-    response?.response_status ||
-    response?.responseState ||
-    ""
-  ).trim().toLowerCase();
+      response?.state ||
+      response?.response_status ||
+      response?.responseState ||
+      response?.data?.status ||
+      response?.data?.state ||
+      response?.data?.response_status ||
+      response?.data?.responseState ||
+      ""
+  );
+
+  const text = extractProviderText(response);
+
+  const hasAny = (...tokens) =>
+    tokens.some((token) => status.includes(token) || text.includes(token));
 
   if (
-    status === "pending" ||
-    status === "processing" ||
-    status === "incomplete" ||
-    status === "queued" ||
-    text.includes("pending") ||
-    text.includes("processing") ||
-    text.includes("incomplete")
+    hasAny(
+      "processing-api",
+      "processing",
+      "pending",
+      "queued",
+      "in-progress",
+      "inprogress"
+    )
   ) {
     return "pending";
   }
 
   if (
-    status === "success" ||
-    status === "successful" ||
-    status === "completed" ||
-    status === "complete" ||
-    status === "paid" ||
-    text.includes("success") ||
-    text.includes("completed")
+    hasAny(
+      "completed-api",
+      "completed",
+      "complete",
+      "success",
+      "successful",
+      "paid",
+      "delivered",
+      "fulfilled",
+      "ok"
+    )
   ) {
     return "success";
   }
 
   if (
-    status === "failed" ||
-    status === "error" ||
-    status === "reversed" ||
-    status === "reverse" ||
-    text.includes("failed") ||
-    text.includes("reversed") ||
-    text.includes("error")
+    hasAny(
+      "refunded-api",
+      "refunded",
+      "failed",
+      "error",
+      "reversed",
+      "cancelled",
+      "canceled",
+      "declined"
+    )
   ) {
     return "failed";
   }
@@ -1005,6 +1037,243 @@ function mergeMeta(oldMeta, extraMeta) {
   return { ...base, ...extraMeta };
 }
 
+function isSensitiveProviderError(err) {
+  const text = String(
+    err?.response?.data?.message ||
+      err?.response?.data?.error?.message ||
+      err?.message ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    text.includes("insufficient") ||
+    text.includes("wallet") ||
+    text.includes("balance") ||
+    text.includes("fund exhausted") ||
+    text.includes("low balance") ||
+    text.includes("provider wallet")
+  );
+}
+
+function verifyIacafeWebhookSignature(req, secret) {
+  if (!secret) return true;
+
+  const signature = String(
+    req.headers["x-iacafe-signature"] ||
+      req.headers["x-webhook-signature"] ||
+      req.headers["x-signature"] ||
+      ""
+  ).trim();
+
+  if (!signature) return true;
+
+  const rawBody =
+    typeof req.rawBody === "string"
+      ? req.rawBody
+      : Buffer.isBuffer(req.body)
+        ? req.body.toString("utf8")
+        : JSON.stringify(req.body || {});
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+
+  const normalizedSignature = signature.replace(/^sha256=/i, "");
+
+  return expected === normalizedSignature || expected === signature;
+}
+
+async function applyProviderOutcomeByReference({
+  requestId,
+  providerResponse,
+  source = "manual",
+  webhookPayload = null,
+}) {
+  const state = classifyProviderResponse(providerResponse);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const txResult = await client.query(
+      `SELECT id, user_id, amount, status, reference, meta
+       FROM transactions
+       WHERE reference = $1
+       FOR UPDATE`,
+      [requestId]
+    );
+
+    if (!txResult.rows.length) {
+      await client.query("ROLLBACK");
+      return { found: false, state };
+    }
+
+    const tx = txResult.rows[0];
+    const currentStatus = String(tx.status || "").trim().toLowerCase();
+    const currentMeta = normalizeMeta(tx.meta);
+
+    const mergedMeta = mergeMeta(currentMeta, {
+      providerResponse,
+      providerState: state,
+      providerSource: source,
+      syncedAt: new Date().toISOString(),
+      ...(webhookPayload ? { webhookPayload } : {}),
+    });
+
+    if (state === "pending" || state === "unknown") {
+      await client.query(
+        `UPDATE transactions
+         SET meta = $2
+         WHERE id = $1`,
+        [tx.id, JSON.stringify(mergedMeta)]
+      );
+
+      await client.query("COMMIT");
+      return { found: true, state, tx };
+    }
+
+    if (state === "success") {
+      if (
+        currentStatus === "pending" ||
+        currentStatus === "processing" ||
+        currentStatus === "unknown"
+      ) {
+        await client.query(
+          `UPDATE transactions
+           SET status = 'success',
+               meta = $2
+           WHERE id = $1`,
+          [tx.id, JSON.stringify(mergedMeta)]
+        );
+      } else {
+        await client.query(
+          `UPDATE transactions
+           SET meta = $2
+           WHERE id = $1`,
+          [tx.id, JSON.stringify(mergedMeta)]
+        );
+      }
+
+      await client.query("COMMIT");
+      clearPendingRequery(requestId);
+      return { found: true, state, tx };
+    }
+
+    if (state === "failed") {
+      if (
+        currentStatus === "pending" ||
+        currentStatus === "processing" ||
+        currentStatus === "unknown"
+      ) {
+        await client.query(
+          `UPDATE wallets
+           SET balance = balance + $2,
+               updated_at = NOW()
+           WHERE user_id = $1`,
+          [tx.user_id, tx.amount]
+        );
+
+        await client.query(
+          `UPDATE transactions
+           SET status = 'reversed',
+               meta = $2
+           WHERE id = $1`,
+          [tx.id, JSON.stringify(mergedMeta)]
+        );
+      } else {
+        await client.query(
+          `UPDATE transactions
+           SET meta = $2
+           WHERE id = $1`,
+          [tx.id, JSON.stringify(mergedMeta)]
+        );
+      }
+
+      await client.query("COMMIT");
+      clearPendingRequery(requestId);
+      return { found: true, state, tx };
+    }
+
+    await client.query(
+      `UPDATE transactions
+       SET meta = $2
+       WHERE id = $1`,
+      [tx.id, JSON.stringify(mergedMeta)]
+    );
+
+    await client.query("COMMIT");
+    return { found: true, state, tx };
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function requeryTransactionByRequestId(requestId, { source = "requery" } = {}) {
+  if (!requestId) return { found: false, state: "unknown" };
+
+  const providerResponse = await iacafe.requery(requestId);
+  return applyProviderOutcomeByReference({
+    requestId,
+    providerResponse,
+    source,
+  });
+}
+
+function scheduleIacafeRequery(
+  requestId,
+  {
+    delayMs = ICAFE_REQUERY_DELAY_MS,
+    attempt = 1,
+    maxAttempts = ICAFE_REQUERY_MAX_ATTEMPTS,
+  } = {}
+) {
+  if (!requestId) return;
+
+  const existing = pendingRequeryTimers.get(requestId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    pendingRequeryTimers.delete(requestId);
+
+    try {
+      const result = await requeryTransactionByRequestId(requestId, {
+        source: `timer_${attempt}`,
+      });
+
+      if (
+        (result?.state === "pending" || result?.state === "unknown") &&
+        attempt < maxAttempts
+      ) {
+        scheduleIacafeRequery(requestId, {
+          delayMs: delayMs * 2,
+          attempt: attempt + 1,
+          maxAttempts,
+        });
+      }
+    } catch (err) {
+      console.error("Scheduled requery failed:", requestId, err?.message);
+
+      if (attempt < maxAttempts) {
+        scheduleIacafeRequery(requestId, {
+          delayMs: delayMs * 2,
+          attempt: attempt + 1,
+          maxAttempts,
+        });
+      }
+    }
+  }, delayMs);
+
+  pendingRequeryTimers.set(requestId, timer);
+}
+
 async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
   if (!txRow?.id) return;
 
@@ -1032,10 +1301,11 @@ async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta
       return;
     }
 
-    const currentMeta = txCheck.rows[0].meta || {};
+    const currentMeta = normalizeMeta(txCheck.rows[0].meta);
     const mergedMeta = mergeMeta(currentMeta, {
       reverseReason: reason,
       ...extraMeta,
+      updatedAt: new Date().toISOString(),
     });
 
     await client.query(
@@ -1074,13 +1344,16 @@ async function requeryPendingServiceTransactions() {
       `SELECT id, user_id, reference, amount, category, meta, status
        FROM transactions
        WHERE status = 'pending'
+         AND created_at <= NOW() - INTERVAL '20 seconds'
        ORDER BY created_at ASC
        LIMIT 50`
     );
 
     for (const tx of result.rows) {
-      const meta = tx.meta || {};
+      const meta = normalizeMeta(tx.meta);
       const requestId = tx.reference;
+
+      if (!requestId) continue;
 
       let providerResponse;
       try {
@@ -1093,6 +1366,21 @@ async function requeryPendingServiceTransactions() {
       const state = classifyProviderResponse(providerResponse);
 
       if (state === "pending" || state === "unknown") {
+        await client.query(
+          `UPDATE transactions
+           SET meta = $2
+           WHERE id = $1`,
+          [
+            tx.id,
+            JSON.stringify(
+              mergeMeta(meta, {
+                providerResponse,
+                requeryResult: "pending",
+                updatedAt: new Date().toISOString(),
+              })
+            ),
+          ]
+        );
         continue;
       }
 
@@ -1104,11 +1392,13 @@ async function requeryPendingServiceTransactions() {
            WHERE id = $1`,
           [
             tx.id,
-            JSON.stringify({
-              ...meta,
-              providerResponse,
-              requeryResult: "success",
-            }),
+            JSON.stringify(
+              mergeMeta(meta, {
+                providerResponse,
+                requeryResult: "success",
+                updatedAt: new Date().toISOString(),
+              })
+            ),
           ]
         );
         continue;
@@ -1151,11 +1441,13 @@ async function requeryPendingServiceTransactions() {
              WHERE id = $1`,
             [
               tx.id,
-              JSON.stringify({
-                ...meta,
-                providerResponse,
-                requeryResult: "failed",
-              }),
+              JSON.stringify(
+                mergeMeta(meta, {
+                  providerResponse,
+                  requeryResult: "failed",
+                  updatedAt: new Date().toISOString(),
+                })
+              ),
             ]
           );
 
@@ -1639,23 +1931,25 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         return respondError(res, 400, "amount and phone are required");
       }
 
-      pricing = buildRolePricing("airtime", providerAmount, role);
+      pricing = buildRolePricing("airtime", providerAmount, role, {
+        network: body.network || body.service_id || body.serviceId,
+      });
       purchaseAmount = pricing.finalPrice || providerAmount;
     } else {
       const variationCode = String(
         body.variation_code ||
-        body.planId ||
-        body.plan_id ||
-        body.planCode ||
-        body.code ||
-        ""
+          body.planId ||
+          body.plan_id ||
+          body.planCode ||
+          body.code ||
+          ""
       ).trim();
 
       providerAmount = toNumber(
         body.base_price ||
-        body.rawPrice ||
-        body.raw_price ||
-        body.amount,
+          body.rawPrice ||
+          body.raw_price ||
+          body.amount,
         0
       );
 
@@ -1793,6 +2087,35 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         "Provider timeout"
       );
     } catch (err) {
+      const sensitive = isSensitiveProviderError(err);
+
+      if (sensitive) {
+        await reverseAndRefund(
+          txRow,
+          userId,
+          purchaseAmount,
+          `${description} failed`,
+          {
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerError: "Provider wallet issue",
+            providerResponse: err?.response?.data || null,
+            status: "failed",
+          }
+        );
+
+        return respondError(
+          res,
+          503,
+          "Transaction could not be completed. Please try again later."
+        );
+      }
+
       await pool.query(
         `UPDATE transactions
          SET status = 'pending',
@@ -1816,6 +2139,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
           }),
         ]
       );
+
+      scheduleIacafeRequery(txRow.reference, { source: "timeout" });
 
       return res.status(202).json({
         success: true,
@@ -1858,6 +2183,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         ]
       );
 
+      scheduleIacafeRequery(txRow.reference, { source: "provider_pending" });
+
       return res.status(202).json({
         success: true,
         pending: true,
@@ -1896,6 +2223,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
         providerText || providerResponse?.response_description || providerResponse?.message || "Purchase failed"
       );
     }
+
+    clearPendingRequery(txRow.reference);
 
     await pool.query(
       `UPDATE transactions
