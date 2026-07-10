@@ -122,8 +122,6 @@ function createVtuGateway({ primary, fallback }) {
   const p = new ProviderClient(primary);
   const f = fallback ? new ProviderClient(fallback) : null;
 
-  // Updated defaults for betting to match the provider endpoints you showed.
-  // If your provider docs say /verify instead of /verify-customer, change these two lines only.
   const primaryBettingVerifyPath = primary?.bettingVerifyPath || "/verify-customer";
   const primaryBettingBuyPath = primary?.bettingBuyPath || "/betting";
 
