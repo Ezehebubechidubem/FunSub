@@ -1799,13 +1799,86 @@ async function processServicePayment(req, res, serviceType, serviceName) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const PROVIDER_TIMEOUT_MS = 60_000;
   const PIN_MAX_ATTEMPTS = 4;
-  const PIN_LOCK_MS = 60 * 60 * 1000;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
+
+  async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
+    if (!txRow?.id) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const txCheck = await client.query(
+        `SELECT status
+         FROM transactions
+         WHERE id = $1
+         FOR UPDATE`,
+        [txRow.id]
+      );
+
+      if (!txCheck.rows.length) {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const currentStatus = String(txCheck.rows[0].status || '').toLowerCase();
+      if (currentStatus !== 'pending') {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'reversed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          reason,
+          JSON.stringify(extraMeta)
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  function withTimeout(promise, timeoutMs, timeoutMessage = 'Provider timeout') {
+    let timeoutId;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(timeoutMessage));
+      }, timeoutMs);
+    });
+
+    return Promise.race([
+      promise.finally(() => clearTimeout(timeoutId)),
+      timeoutPromise
+    ]);
+  }
 
   async function verifyAndTrackPin(userId, fundPin) {
     const client = await pool.connect();
 
     try {
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
       const stateResult = await client.query(
         `SELECT
@@ -1819,8 +1892,8 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
       const row = stateResult.rows[0];
       if (!row) {
-        await client.query("ROLLBACK");
-        return { ok: false, status: 404, message: "User not found" };
+        await client.query('ROLLBACK');
+        return { ok: false, status: 404, message: 'User not found' };
       }
 
       let failedAttempts = Number(row.failed_attempts || 0);
@@ -1841,657 +1914,13 @@ async function processServicePayment(req, res, serviceType, serviceName) {
 
       if (lockedUntil && lockedUntil.getTime() > now) {
         const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
         return {
           ok: false,
           status: 423,
           message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
           locked: true,
-          minutesLeft,
-        };
-      }
-
-      const pinOk = await verifyFundPin(userId, fundPin);
-
-      if (!pinOk) {
-        const nextAttempts = failedAttempts + 1;
-        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
-        const lockUntil = shouldLock ? new Date(Date.now() + PIN_LOCK_MS) : null;
-
-        await client.query(
-          `UPDATE users
-           SET fund_pin_failed_attempts = $2,
-               fund_pin_locked_until = $3,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
-        );
-
-        await client.query("COMMIT");
-
-        return {
-          ok: false,
-          status: shouldLock ? 423 : 401,
-          message: shouldLock
-            ? "Invalid PIN. Your account has been locked for 1 hour."
-            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left.`,
-          attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
-          locked: shouldLock,
-          minutesLeft: shouldLock ? 60 : 0,
-        };
-      }
-
-      await client.query(
-        `UPDATE users
-         SET fund_pin_failed_attempts = 0,
-             fund_pin_locked_until = NULL,
-             updated_at = NOW()
-         WHERE id = $1`,
-        [userId]
-      );
-
-      await client.query("COMMIT");
-      return { ok: true };
-    } catch (err) {
-      try {
-        await client.query("ROLLBACK");
-      } catch (_) {}
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
-
-  try {
-    const body = req.body || {};
-    const userId = req.user?.id || req.user?.userId;
-
-    if (!userId) {
-      return respondError(res, 401, "Unauthorized");
-    }
-
-    const fundPin = String(body.fundPin || body.fund_pin || "").trim();
-    if (!fundPin) {
-      return respondError(res, 400, "Transaction PIN is required");
-    }
-
-    const pinCheck = await verifyAndTrackPin(userId, fundPin);
-    if (!pinCheck.ok) {
-      return respondError(res, pinCheck.status || 401, pinCheck.message || "Invalid fund PIN");
-    }
-
-    let pricing = null;
-    let selectedPlan = null;
-    let description = `${serviceName} purchase`;
-
-    const rawDestination =
-      body.phone ||
-      body.smartcard_number ||
-      body.meter_number ||
-      body.customer_id ||
-      body.accountNumber ||
-      body.billersCode ||
-      "";
-
-    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
-
-    let providerAmount = 0;
-    let purchaseAmount = 0;
-    const role = req.user?.role;
-    const requestId = buildTxnRef(normalizedServiceType.toUpperCase());
-
-    if (normalizedServiceType === "airtime") {
-      providerAmount = toNumber(body.amount, 0);
-
-      if (providerAmount <= 0 || !destination) {
-        return respondError(res, 400, "amount and phone are required");
-      }
-
-      pricing = buildRolePricing("airtime", providerAmount, role, {
-        network: body.network || body.service_id || body.serviceId,
-      });
-      purchaseAmount = pricing.finalPrice || providerAmount;
-    } else {
-      const variationCode = String(
-        body.variation_code ||
-          body.planId ||
-          body.plan_id ||
-          body.planCode ||
-          body.code ||
-          ""
-      ).trim();
-
-      providerAmount = toNumber(
-        body.base_price ||
-          body.rawPrice ||
-          body.raw_price ||
-          body.amount,
-        0
-      );
-
-      if (!variationCode) {
-        return respondError(res, 400, "variation_code is required");
-      }
-
-      if (providerAmount <= 0) {
-        return respondError(res, 400, "base_price is required");
-      }
-
-      const pricingOptions = {
-        network: body.network || body.service_id || body.serviceId,
-        provider: body.provider,
-        service_id: body.service_id || body.serviceId,
-      };
-
-      pricing = buildRolePricing(normalizedServiceType, providerAmount, role, pricingOptions);
-      purchaseAmount = pricing.finalPrice;
-
-      selectedPlan = {
-        id: variationCode,
-        name: body.plan_name || `${serviceName} Plan`,
-        rawPrice: providerAmount,
-        purchase_amount: purchaseAmount,
-        purchase_route:
-          String(body.purchase_route || body.plan_source || body.source || "").toLowerCase() === "budget-data"
-            ? "/budget-data"
-            : "/data",
-        purchase_key: variationCode,
-        meta: {
-          service_id: body.service_id || body.serviceId,
-          provider: body.provider,
-          network: body.network,
-        },
-      };
-
-      description = `${serviceName} - ${selectedPlan.name}`;
-    }
-
-    if (!pricing) {
-      return respondError(res, 400, "Unable to prepare purchase");
-    }
-
-    const client = await pool.connect();
-    let txRow = null;
-
-    try {
-      await client.query("BEGIN");
-
-      const walletResult = await client.query(
-        "SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE",
-        [userId]
-      );
-
-      const wallet = walletResult.rows[0];
-      if (!wallet) {
-        await client.query("ROLLBACK");
-        return respondError(res, 404, "Wallet not found");
-      }
-
-      const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < purchaseAmount) {
-        await client.query("ROLLBACK");
-        return respondError(res, 400, "Insufficient wallet balance");
-      }
-
-      await client.query(
-        `UPDATE wallets
-         SET balance = balance - $2,
-             updated_at = NOW()
-         WHERE user_id = $1`,
-        [userId, purchaseAmount]
-      );
-
-      const inserted = await client.query(
-        `INSERT INTO transactions
-         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
-         VALUES
-         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
-         RETURNING *`,
-        [
-          uid("tx_"),
-          userId,
-          "purchase",
-          normalizedServiceType,
-          purchaseAmount,
-          requestId,
-          description,
-          JSON.stringify({
-            requestId,
-            serviceType: normalizedServiceType,
-            serviceName,
-            selectedPlan,
-            pricing,
-            providerAmount,
-            purchaseAmount,
-            status: "pending",
-            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
-          }),
-        ]
-      );
-
-      txRow = inserted.rows[0];
-
-      await client.query("COMMIT");
-    } catch (err) {
-      try {
-        await client.query("ROLLBACK");
-      } catch (_) {}
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    const providerBody = {
-      ...body,
-      request_id: requestId,
-      amount: providerAmount,
-      plan_amount: providerAmount,
-      base_price: providerAmount,
-      final_amount: purchaseAmount,
-    };
-
-    let providerResponse;
-    try {
-      providerResponse = await withTimeout(
-        buyServiceThroughGateway({
-          serviceType: normalizedServiceType,
-          body: providerBody,
-          selectedPlan,
-          requestId,
-        }),
-        PROVIDER_TIMEOUT_MS,
-        "Provider timeout"
-      );
-    } catch (err) {
-      const sensitive = isSensitiveProviderError(err);
-
-      if (sensitive) {
-        await reverseAndRefund(
-          txRow,
-          userId,
-          purchaseAmount,
-          `${description} failed`,
-          {
-            requestId,
-            serviceType: normalizedServiceType,
-            serviceName,
-            selectedPlan,
-            pricing,
-            providerAmount,
-            purchaseAmount,
-            providerError: "Provider wallet issue",
-            providerResponse: err?.response?.data || null,
-            status: "failed",
-          }
-        );
-
-        return respondError(
-          res,
-          503,
-          "Transaction could not be completed. Please try again later."
-        );
-      }
-
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'pending',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} pending`,
-          JSON.stringify({
-            requestId,
-            serviceType: normalizedServiceType,
-            serviceName,
-            selectedPlan,
-            pricing,
-            providerAmount,
-            purchaseAmount,
-            providerError: err?.message || "Provider timeout",
-            status: "pending",
-            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
-          }),
-        ]
-      );
-
-      scheduleIacafeRequery(txRow.reference, { source: "timeout" });
-
-      return res.status(202).json({
-        success: true,
-        pending: true,
-        message: err?.message || "Provider timeout. Transaction is pending.",
-        transaction: {
-          ...txRow,
-          status: "pending",
-        },
-        pricing,
-        requestId,
-      });
-    }
-
-    const providerState = classifyProviderResponse(providerResponse);
-    const providerText = extractProviderText(providerResponse);
-
-    if (providerState === "pending" || providerState === "unknown") {
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'pending',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} pending`,
-          JSON.stringify({
-            requestId,
-            serviceType: normalizedServiceType,
-            serviceName,
-            selectedPlan,
-            pricing,
-            providerAmount,
-            purchaseAmount,
-            providerResponse,
-            status: "pending",
-            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
-          }),
-        ]
-      );
-
-      scheduleIacafeRequery(txRow.reference, { source: "provider_pending" });
-
-      return res.status(202).json({
-        success: true,
-        pending: true,
-        message: providerText || "Transaction pending",
-        transaction: {
-          ...txRow,
-          status: "pending",
-        },
-        pricing,
-        requestId,
-        providerResponse,
-      });
-    }
-
-    if (providerState === "failed") {
-      await reverseAndRefund(
-        txRow,
-        userId,
-        purchaseAmount,
-        `${description} failed`,
-        {
-          requestId,
-          serviceType: normalizedServiceType,
-          serviceName,
-          selectedPlan,
-          pricing,
-          providerAmount,
-          purchaseAmount,
-          providerResponse,
-        }
-      );
-
-      return respondError(
-        res,
-        400,
-        providerText || providerResponse?.response_description || providerResponse?.message || "Purchase failed"
-      );
-    }
-
-    clearPendingRequery(txRow.reference);
-
-    await pool.query(
-      `UPDATE transactions
-       SET status = 'success',
-           description = $2,
-           meta = $3
-       WHERE id = $1`,
-      [
-        txRow.id,
-        description,
-        JSON.stringify({
-          requestId,
-          serviceType: normalizedServiceType,
-          serviceName,
-          selectedPlan,
-          pricing,
-          providerAmount,
-          purchaseAmount,
-          providerResponse,
-          status: "success",
-        }),
-      ]
-    );
-
-    await addNotification(
-      userId,
-      `${serviceName} purchased`,
-      `${description} was successful`,
-      {
-        transactionId: txRow.id,
-        requestId,
-        serviceType: normalizedServiceType,
-        pricing,
-        providerAmount,
-        purchaseAmount,
-        providerResponse,
-      },
-      true
-    );
-
-    return respondOk(
-      res,
-      {
-        transaction: {
-          ...txRow,
-          status: "success",
-          amount: purchaseAmount,
-        },
-        pricing,
-        requestId,
-        providerResponse,
-      },
-      `${serviceName} purchased successfully`
-    );
-  } catch (err) {
-    console.error("PROCESS SERVICE PAYMENT ERROR:", err);
-    return respondError(
-      res,
-      500,
-      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
-    );
-  }
-}
-async function processBettingVerification(req, res) {
-  try {
-    const body = req.body || {};
-    const userId = req.user?.id || req.user?.userId;
-
-    if (!userId) {
-      return respondError(res, 401, "Unauthorized");
-    }
-
-    const customer_id = String(
-      body.customer_id ||
-        body.customerId ||
-        body.user_id ||
-        body.account_id ||
-        body.betting_id ||
-        ""
-    ).trim();
-
-    const service_id = String(
-      body.service_id ||
-        body.serviceId ||
-        body.provider ||
-        body.platform ||
-        ""
-    ).trim();
-
-    if (!customer_id || !service_id) {
-      return respondError(res, 400, "customer_id and service_id are required");
-    }
-
-    const verification = await iacafe.verifyBettingCustomer({
-      customer_id,
-      service_id,
-    });
-
-    return respondOk(res, { verification }, "Betting customer verified");
-  } catch (err) {
-    const code = String(err?.code || err?.response?.data?.error?.code || "").trim().toLowerCase();
-    const message =
-      err?.response?.data?.error?.message ||
-      err?.message ||
-      "Unable to verify betting account";
-
-    if (code === "customer_not_found") {
-      return respondError(res, 404, message);
-    }
-
-    return respondError(res, 400, message);
-  }
-}
-
-async function processBettingVerification(req, res) {
-  try {
-    const body = req.body || {};
-    const userId = req.user?.id || req.user?.userId;
-
-    if (!userId) {
-      return respondError(res, 401, "Unauthorized");
-    }
-
-    const customer_id = String(
-      body.customer_id ||
-        body.customerId ||
-        body.user_id ||
-        body.account_id ||
-        body.betting_id ||
-        ""
-    ).trim();
-
-    const service_id = String(
-      body.service_id ||
-        body.serviceId ||
-        body.provider ||
-        body.platform ||
-        ""
-    ).trim();
-
-    if (!customer_id || !service_id) {
-      return respondError(res, 400, "customer_id and service_id are required");
-    }
-
-    const verification = await iacafe.verifyBettingCustomer({
-      customer_id,
-      service_id,
-    });
-
-    const customerName =
-      verification?.customer_name ||
-      verification?.data?.customer_name ||
-      verification?.name ||
-      verification?.data?.name ||
-      verification?.customer?.name ||
-      verification?.data?.customer?.name ||
-      null;
-
-    return respondOk(
-      res,
-      {
-        verified: true,
-        customer_name: customerName,
-        customer_id,
-        service_id,
-        raw: verification,
-      },
-      "Betting customer verified"
-    );
-  } catch (err) {
-    const code = String(
-      err?.code ||
-        err?.response?.data?.error?.code ||
-        err?.response?.data?.code ||
-        ""
-    )
-      .trim()
-      .toLowerCase();
-
-    const message =
-      err?.response?.data?.error?.message ||
-      err?.response?.data?.message ||
-      err?.message ||
-      "Unable to verify betting account";
-
-    if (code === "customer_not_found") {
-      return respondError(res, 404, message);
-    }
-
-    return respondError(res, 400, message);
-  }
-}
-
-async function processBettingPayment(req, res) {
-  const PROVIDER_TIMEOUT_MS = 60_000;
-  const PIN_MAX_ATTEMPTS = 4;
-  const PIN_LOCK_MS = 60 * 60 * 1000;
-
-  async function verifyAndTrackPin(userId, fundPin) {
-    const client = await pool.connect();
-
-    try {
-      await client.query("BEGIN");
-
-      const stateResult = await client.query(
-        `SELECT
-           COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts,
-           fund_pin_locked_until
-         FROM users
-         WHERE id = $1
-         FOR UPDATE`,
-        [userId]
-      );
-
-      const row = stateResult.rows[0];
-      if (!row) {
-        await client.query("ROLLBACK");
-        return { ok: false, status: 404, message: "User not found" };
-      }
-
-      let failedAttempts = Number(row.failed_attempts || 0);
-      const lockedUntil = row.fund_pin_locked_until
-        ? new Date(row.fund_pin_locked_until)
-        : null;
-      const now = Date.now();
-
-      if (lockedUntil && lockedUntil.getTime() <= now) {
-        await client.query(
-          `UPDATE users
-           SET fund_pin_failed_attempts = 0,
-               fund_pin_locked_until = NULL,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [userId]
-        );
-        failedAttempts = 0;
-      }
-
-      if (lockedUntil && lockedUntil.getTime() > now) {
-        const minutesLeft = Math.max(
-          1,
-          Math.ceil((lockedUntil.getTime() - now) / 60000)
-        );
-
-        await client.query("ROLLBACK");
-        return {
-          ok: false,
-          status: 423,
-          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
-          locked: true,
-          minutesLeft,
+          minutesLeft
         };
       }
 
@@ -2513,17 +1942,17 @@ async function processBettingPayment(req, res) {
           [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
         );
 
-        await client.query("COMMIT");
+        await client.query('COMMIT');
 
         return {
           ok: false,
           status: shouldLock ? 423 : 401,
           message: shouldLock
-            ? "Invalid PIN. Your account has been locked for 1 hour."
-            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left.`,
+            ? 'Invalid PIN. Your account has been locked for 1 hour after 4 failed attempts.'
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left before lock.`,
           attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
           locked: shouldLock,
-          minutesLeft: shouldLock ? 60 : 0,
+          minutesLeft: shouldLock ? 60 : 0
         };
       }
 
@@ -2536,11 +1965,11 @@ async function processBettingPayment(req, res) {
         [userId]
       );
 
-      await client.query("COMMIT");
+      await client.query('COMMIT');
       return { ok: true };
     } catch (err) {
       try {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
       } catch (_) {}
       throw err;
     } finally {
@@ -2553,59 +1982,151 @@ async function processBettingPayment(req, res) {
     const userId = req.user?.id || req.user?.userId;
 
     if (!userId) {
-      return respondError(res, 401, "Unauthorized");
+      return respondError(res, 401, 'Unauthorized');
     }
 
-    const fundPin = String(body.fundPin || body.fund_pin || "").trim();
+    const fundPin = String(body.fundPin || body.fund_pin || '').trim();
     if (!fundPin) {
-      return respondError(res, 400, "Transaction PIN is required");
+      return respondError(res, 400, 'Transaction PIN is required');
     }
 
     const pinCheck = await verifyAndTrackPin(userId, fundPin);
     if (!pinCheck.ok) {
-      return respondError(
-        res,
-        pinCheck.status || 401,
-        pinCheck.message || "Invalid fund PIN"
+      return respondError(res, pinCheck.status || 401, pinCheck.message || 'Invalid fund PIN');
+    }
+
+    let pricing = null;
+    let selectedPlan = null;
+    let description = `${serviceName} purchase`;
+
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      '';
+
+    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    let providerAmount = 0;
+    let purchaseAmount = 0;
+
+    const role = req.user?.role;
+
+    if (normalizedServiceType === 'airtime') {
+      providerAmount = toNumber(body.amount, 0);
+
+      purchaseAmount = toNumber(
+        body.plan_amount ||
+        body.finalPrice ||
+        body.final_price ||
+        body.amount,
+        0
       );
+
+      if (providerAmount <= 0 || !destination) {
+        return respondError(res, 400, 'amount and phone are required');
+      }
+
+      // Full role-aware pricing:
+      // user = normal markup
+      // agent = discount on markup profit only
+      pricing = buildRolePricing('airtime', providerAmount, role);
+      purchaseAmount = pricing.finalPrice;
+
+      if (purchaseAmount <= 0) {
+        purchaseAmount = providerAmount;
+      }
+    } else {
+      const variationCode = String(
+        body.variation_code ||
+        body.planId ||
+        body.plan_id ||
+        body.planCode ||
+        body.code ||
+        ''
+      ).trim();
+
+      providerAmount = toNumber(
+        body.base_price ||
+        body.rawPrice ||
+        body.raw_price ||
+        body.amount,
+        0
+      );
+
+      purchaseAmount = toNumber(
+        body.plan_amount ||
+        body.finalPrice ||
+        body.final_price ||
+        body.amount,
+        0
+      );
+
+      if (!variationCode) {
+        return respondError(res, 400, 'variation_code is required');
+      }
+
+      if (providerAmount <= 0) {
+        return respondError(res, 400, 'base_price is required');
+      }
+
+      const pricingOptions = {
+        network: body.network || body.service_id || body.serviceId,
+        provider: body.provider,
+        service_id: body.service_id || body.serviceId
+      };
+
+      pricing = buildRolePricing(normalizedServiceType, providerAmount, role, pricingOptions);
+      purchaseAmount = pricing.finalPrice;
+
+      selectedPlan = {
+        id: variationCode,
+        name: body.plan_name || `${serviceName} Plan`,
+        rawPrice: providerAmount,
+        purchase_amount: purchaseAmount,
+        purchase_route:
+          String(body.purchase_route || body.plan_source || body.source || '').toLowerCase() === 'budget-data'
+            ? '/budget-data'
+            : '/data',
+        purchase_key: variationCode,
+        meta: {
+          service_id: body.service_id || body.serviceId,
+          provider: body.provider,
+          network: body.network
+        }
+      };
+
+      description = `${serviceName} - ${selectedPlan.name}`;
     }
 
-    const customer_id = String(body.customer_id || "").trim();
-    const service_id = String(body.service_id || "").trim();
-    const amount = toNumber(body.amount, 0);
-    const request_id = body.request_id || buildTxnRef("BET");
-
-    if (!customer_id || !service_id) {
-      return respondError(res, 400, "customer_id and service_id are required");
+    if (!pricing) {
+      return respondError(res, 400, 'Unable to prepare purchase');
     }
-
-    if (amount < 100) {
-      return respondError(res, 400, "Minimum betting amount is ₦100");
-    }
-
-    const description = `Betting Funding - ${service_id}`;
 
     const client = await pool.connect();
     let txRow = null;
 
     try {
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
       const walletResult = await client.query(
-        "SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE",
+        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
         [userId]
       );
 
       const wallet = walletResult.rows[0];
       if (!wallet) {
-        await client.query("ROLLBACK");
-        return respondError(res, 404, "Wallet not found");
+        await client.query('ROLLBACK');
+        return respondError(res, 404, 'Wallet not found');
       }
 
       const currentBalance = Number(wallet.balance || 0);
-      if (currentBalance < amount) {
-        await client.query("ROLLBACK");
-        return respondError(res, 400, "Insufficient wallet balance");
+      if (currentBalance < purchaseAmount) {
+        await client.query('ROLLBACK');
+        return respondError(res, 400, 'Insufficient wallet balance');
       }
 
       await client.query(
@@ -2613,184 +2134,170 @@ async function processBettingPayment(req, res) {
          SET balance = balance - $2,
              updated_at = NOW()
          WHERE user_id = $1`,
-        [userId, amount]
+        [userId, purchaseAmount]
       );
 
       const inserted = await client.query(
         `INSERT INTO transactions
          (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
-         VALUES ($1, $2, 'purchase', 'betting', $3, 'NGN', 'pending', $4, $5, $6, NOW())
+         VALUES
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
          RETURNING *`,
         [
-          uid("tx_"),
+          uid('tx_'),
           userId,
-          amount,
-          request_id,
+          'purchase',
+          normalizedServiceType,
+          purchaseAmount,
+          uid('ref_'),
           description,
           JSON.stringify({
-            customer_id,
-            service_id,
-            amount,
-            request_id,
-            status: "pending",
-            serviceName: "Betting",
-          }),
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
+          })
         ]
       );
 
       txRow = inserted.rows[0];
-      await client.query("COMMIT");
+
+      await client.query('COMMIT');
     } catch (err) {
       try {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
       } catch (_) {}
       throw err;
     } finally {
       client.release();
     }
 
+    const providerBody = {
+      ...body,
+      amount: providerAmount,
+      plan_amount: providerAmount,
+      base_price: providerAmount,
+      final_amount: purchaseAmount
+    };
+
     let providerResponse;
 
     try {
       providerResponse = await withTimeout(
-        iacafe.buyBetting({
-          request_id: txRow.reference,
-          customer_id,
-          service_id,
-          amount,
-          skip_verify: true,
+        buyServiceThroughGateway({
+          serviceType: normalizedServiceType,
+          body: providerBody,
+          selectedPlan,
+          requestId: txRow.reference
         }),
         PROVIDER_TIMEOUT_MS,
-        "Provider timeout"
+        'Provider timeout'
       );
     } catch (err) {
-      if (isSensitiveProviderError(err)) {
-        await reverseAndRefund(
-          txRow,
-          userId,
-          amount,
-          `${description} failed`,
-          {
-            requestId: txRow.reference,
-            serviceType: "betting",
-            serviceName: "Betting",
-            customer_id,
-            service_id,
-            amount,
-            providerError: "Provider wallet issue",
-          }
-        );
+      console.error('PROVIDER CALL TIMEOUT/ERROR:', err?.message);
 
-        return respondError(
-          res,
-          503,
-          "Transaction could not be completed. Please try again later."
-        );
-      }
-
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'pending',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} pending`,
-          JSON.stringify({
-            customer_id,
-            service_id,
-            amount,
-            request_id: txRow.reference,
-            providerError: err?.message || "Provider timeout",
-            status: "pending",
-            serviceName: "Betting",
-          }),
-        ]
-      );
-
-      scheduleIacafeRequery(txRow.reference, { source: "timeout" });
-
-      return res.status(202).json({
-        success: true,
-        pending: true,
-        message: err?.message || "Provider timeout. Transaction is pending.",
-        transaction: {
-          ...txRow,
-          status: "pending",
-        },
-        requestId: txRow.reference,
-      });
-    }
-
-    const providerState = classifyProviderResponse(providerResponse);
-    const providerText = extractProviderText(providerResponse);
-
-    if (providerState === "pending" || providerState === "unknown") {
-      await pool.query(
-        `UPDATE transactions
-         SET status = 'pending',
-             description = $2,
-             meta = $3
-         WHERE id = $1`,
-        [
-          txRow.id,
-          `${description} pending`,
-          JSON.stringify({
-            customer_id,
-            service_id,
-            amount,
-            request_id: txRow.reference,
-            providerResponse,
-            status: "pending",
-            serviceName: "Betting",
-          }),
-        ]
-      );
-
-      scheduleIacafeRequery(txRow.reference, { source: "provider_pending" });
-
-      return res.status(202).json({
-        success: true,
-        pending: true,
-        message: providerText || "Transaction pending",
-        transaction: {
-          ...txRow,
-          status: "pending",
-        },
-        requestId: txRow.reference,
-        providerResponse,
-      });
-    }
-
-    if (providerState === "failed") {
       await reverseAndRefund(
         txRow,
         userId,
-        amount,
-        `${description} failed`,
+        purchaseAmount,
+        `${description} reversed`,
         {
-          requestId: txRow.reference,
-          serviceType: "betting",
-          serviceName: "Betting",
-          customer_id,
-          service_id,
-          amount,
-          providerResponse,
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          reverseReason: err?.message || 'Provider timeout'
         }
       );
 
       return respondError(
         res,
-        400,
-        providerText ||
-          providerResponse?.response_description ||
-          providerResponse?.message ||
-          "Betting funding failed"
+        504,
+        err?.message || 'Provider timeout. Wallet reversed.'
       );
     }
 
-    clearPendingRequery(txRow.reference);
+    console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
+
+    const providerState = providerRequestLooksSuccessful(providerResponse);
+    const providerText = extractProviderText(providerResponse);
+
+    if (providerState === 'pending') {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          description,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerResponse,
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
+          })
+        ]
+      );
+
+      return res.status(202).json({
+        success: true,
+        message: providerText || 'Purchase pending',
+        transaction: {
+          ...txRow,
+          status: 'pending'
+        },
+        pricing,
+        providerResponse
+      });
+    }
+
+    if (!providerState) {
+      await pool.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'failed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} failed`,
+          JSON.stringify({
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerResponse
+          })
+        ]
+      );
+
+      return respondError(
+        res,
+        400,
+        providerText || providerResponse?.response_description || providerResponse?.message || 'Purchase failed'
+      );
+    }
 
     await pool.query(
       `UPDATE transactions
@@ -2802,43 +2309,185 @@ async function processBettingPayment(req, res) {
         txRow.id,
         description,
         JSON.stringify({
-          customer_id,
-          service_id,
-          amount,
-          request_id: txRow.reference,
-          providerResponse,
-          status: "success",
-          serviceName: "Betting",
-        }),
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          providerResponse
+        })
       ]
     );
 
     await addNotification(
       userId,
-      `Betting Funded`,
-      `${description} of ₦${amount.toLocaleString("en-NG")} was successful`,
-      { transactionId: txRow.id, requestId: txRow.reference },
+      `${serviceName} purchased`,
+      `${description} was successful`,
+      {
+        transactionId: txRow.id,
+        serviceType: normalizedServiceType,
+        pricing,
+        providerAmount,
+        purchaseAmount,
+        providerResponse
+      },
       true
     );
 
     return respondOk(
       res,
       {
-        transaction: { ...txRow, status: "success" },
-        providerResponse,
-        requestId: txRow.reference,
+        transaction: {
+          ...txRow,
+          status: 'success',
+          amount: purchaseAmount
+        },
+        pricing,
+        providerResponse
       },
-      "Betting funded successfully"
+      `${serviceName} purchased successfully`
     );
   } catch (err) {
-    console.error("PROCESS BETTING PAYMENT ERROR:", err);
+    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('ERROR STACK:', err?.stack);
+    console.error('ERROR RESPONSE DATA:', err?.response?.data);
+
     return respondError(
       res,
       500,
-      err?.message || "Unable to process betting purchase"
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
     );
   }
 }
+
+async function processBettingPayment(req, res) {
+  const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
+
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const stateResult = await client.query(
+        `SELECT COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts, fund_pin_locked_until FROM users WHERE id = $1 FOR UPDATE`,
+        [userId]
+      );
+      const row = stateResult.rows[0];
+      if (!row) { await client.query('ROLLBACK'); return { ok: false, status: 404, message: 'User not found' }; }
+
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until? new Date(row.fund_pin_locked_until) : null;
+      const now = Date.now();
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(`UPDATE users SET fund_pin_failed_attempts = 0, fund_pin_locked_until = NULL, updated_at = NOW() WHERE id = $1`, [userId]);
+        failedAttempts = 0;
+      }
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
+        await client.query('ROLLBACK');
+        return { ok: false, status: 423, message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`, locked: true };
+      }
+      const pinOk = await verifyFundPin(userId, fundPin);
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1; const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock? new Date(Date.now() + PIN_LOCK_MS) : null;
+        await client.query(`UPDATE users SET fund_pin_failed_attempts = $2, fund_pin_locked_until = $3, updated_at = NOW() WHERE id = $1`, [userId, shouldLock? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]);
+        await client.query('COMMIT');
+        return { ok: false, status: shouldLock? 423 : 401, message: shouldLock? 'Invalid PIN. Locked for 1 hour.' : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left`, locked: shouldLock };
+      }
+      await client.query(`UPDATE users SET fund_pin_failed_attempts = 0, fund_pin_locked_until = NULL, updated_at = NOW() WHERE id = $1`, [userId]);
+      await client.query('COMMIT');
+      return { ok: true };
+    } catch (err) { try { await client.query('ROLLBACK'); } catch (_) {} throw err; } finally { client.release(); }
+  }
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+    if (!userId) return respondError(res, 401, 'Unauthorized');
+
+    const fundPin = String(body.fundPin || '').trim();
+    if (!fundPin) return respondError(res, 400, 'Transaction PIN is required');
+
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) return respondError(res, pinCheck.status || 401, pinCheck.message || 'Invalid fund PIN');
+
+    const customer_id = String(body.customer_id || '').trim();
+    const service_id = String(body.service_id || '').trim();
+    const amount = toNumber(body.amount, 0);
+    const request_id = body.request_id || uid('BET_');
+
+    if (!customer_id ||!service_id) return respondError(res, 400, 'customer_id and service_id are required');
+    if (amount < 100) return respondError(res, 400, 'Minimum betting amount is ₦100'); // Min 100
+
+    const description = `Betting Funding - ${service_id}`;
+
+    const client = await pool.connect();
+    let txRow = null;
+    try {
+      await client.query('BEGIN');
+      const walletResult = await client.query('SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE', [userId]);
+      const wallet = walletResult.rows[0];
+      if (!wallet) { await client.query('ROLLBACK'); return respondError(res, 404, 'Wallet not found'); }
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < amount) { await client.query('ROLLBACK'); return respondError(res, 400, 'Insufficient wallet balance'); }
+
+      // 1. DEDUCT FIRST - Same as data
+      await client.query(`UPDATE wallets SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
+
+      // 2. CREATE PENDING TX - Same as data
+      const inserted = await client.query(
+        `INSERT INTO transactions (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES ($1, $2, 'purchase', 'betting', $3, 'NGN', 'pending', $4, $5, $6, NOW()) RETURNING *`,
+        [uid('tx_'), userId, amount, request_id, description, JSON.stringify({ customer_id, service_id, amount })]
+      );
+      txRow = inserted.rows[0];
+      await client.query('COMMIT');
+    } catch (err) { try { await client.query('ROLLBACK'); } catch (_) {} throw err; } finally { client.release(); }
+
+    // 3. CALL PROVIDER - Same as data
+    let providerResponse;
+    try {
+      providerResponse = await Promise.race([
+        iacafe.buyBetting({
+          request_id: txRow.reference,
+          customer_id,
+          service_id,
+          amount,
+          skip_verify: true
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Provider timeout')), PROVIDER_TIMEOUT_MS))
+      ]);
+    } catch (err) {
+      // REFUND ON FAIL - Same as data
+      await pool.query(`UPDATE wallets SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
+      await pool.query(`UPDATE transactions SET status = 'failed', description = $2 WHERE id = $1`, [txRow.id, `${description} failed`]);
+      return respondError(res, 504, err?.message || 'Provider timeout. Wallet reversed.');
+    }
+
+    const providerState = providerRequestLooksSuccessful(providerResponse);
+    if (!providerState) {
+      // REFUND ON FAIL - Same as data
+      await pool.query(`UPDATE wallets SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1`, [userId, amount]);
+      await pool.query(`UPDATE transactions SET status = 'failed', description = $2 WHERE id = $1`, [txRow.id, `${description} failed`]);
+      return respondError(res, 400, providerResponse?.message || 'Betting funding failed');
+    }
+
+    // 4. UPDATE TO SUCCESS - Same as data. Webhook will handle final update too
+    await pool.query(`UPDATE transactions SET status = 'success' WHERE id = $1`, [txRow.id]);
+    await addNotification(userId, `Betting Funded`, `${description} of ₦${amount.toLocaleString('en-NG')} was successful`, { transactionId: txRow.id }, true);
+
+    return respondOk(res, { transaction: {...txRow, status: 'success' }, providerResponse }, 'Betting funded successfully');
+
+  } catch (err) {
+    console.error('PROCESS BETTING PAYMENT ERROR:', err);
+    return respondError(res, 500, err?.message || 'Unable to process betting purchase');
+  }
+}
+
 function requireDebugAccess(req, res, next) {
   const got = req.headers['x-debug-key'] || req.query.debug_key;
   const expected = process.env.DEBUG_KEY;
@@ -2947,14 +2596,7 @@ app.post('/api/temp/topup-wallet', requireAuth, async (req, res) => {
     client.release();
   }
 });
-/*Betting verify
-app.post("/api/services/betting/verify", requireAuth, async (req, res) => {
-  return processBettingVerification(req, res);
-});
 
-app.post("/api/services/betting", requireAuth, async (req, res) => {
-  return processBettingPayment(req, res);
-});
 
 /* BETTING */
 
