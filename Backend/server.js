@@ -410,61 +410,66 @@ function providerRequestLooksSuccessful(response) {
 
   return false;
 }
-async function buyServiceThroughGateway({
-  serviceType,
-  body,
-  selectedPlan,
-  requestId
-}) {
+async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
+  const service_id = body.service_id || body.serviceId;
+
   switch (normalizedServiceType) {
-    case 'airtime':
+    case "airtime":
       return iacafe.buyAirtime({
         request_id: requestId,
         phone: body.phone,
-        service_id: body.service_id || body.serviceId,
-        amount: body.amount
+        service_id,
+        amount: toNumber(body.amount, 0),
       });
 
-    case 'data':
+    case "data":
       return iacafe.buyData({
         request_id: requestId,
         phone: body.phone,
         plan: selectedPlan,
-        service_id: body.service_id || body.serviceId
+        service_id,
       });
 
-    case 'cable_tv':
+    case "cable_tv":
       return iacafe.buyCable({
         request_id: requestId,
-        customer_id: body.smartcard_number || body.customer_id || body.accountNumber || body.billersCode,
-        service_id: body.service_id || body.serviceId,
-        plan: selectedPlan
+        customer_id:
+          body.smartcard_number ||
+          body.customer_id ||
+          body.accountNumber ||
+          body.billersCode,
+        service_id,
+        plan: selectedPlan,
       });
 
-    case 'electricity':
+    case "electricity":
       return iacafe.buyElectricity({
         request_id: requestId,
-        customer_id: body.meter_number || body.meterNumber || body.customer_id || body.billersCode,
-        service_id: body.service_id || body.serviceId,
+        customer_id:
+          body.meter_number ||
+          body.meterNumber ||
+          body.customer_id ||
+          body.billersCode,
+        service_id,
         meter_number: body.meter_number || body.meterNumber,
         account_number: body.accountNumber,
-        amount: body.amount
+        amount: toNumber(body.amount, 0),
       });
 
-    case 'betting':
-  if (!body.customer_id || !body.service_id) {
-    throw new Error('customer_id and service_id are required');
-  }
-  
-  return iacafe.buyBetting({
-    request_id: requestId,
-    customer_id: String(body.customer_id).trim(),
-    service_id: String(body.service_id).trim(),
-    amount: toNumber(body.plan_amount || body.amount, 0),
-    skip_verify: true // important so we don't double verify
-  });
+    case "betting":
+      if (!body.customer_id || !service_id) {
+        throw new Error("customer_id and service_id are required");
+      }
+
+      return iacafe.buyBetting({
+        request_id: requestId,
+        customer_id: String(body.customer_id).trim(),
+        service_id: String(service_id).trim(),
+        amount: toNumber(body.plan_amount || body.amount, 0),
+        skip_verify: true,
+      });
 
     default:
       throw new Error(`${normalizedServiceType} is not supported yet`);
