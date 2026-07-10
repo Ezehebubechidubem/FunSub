@@ -909,6 +909,272 @@ async function pollFundingStatus(reference, amount) {
     }
   }, 3000);
 }
+
+function extractProviderText(response) {
+  const parts = [
+    response?.message,
+    response?.response_description,
+    response?.description,
+    response?.data?.message,
+    response?.data?.response_description,
+    response?.data?.description,
+    response?.error?.message,
+  ];
+
+  return parts
+    .filter(Boolean)
+    .map((x) => String(x).trim())
+    .join(" ")
+    .trim()
+    .toLowerCase();
+}
+
+function classifyProviderResponse(response) {
+  const text = extractProviderText(response);
+  const status = String(
+    response?.status ||
+    response?.state ||
+    response?.response_status ||
+    response?.responseState ||
+    ""
+  ).trim().toLowerCase();
+
+  if (
+    status === "pending" ||
+    status === "processing" ||
+    status === "incomplete" ||
+    status === "queued" ||
+    text.includes("pending") ||
+    text.includes("processing") ||
+    text.includes("incomplete")
+  ) {
+    return "pending";
+  }
+
+  if (
+    status === "success" ||
+    status === "successful" ||
+    status === "completed" ||
+    status === "complete" ||
+    status === "paid" ||
+    text.includes("success") ||
+    text.includes("completed")
+  ) {
+    return "success";
+  }
+
+  if (
+    status === "failed" ||
+    status === "error" ||
+    status === "reversed" ||
+    status === "reverse" ||
+    text.includes("failed") ||
+    text.includes("reversed") ||
+    text.includes("error")
+  ) {
+    return "failed";
+  }
+
+  return "unknown";
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage = "Provider timeout") {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeoutPromise,
+  ]);
+}
+
+function buildTxnRef(prefix = "TX") {
+  return uid(`${prefix}_`);
+}
+
+function mergeMeta(oldMeta, extraMeta) {
+  const base = oldMeta && typeof oldMeta === "object" ? oldMeta : {};
+  return { ...base, ...extraMeta };
+}
+
+async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
+  if (!txRow?.id) return;
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const txCheck = await client.query(
+      `SELECT status, meta
+       FROM transactions
+       WHERE id = $1
+       FOR UPDATE`,
+      [txRow.id]
+    );
+
+    if (!txCheck.rows.length) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const currentStatus = String(txCheck.rows[0].status || "").toLowerCase();
+    if (currentStatus !== "pending") {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const currentMeta = txCheck.rows[0].meta || {};
+    const mergedMeta = mergeMeta(currentMeta, {
+      reverseReason: reason,
+      ...extraMeta,
+    });
+
+    await client.query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId, purchaseAmount]
+    );
+
+    await client.query(
+      `UPDATE transactions
+       SET status = 'reversed',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [txRow.id, reason, JSON.stringify(mergedMeta)]
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function requeryPendingServiceTransactions() {
+  const client = await pool.connect();
+
+  try {
+    const result = await client.query(
+      `SELECT id, user_id, reference, amount, category, meta, status
+       FROM transactions
+       WHERE status = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 50`
+    );
+
+    for (const tx of result.rows) {
+      const meta = tx.meta || {};
+      const requestId = tx.reference;
+
+      let providerResponse;
+      try {
+        providerResponse = await iacafe.requery(requestId);
+      } catch (err) {
+        console.error("Requery failed for:", requestId, err?.message);
+        continue;
+      }
+
+      const state = classifyProviderResponse(providerResponse);
+
+      if (state === "pending" || state === "unknown") {
+        continue;
+      }
+
+      if (state === "success") {
+        await client.query(
+          `UPDATE transactions
+           SET status = 'success',
+               meta = $2
+           WHERE id = $1`,
+          [
+            tx.id,
+            JSON.stringify({
+              ...meta,
+              providerResponse,
+              requeryResult: "success",
+            }),
+          ]
+        );
+        continue;
+      }
+
+      if (state === "failed") {
+        await client.query("BEGIN");
+        try {
+          const check = await client.query(
+            `SELECT status, user_id, amount, meta
+             FROM transactions
+             WHERE id = $1
+             FOR UPDATE`,
+            [tx.id]
+          );
+
+          if (!check.rows.length) {
+            await client.query("ROLLBACK");
+            continue;
+          }
+
+          const currentStatus = String(check.rows[0].status || "").toLowerCase();
+          if (currentStatus !== "pending") {
+            await client.query("ROLLBACK");
+            continue;
+          }
+
+          await client.query(
+            `UPDATE wallets
+             SET balance = balance + $2,
+                 updated_at = NOW()
+             WHERE user_id = $1`,
+            [tx.user_id, tx.amount]
+          );
+
+          await client.query(
+            `UPDATE transactions
+             SET status = 'reversed',
+                 meta = $2
+             WHERE id = $1`,
+            [
+              tx.id,
+              JSON.stringify({
+                ...meta,
+                providerResponse,
+                requeryResult: "failed",
+              }),
+            ]
+          );
+
+          await client.query("COMMIT");
+        } catch (err) {
+          try {
+            await client.query("ROLLBACK");
+          } catch (_) {}
+          console.error("Requery reverse failed:", tx.id, err?.message);
+        }
+      }
+    }
+  } finally {
+    client.release();
+  }
+}
+setInterval(() => {
+  requeryPendingServiceTransactions().catch((err) => {
+    console.error("Pending requery worker error:", err?.message);
+  });
+}, 60_000);
+
+
+
 async function processFundingSuccess({ reference, amount, flutterwaveData = {}, rawWebhook = null }) {
   const client = await pool.connect();
 
@@ -2166,6 +2432,123 @@ app.post('/api/auth/register', async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+app.post("/api/webhooks/iacafe", async (req, res) => {
+  try {
+    const payload = req.body || {};
+
+    const requestId =
+      payload.request_id ||
+      payload.reference ||
+      payload.tx_ref ||
+      payload.transaction_id ||
+      payload.id;
+
+    if (!requestId) {
+      return res.status(400).json({ success: false, message: "Missing request reference" });
+    }
+
+    const state = classifyProviderResponse(payload);
+    const metaUpdate = {
+      webhookPayload: payload,
+      webhookState: state,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const txResult = await pool.query(
+      `SELECT id, user_id, amount, status, meta
+       FROM transactions
+       WHERE reference = $1
+       LIMIT 1`,
+      [requestId]
+    );
+
+    const tx = txResult.rows[0];
+    if (!tx) {
+      return res.status(404).json({ success: false, message: "Transaction not found" });
+    }
+
+    if (state === "pending" || state === "unknown") {
+      await pool.query(
+        `UPDATE transactions
+         SET meta = $2
+         WHERE id = $1`,
+        [
+          tx.id,
+          JSON.stringify({
+            ...(tx.meta || {}),
+            ...metaUpdate,
+          }),
+        ]
+      );
+
+      return res.json({ success: true, message: "Webhook received", status: "pending" });
+    }
+
+    if (state === "success") {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'success',
+             meta = $2
+         WHERE id = $1`,
+        [
+          tx.id,
+          JSON.stringify({
+            ...(tx.meta || {}),
+            ...metaUpdate,
+          }),
+        ]
+      );
+
+      return res.json({ success: true, message: "Webhook processed", status: "success" });
+    }
+
+    if (state === "failed") {
+      const current = String(tx.status || "").toLowerCase();
+
+      if (current === "pending") {
+        await pool.query("BEGIN");
+        try {
+          await pool.query(
+            `UPDATE wallets
+             SET balance = balance + $2,
+                 updated_at = NOW()
+             WHERE user_id = $1`,
+            [tx.user_id, tx.amount]
+          );
+
+          await pool.query(
+            `UPDATE transactions
+             SET status = 'reversed',
+                 meta = $2
+             WHERE id = $1`,
+            [
+              tx.id,
+              JSON.stringify({
+                ...(tx.meta || {}),
+                ...metaUpdate,
+              }),
+            ]
+          );
+
+          await pool.query("COMMIT");
+        } catch (err) {
+          try {
+            await pool.query("ROLLBACK");
+          } catch (_) {}
+          throw err;
+        }
+      }
+
+      return res.json({ success: true, message: "Webhook processed", status: "failed" });
+    }
+
+    return res.json({ success: true, message: "Webhook received" });
+  } catch (err) {
+    console.error("ICAFE WEBHOOK ERROR:", err);
+    return res.status(500).json({ success: false, message: err?.message || "Webhook error" });
+  }
+});
+
 
 app.post('/api/auth/login', async (req, res) => {
   try {
