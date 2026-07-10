@@ -1339,6 +1339,25 @@ async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta
 async function requeryPendingServiceTransactions() {
   const client = await pool.connect();
 
+  function safeMeta(meta) {
+    if (!meta) return {};
+
+    if (typeof meta === "object" && !Array.isArray(meta)) {
+      return meta;
+    }
+
+    if (typeof meta === "string") {
+      try {
+        const parsed = JSON.parse(meta);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        return { rawMeta: meta };
+      }
+    }
+
+    return {};
+  }
+
   try {
     const result = await client.query(
       `SELECT id, user_id, reference, amount, category, meta, status
@@ -1350,7 +1369,7 @@ async function requeryPendingServiceTransactions() {
     );
 
     for (const tx of result.rows) {
-      const meta = normalizeMeta(tx.meta);
+      const meta = safeMeta(tx.meta);
       const requestId = tx.reference;
 
       if (!requestId) continue;
@@ -1372,13 +1391,12 @@ async function requeryPendingServiceTransactions() {
            WHERE id = $1`,
           [
             tx.id,
-            JSON.stringify(
-              mergeMeta(meta, {
-                providerResponse,
-                requeryResult: "pending",
-                updatedAt: new Date().toISOString(),
-              })
-            ),
+            JSON.stringify({
+              ...meta,
+              providerResponse,
+              requeryResult: "pending",
+              updatedAt: new Date().toISOString(),
+            }),
           ]
         );
         continue;
@@ -1392,13 +1410,12 @@ async function requeryPendingServiceTransactions() {
            WHERE id = $1`,
           [
             tx.id,
-            JSON.stringify(
-              mergeMeta(meta, {
-                providerResponse,
-                requeryResult: "success",
-                updatedAt: new Date().toISOString(),
-              })
-            ),
+            JSON.stringify({
+              ...meta,
+              providerResponse,
+              requeryResult: "success",
+              updatedAt: new Date().toISOString(),
+            }),
           ]
         );
         continue;
@@ -1441,13 +1458,12 @@ async function requeryPendingServiceTransactions() {
              WHERE id = $1`,
             [
               tx.id,
-              JSON.stringify(
-                mergeMeta(meta, {
-                  providerResponse,
-                  requeryResult: "failed",
-                  updatedAt: new Date().toISOString(),
-                })
-              ),
+              JSON.stringify({
+                ...meta,
+                providerResponse,
+                requeryResult: "failed",
+                updatedAt: new Date().toISOString(),
+              }),
             ]
           );
 
