@@ -62,7 +62,7 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 
 const DEFAULT_MARKUP_PERCENT = envNumber(process.env.DEFAULT_MARKUP_PERCENT, 1);
-const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT, 1.7);
+const FLW_WALLET_FEE_PERCENT = envNumber(process.env.FLW_WALLET_FEE_PERCENT,0);
 
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
