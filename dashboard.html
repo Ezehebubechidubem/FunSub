@@ -1111,7 +1111,7 @@ function formatWholeMoney(value) {
 
     function shortName(fullName) {
       const name = safeText(fullName, "");
-      if (!name) return "{user}!";
+      if (!name) return "user";
       return name.split(/\s+/)[0] || name;
     }
 
