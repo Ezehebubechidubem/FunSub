@@ -40,6 +40,9 @@ const FLW_BASE_URL = String(process.env.FLW_BASE_URL || 'https://api.flutterwave
 const FLW_WEBHOOK_HASH = process.env.FLW_WEBHOOK_HASH;
 const FLW_ACCOUNT_TYPE = String(process.env.FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase(); // dynamic | static
 const FLW_VA_EXPIRY = Number(process.env.FLW_VA_EXPIRY || 3600);
+const pendingRequeryTimers = new Map();
+const ICAFE_REQUERY_DELAY_MS = Number(process.env.ICAFE_REQUERY_DELAY_MS || 15000);
+const ICAFE_REQUERY_MAX_ATTEMPTS = Number(process.env.ICAFE_REQUERY_MAX_ATTEMPTS || 6);
 
 // These are configurable in case Flutterwave changes the route you are using.
 const FLW_CUSTOMER_URL = String(
@@ -139,8 +142,37 @@ function respondOk(res, data = {}, message = 'OK') {
 function respondError(res, status, message) {
   return res.status(status).json({ success: false, message });
 }
-function normalizeStatus(value) {
-  return String(value || '').trim().toLowerCase();
+
+
+function normalizeStatusValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeMeta(meta) {
+  if (!meta) return {};
+
+  if (typeof meta === "object" && !Array.isArray(meta)) {
+    return meta;
+  }
+
+  if (typeof meta === "string") {
+    try {
+      const parsed = JSON.parse(meta);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch (_) {
+      return { rawMeta: meta };
+    }
+  }
+
+  return {};
+}
+
+function clearPendingRequery(requestId) {
+  if (!requestId) return;
+
+  const timer = pendingRequeryTimers.get(requestId);
+  if (timer) clearTimeout(timer);
+  pendingRequeryTimers.delete(requestId);
 }
 async function verifyFundPin(userId, fundPin) {
   if (!fundPin) return false;
