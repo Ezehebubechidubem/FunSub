@@ -2318,16 +2318,7 @@ function requireAdmin(req, res, next) {
   }
 }
 
-const avatarUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, AVATAR_DIR),
-    filename: (req, file, cb) => {
-      const safe = file.originalname.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
-      cb(null, `avatar-${Date.now()}-${safe}`);
-    }
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 }
-});
+
 
 const kycUpload = multer({
   storage: multer.diskStorage({
