@@ -192,48 +192,226 @@ async function verifyFundPin(userId, fundPin) {
 }
 
 function extractProviderText(response) {
-  const parts = [];
+  const payload =
+    response?.data &&
+    typeof response.data === "object" &&
+    !Array.isArray(response.data)
+      ? response.data
+      : response;
 
-  const push = (v) => {
-    const text = normalizeStatus(v);
-    if (text) parts.push(text);
-  };
+  const parts = [
+    response?.message,
+    response?.response_description,
+    response?.description,
+    response?.status,
+    response?.state,
+    response?.response_status,
+    response?.responseState,
+    payload?.message,
+    payload?.response_description,
+    payload?.description,
+    payload?.status,
+    payload?.state,
+    payload?.response_status,
+    payload?.responseState,
+    response?.error?.message,
+    payload?.error?.message,
+  ];
 
-  push(response?.status);
-  push(response?.message);
-  push(response?.response_description);
-  push(response?.responseCode);
-  push(response?.response_code);
-  push(response?.code);
-  push(response?.statusCode);
+  return parts
+    .filter((v) => v !== undefined && v !== null && String(v).trim() !== "")
+    .map((v) => String(v).trim())
+    .join(" ")
+    .trim()
+    .toLowerCase();
+}
 
-  push(response?.data?.status);
-  push(response?.data?.message);
-  push(response?.data?.response_description);
-  push(response?.data?.response_code);
-  push(response?.data?.responseCode);
+function classifyProviderResponse(response) {
+  const status = normalizeStatusValue(
+    response?.status ||
+      response?.state ||
+      response?.response_status ||
+      response?.responseState ||
+      response?.data?.status ||
+      response?.data?.state ||
+      response?.data?.response_status ||
+      response?.data?.responseState ||
+      ""
+  );
 
-  push(response?.transaction?.status);
-  push(response?.transaction?.message);
-  push(response?.transaction?.response_description);
-  push(response?.transaction?.order_status);
+  const text = extractProviderText(response);
 
-  push(response?.content?.transactions?.status);
-  push(response?.content?.transactions?.message);
-  push(response?.content?.transactions?.response_description);
-  push(response?.content?.transactions?.order_status);
+  const hasAny = (...tokens) =>
+    tokens.some((token) => status.includes(token) || text.includes(token));
 
-  push(response?.data?.content?.transactions?.status);
-  push(response?.data?.content?.transactions?.message);
-  push(response?.data?.content?.transactions?.response_description);
-  push(response?.data?.content?.transactions?.order_status);
+  if (
+    hasAny(
+      "processing-api",
+      "processing",
+      "pending",
+      "queued",
+      "in-progress",
+      "inprogress"
+    )
+  ) {
+    return "pending";
+  }
 
-  push(response?.data?.transactions?.status);
-  push(response?.data?.transactions?.message);
-  push(response?.data?.transactions?.response_description);
-  push(response?.data?.transactions?.order_status);
+  if (
+    hasAny(
+      "completed-api",
+      "completed",
+      "complete",
+      "success",
+      "successful",
+      "paid",
+      "delivered",
+      "fulfilled",
+      "ok"
+    )
+  ) {
+    return "success";
+  }
 
-  return parts.join(' | ');
+  if (
+    hasAny(
+      "refunded-api",
+      "refunded",
+      "failed",
+      "error",
+      "reversed",
+      "cancelled",
+      "canceled",
+      "declined"
+    )
+  ) {
+    return "failed";
+  }
+
+  return "unknown";
+}
+
+function providerRequestLooksSuccessful(response) {
+  if (response?.success === true) return true;
+  if ([response?.code, response?.statusCode].some((v) => Number(v) === 200)) return true;
+
+  const candidates = [
+    response?.status,
+    response?.message,
+    response?.response_description,
+    response?.data?.status,
+    response?.data?.message,
+    response?.data?.response_description,
+  ]
+    .map((v) => normalizeStatusValue(v))
+    .filter(Boolean);
+
+  if (
+    candidates.some(
+      (v) =>
+        v === "success" ||
+        v === "successful" ||
+        v === "completed" ||
+        v === "completed-api" ||
+        v === "completed api" ||
+        v === "complete" ||
+        v === "transaction completed" ||
+        v === "order completed" ||
+        v === "payment completed" ||
+        v === "transaction successful" ||
+        v === "purchase successful" ||
+        v === "processed successfully" ||
+        v === "submitted successfully" ||
+        v === "ok" ||
+        v === "paid"
+    )
+  ) {
+    return true;
+  }
+
+  const responseCode = String(response?.response_code ?? response?.data?.response_code ?? "").trim();
+  if (["00", "0", "200"].includes(responseCode)) return true;
+
+  return false;
+}
+
+function isSensitiveProviderError(err) {
+  const text = String(
+    err?.response?.data?.message ||
+      err?.response?.data?.error?.message ||
+      err?.message ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    text.includes("insufficient") ||
+    text.includes("wallet") ||
+    text.includes("balance") ||
+    text.includes("fund exhausted") ||
+    text.includes("low balance") ||
+    text.includes("provider wallet")
+  );
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage = "Provider timeout") {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeoutPromise,
+  ]);
+}
+
+function buildTxnRef(prefix = "TX") {
+  return uid(`${prefix}_`);
+}
+
+function mergeMeta(oldMeta, extraMeta) {
+  const base = oldMeta && typeof oldMeta === "object" ? oldMeta : {};
+  return { ...base, ...extraMeta };
+}
+
+function verifyIacafeWebhookSignature(req, secret) {
+  if (!secret) return true;
+
+  const signature = String(
+    req.headers["x-vtu-signature"] ||
+      req.headers["x-iacafe-signature"] ||
+      req.headers["x-webhook-signature"] ||
+      req.headers["x-signature"] ||
+      ""
+  ).trim();
+
+  const timestamp = String(
+    req.headers["x-vtu-timestamp"] ||
+      req.headers["x-iacafe-timestamp"] ||
+      req.headers["x-webhook-timestamp"] ||
+      ""
+  ).trim();
+
+  if (!signature || !timestamp) return false;
+
+  const rawBody =
+    typeof req.rawBody === "string"
+      ? req.rawBody
+      : Buffer.isBuffer(req.body)
+        ? req.body.toString("utf8")
+        : JSON.stringify(req.body || {});
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+
+  const normalizedSignature = signature.replace(/^sha256=/i, "");
+
+  return expected === normalizedSignature || expected === signature;
 }
 async function cleanupExpiredFundingIntents() {
   try {
