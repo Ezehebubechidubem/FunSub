@@ -580,46 +580,7 @@ function providerResponseState(response) {
 function isSuccessStatus(value) {
   return SUCCESS_STATUSES.has(normalizeStatus(value));
 }
-function providerRequestLooksSuccessful(response) {
-  if (response?.success === true) return true;
-  if ([response?.code, response?.statusCode].some((v) => Number(v) === 200)) return true;
 
-  const candidates = [
-    response?.status,
-    response?.message,
-    response?.response_description,
-    response?.data?.status,
-    response?.data?.message,
-    response?.data?.response_description
-  ]
-    .map((v) => normalizeStatus(v))
-    .filter(Boolean);
-
-  if (
-    candidates.some(
-      (v) =>
-        SUCCESS_STATUSES.has(v) ||
-        v === 'completed-api' ||
-        v === 'completed api' ||
-        v === 'complete' ||
-        v === 'completed' ||
-        v === 'transaction completed' ||
-        v === 'order completed' ||
-        v === 'payment completed' ||
-        v === 'transaction successful' ||
-        v === 'purchase successful' ||
-        v === 'processed successfully' ||
-        v === 'submitted successfully'
-    )
-  ) {
-    return true;
-  }
-
-  const responseCode = String(response?.response_code ?? response?.data?.response_code ?? '').trim();
-  if (['00', '0', '200'].includes(responseCode)) return true;
-
-  return false;
-}
 async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
   const normalizedServiceType = normalizeServiceType(serviceType);
 
