@@ -2865,33 +2865,84 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
     ]);
 
     if (!allowed.has(serviceType)) {
-      return respondError(res, 400, 'Unsupported service type');
+      return respondError(res, 400, 'Invalid service type');
     }
 
-    if (serviceType === 'data' || serviceType === 'cable_tv') {
-      const service_id = String(
+    const includeUnavailable =
+      String(req.query.include_unavailable || '').toLowerCase() === 'true';
+
+    // DATA PLANS
+    if (serviceType === 'data') {
+      const networkId = toNumber(req.query.network_id || req.query.networkId, 0) || null;
+      const provider = req.query.provider || undefined;
+
+      const explicitServiceId = String(
         req.query.service_id ||
-        req.query.network ||
-        req.query.provider ||
+        req.query.serviceId ||
         ''
-      ).trim();
+      ).trim().toLowerCase();
+
+      const mappedServiceId = networkId ? getNetworkServiceId(networkId) : null;
+      const service_id = explicitServiceId || mappedServiceId;
 
       if (!service_id) {
-        return respondError(res, 400, 'service_id is required');
+        return respondError(
+          res,
+          400,
+          'service_id or network_id is required for data plans'
+        );
       }
 
-      const product = serviceType === 'data' ? 'data' : 'cable';
-      const raw = await iacafe.getVariations({ product, service_id });
+      const regularRes = await iacafe.getVariations({
+        product: 'data',
+        service_id
+      }).catch((err) => {
+        console.error('REGULAR DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
 
-      const list = extractArrayFromProviderResponse(raw).map((plan) => {
-        const normalized = normalizeProviderPlan(plan);
-        const pricing = buildRolePricing(serviceType, normalized.rawPrice, req.user.role, {
-          service_id
+      const budgetRes = await iacafe.getBudgetPlans({
+        network_id: networkId || undefined,
+        provider
+      }).catch((err) => {
+        console.error('BUDGET DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
+
+      const regularPlansRaw = extractArray(regularRes);
+      const budgetPlansRaw = extractArray(budgetRes);
+
+      const regularPlans = regularPlansRaw.map((plan) => ({
+        id: plan.variation_id ?? plan.id ?? plan.code,
+        name: plan.name ?? plan.variation_name ?? plan.data_plan ?? 'Data Plan',
+        rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+        availability: plan.availability ?? 'Available',
+        source: 'regular',
+        meta: plan
+      }));
+
+      const budgetPlans = budgetPlansRaw.map((plan) => ({
+        id: plan.data_plan ?? plan.id ?? plan.code,
+        name: plan.name ?? 'Data Plan',
+        rawPrice: Number(plan.api_user_price ?? plan.price ?? 0),
+        availability: plan.availability ?? 'Available',
+        source: 'budget-data',
+        meta: plan
+      }));
+
+      const allPlans = [...regularPlans, ...budgetPlans].filter((plan) => {
+        const available = String(plan.availability).toLowerCase() === 'available';
+        return available || includeUnavailable;
+      });
+
+      const withPricing = [];
+      for (const plan of allPlans) {
+        const pricing = buildRolePricing('data', plan.rawPrice, req.user?.role, {
+          network: service_id
         });
 
-        return {
-          ...normalized,
-          price: normalized.rawPrice,
+        withPricing.push({
+          ...plan,
           pricing: {
             basePrice: pricing.basePrice,
             markupPercent: pricing.markupPercent,
@@ -2901,16 +2952,82 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
             agentDiscountAmount: pricing.agentDiscountAmount,
             finalPrice: pricing.finalPrice
           }
-        };
-      });
+        });
+      }
 
       return respondOk(res, {
-        serviceType: serviceType === 'data' ? 'data' : 'cable_tv',
+        serviceType: 'data',
+        network_id: networkId,
         service_id,
-        plans: list
-      }, `${serviceType === 'data' ? 'Data' : 'Cable'} plans loaded`);
+        plans: withPricing
+      }, 'Data plans loaded');
     }
 
+    // CABLE TV PLANS
+    if (serviceType === 'cable_tv') {
+      const service_id = String(
+        req.query.service_id ||
+        req.query.serviceId ||
+        req.query.provider ||
+        ''
+      ).trim().toLowerCase();
+
+      if (!service_id) {
+        return respondError(res, 400, 'service_id is required for cable plans');
+      }
+
+      const cableRes = await iacafe.getVariations({
+        product: 'cable',
+        service_id
+      }).catch((err) => {
+        console.error('CABLE PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
+
+      const cablePlansRaw = extractArray(cableRes);
+
+      const plans = cablePlansRaw
+        .map((plan) => ({
+          id: plan.variation_id ?? plan.id ?? plan.code,
+          name: plan.name ?? plan.variation_name ?? 'Cable Plan',
+          rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+          availability: plan.availability ?? 'Available',
+          source: 'cable',
+          meta: plan
+        }))
+        .filter((plan) => {
+          const available = String(plan.availability).toLowerCase() === 'available';
+          return available || includeUnavailable;
+        });
+
+      const withPricing = [];
+      for (const plan of plans) {
+        const pricing = buildRolePricing('cable_tv', plan.rawPrice, req.user?.role, {
+          provider: service_id
+        });
+
+        withPricing.push({
+          ...plan,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType: 'cable_tv',
+        service_id,
+        plans: withPricing
+      }, 'Cable plans loaded');
+    }
+
+    // OTHER SERVICES: RETURN SUPPORTED OPTIONS
     const providersRes = await iacafe.getProviders().catch((err) => {
       console.error('PROVIDERS ERROR:', err?.response?.data || err?.message);
       return null;
@@ -2972,7 +3089,6 @@ app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
     );
   }
 });
-
 app.post('/api/services/data', requireAuth, async (req, res) => {
   return processServicePayment(req, res, 'data', 'Data');
 });
