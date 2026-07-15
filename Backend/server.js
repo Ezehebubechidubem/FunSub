@@ -3670,7 +3670,80 @@ app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Unable to query transaction status');
   }
 });
+/* TRANSACTIONS */
 
+app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit || 20), 100);
+
+    const result = await query(
+      `SELECT * FROM transactions
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [req.user.id, limit]
+    );
+
+    return respondOk(res, { transactions: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* NOTIFICATIONS */
+
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [req.user.id]
+    );
+
+    return respondOk(res, { notifications: result.rows });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/notifications/unread-count', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT COUNT(*)::int AS count
+       FROM notifications
+       WHERE user_id = $1 AND is_read = false`,
+      [req.user.id]
+    );
+
+    return respondOk(res, { count: result.rows[0]?.count || 0 });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE notifications
+       SET is_read = true
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!result.rows[0]) return respondError(res, 404, 'Notification not found');
+
+    return respondOk(res, { notification: result.rows[0] }, 'Notification marked read');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
 /* LOGOUT */
 
 app.post('/api/auth/logout', requireAuth, async (req, res) => {
