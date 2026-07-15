@@ -3465,4 +3465,130 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       'Customer verified'
     );
   } catch (err) {
-    
+    const code = String(
+      err?.code ||
+      err?.response?.data?.error?.code ||
+      err?.response?.data?.code ||
+      ''
+    ).trim().toLowerCase();
+
+    const message =
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Unable to verify customer';
+
+    return respondError(
+      res,
+      code === 'customer_not_found' ? 404 : 400,
+      message
+    );
+  }
+});
+
+/**
+ * Step 3: Fund betting account only after verification succeeds
+ */
+app.post('/api/services/betting', requireAuth, async (req, res) => {
+  return processBettingPayment(req, res);
+});
+
+/* PROVIDER DEBUG */
+
+app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      provider: SERVICE_PROVIDER,
+      baseUrlSet: Boolean(VTPASS_BASE_URL),
+      hasApiKey: Boolean(VTPASS_API_KEY),
+      hasPublicKey: Boolean(VTPASS_PUBLIC_KEY),
+      hasSecretKey: Boolean(VTPASS_SECRET_KEY),
+      variationsPathSet: Boolean(VTPASS_VARIATIONS_PATH),
+      payPathSet: Boolean(VTPASS_PAY_PATH),
+      requeryPathSet: Boolean(VTPASS_REQUERY_PATH),
+      services: PROVIDER_ENDPOINTS
+    }, 'Provider config loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.body || {};
+    if (!requestId) return respondError(res, 400, 'requestId is required');
+
+    const result = await requeryVtpassTransaction(requestId);
+    return respondOk(res, { result }, 'Transaction status loaded');
+  } catch (err) {
+    console.error(err.response?.data || err.message || err);
+    return respondError(res, 500, 'Unable to query transaction status');
+  }
+});
+
+/* LOGOUT */
+
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
+  try {
+    await query(
+      `UPDATE users
+       SET online = false, updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id]
+    );
+    return respondOk(res, {}, 'Logged out');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+/* ERRORS */
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  return respondError(res, 500, 'Internal server error');
+});
+
+/* START */
+
+(async () => {
+  try {
+    await query('SELECT 1');
+    await initDb();
+
+    if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+      const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+      const existing = await query('SELECT id FROM users WHERE email = $1 LIMIT 1', [adminEmail]);
+
+      if (!existing.rows[0]) {
+        const password_hash = await bcrypt.hash(String(process.env.ADMIN_PASSWORD), 10);
+        const adminId = uid('usr_');
+
+        await query(
+          `INSERT INTO users
+           (id, role, full_name, email, phone, password_hash, state, kyc_status, profile_complete, online, created_at, updated_at)
+           VALUES ($1, 'admin', $2, $3, $4, $5, $6, 'verified', true, false, NOW(), NOW())`,
+          [
+            adminId,
+            process.env.ADMIN_NAME || 'Super Admin',
+            adminEmail,
+            process.env.ADMIN_PHONE || '0000000000',
+            password_hash,
+            process.env.ADMIN_STATE || 'Admin'
+          ]
+        );
+
+        await ensureWallet(adminId);
+      }
+    }
+
+    app.listen(PORT, () => {
+      console.log(`PhoneStop backend running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Startup error:', err);
+    process.exit(1);
+  }
+})();
