@@ -2754,3 +2754,715 @@ app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
     return respondError(res, 500, 'Unable to load funding status');
   }
 });
+/**
+ * Flutterwave webhook for virtual account payments.
+ */
+
+app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
+  try {
+    const transactionId = String(req.params.transactionId || '').trim();
+    if (!transactionId) {
+      return respondError(res, 400, 'transactionId is required');
+    }
+
+    const data = await flutterwaveVerify(transactionId);
+    if (!data) return respondError(res, 400, 'Unable to verify payment');
+
+    const providerStatus = normalizeStatusValue(data.status || data.tx_status || '');
+    const amount = toNumber(data.amount, 0);
+    const txRef = String(data.tx_ref || data.reference || '').trim();
+
+    if (!txRef) {
+      return respondError(res, 400, 'Missing transaction reference');
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1 AND user_id = $2
+       LIMIT 1`,
+      [txRef, req.user.id]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) return respondError(res, 404, 'Payment intent not found');
+
+    if (SUCCESS_STATUSES.has(providerStatus) || providerStatus === 'completed' || providerStatus === 'successful') {
+      const result = await processFundingSuccess({
+        reference: txRef,
+        amount,
+        flutterwaveData: data,
+        rawWebhook: { source: 'manual_verify' }
+      });
+
+      if (!result.ok) {
+        return respondError(res, 400, result.reason || 'Unable to complete funding');
+      }
+
+      return respondOk(res, { verified: true, amount, reference: txRef }, 'Payment verified and wallet funded');
+    }
+
+    return respondError(res, 400, `Payment status is ${providerStatus || 'unknown'}`);
+  } catch (err) {
+    console.error('FLW VERIFY ERROR:', err?.response?.data || err?.message || err);
+    return respondError(res, 500, err?.message || 'Unable to verify payment');
+  }
+});
+
+/* SERVICES LIST */
+
+app.get('/api/services', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      services: SERVICE_CATALOG
+    }, 'Services loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+function toNetworkId(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function getNetworkServiceId(networkId) {
+  const map = {
+    1: 'mtn',
+    2: 'glo',
+    3: '9mobile',
+    4: 'airtel'
+  };
+  return map[networkId] || null;
+}
+
+function extractArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.plans)) return payload.plans;
+  return [];
+}
+
+/* BILLS / SERVICES */
+
+app.get('/api/services/:serviceType/plans', requireAuth, async (req, res) => {
+  try {
+    const serviceType = normalizeServiceType(req.params.serviceType);
+
+    const allowed = new Set([
+      'airtime',
+      'data',
+      'cable_tv',
+      'electricity',
+      'betting',
+      'recharge_pin',
+      'data_pin',
+      'exam_pin'
+    ]);
+
+    if (!allowed.has(serviceType)) {
+      return respondError(res, 400, 'Invalid service type');
+    }
+
+    const includeUnavailable =
+      String(req.query.include_unavailable || '').toLowerCase() === 'true';
+
+    // DATA PLANS
+    if (serviceType === 'data') {
+      const networkId = toNumber(req.query.network_id || req.query.networkId, 0) || null;
+      const provider = req.query.provider || undefined;
+
+      const explicitServiceId = String(
+        req.query.service_id ||
+        req.query.serviceId ||
+        ''
+      ).trim().toLowerCase();
+
+      const mappedServiceId = networkId ? getNetworkServiceId(networkId) : null;
+      const service_id = explicitServiceId || mappedServiceId;
+
+      if (!service_id) {
+        return respondError(
+          res,
+          400,
+          'service_id or network_id is required for data plans'
+        );
+      }
+
+      const regularRes = await iacafe.getVariations({
+        product: 'data',
+        service_id
+      }).catch((err) => {
+        console.error('REGULAR DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
+
+      const budgetRes = await iacafe.getBudgetPlans({
+        network_id: networkId || undefined,
+        provider
+      }).catch((err) => {
+        console.error('BUDGET DATA PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
+
+      const regularPlansRaw = extractArray(regularRes);
+      const budgetPlansRaw = extractArray(budgetRes);
+
+      const regularPlans = regularPlansRaw.map((plan) => ({
+        id: plan.variation_id ?? plan.id ?? plan.code,
+        name: plan.name ?? plan.variation_name ?? plan.data_plan ?? 'Data Plan',
+        rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+        availability: plan.availability ?? 'Available',
+        source: 'regular',
+        meta: plan
+      }));
+
+      const budgetPlans = budgetPlansRaw.map((plan) => ({
+        id: plan.data_plan ?? plan.id ?? plan.code,
+        name: plan.name ?? 'Data Plan',
+        rawPrice: Number(plan.api_user_price ?? plan.price ?? 0),
+        availability: plan.availability ?? 'Available',
+        source: 'budget-data',
+        meta: plan
+      }));
+
+      const allPlans = [...regularPlans, ...budgetPlans].filter((plan) => {
+        const available = String(plan.availability).toLowerCase() === 'available';
+        return available || includeUnavailable;
+      });
+
+      const withPricing = [];
+      for (const plan of allPlans) {
+        const pricing = buildRolePricing('data', plan.rawPrice, req.user?.role, {
+          network: service_id
+        });
+
+        withPricing.push({
+          ...plan,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType: 'data',
+        network_id: networkId,
+        service_id,
+        plans: withPricing
+      }, 'Data plans loaded');
+    }
+
+    // CABLE TV PLANS
+    if (serviceType === 'cable_tv') {
+      const service_id = String(
+        req.query.service_id ||
+        req.query.serviceId ||
+        req.query.provider ||
+        ''
+      ).trim().toLowerCase();
+
+      if (!service_id) {
+        return respondError(res, 400, 'service_id is required for cable plans');
+      }
+
+      const cableRes = await iacafe.getVariations({
+        product: 'cable',
+        service_id
+      }).catch((err) => {
+        console.error('CABLE PLANS ERROR:', err?.response?.data || err?.message);
+        return null;
+      });
+
+      const cablePlansRaw = extractArray(cableRes);
+
+      const plans = cablePlansRaw
+        .map((plan) => ({
+          id: plan.variation_id ?? plan.id ?? plan.code,
+          name: plan.name ?? plan.variation_name ?? 'Cable Plan',
+          rawPrice: Number(plan.reseller_price ?? plan.price ?? plan.amount ?? 0),
+          availability: plan.availability ?? 'Available',
+          source: 'cable',
+          meta: plan
+        }))
+        .filter((plan) => {
+          const available = String(plan.availability).toLowerCase() === 'available';
+          return available || includeUnavailable;
+        });
+
+      const withPricing = [];
+      for (const plan of plans) {
+        const pricing = buildRolePricing('cable_tv', plan.rawPrice, req.user?.role, {
+          provider: service_id
+        });
+
+        withPricing.push({
+          ...plan,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
+          }
+        });
+      }
+
+      return respondOk(res, {
+        serviceType: 'cable_tv',
+        service_id,
+        plans: withPricing
+      }, 'Cable plans loaded');
+    }
+
+    // OTHER SERVICES: RETURN SUPPORTED OPTIONS
+    const providersRes = await iacafe.getProviders().catch((err) => {
+      console.error('PROVIDERS ERROR:', err?.response?.data || err?.message);
+      return null;
+    });
+
+    const providers = providersRes?.data || {};
+    let options = [];
+
+    switch (serviceType) {
+      case 'airtime':
+        options = (providers.airtime || []).map((x) => ({
+          id: x,
+          name: String(x).toUpperCase()
+        }));
+        break;
+
+      case 'electricity':
+        options = (providers.electricity || []).map((x) => ({
+          id: x,
+          name: String(x).replace(/-/g, ' ').toUpperCase()
+        }));
+        break;
+
+      case 'betting':
+        options = (providers.betting || []).map((x) => ({
+          id: x,
+          name: x
+        }));
+        break;
+
+      case 'recharge_pin':
+      case 'data_pin':
+      case 'exam_pin':
+        options = (providers.epins || []).map((x) => ({
+          id: x,
+          name: String(x).toUpperCase()
+        }));
+        break;
+
+      default:
+        options = [];
+        break;
+    }
+
+    return respondOk(res, {
+      serviceType,
+      options
+    }, 'Service options loaded');
+  } catch (err) {
+    console.error('LOAD PLANS ERROR:', err);
+    console.error('MESSAGE:', err?.message);
+    console.error('STACK:', err?.stack);
+    console.error('RESPONSE DATA:', err?.response?.data);
+
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.message || 'Unable to load plans'
+    );
+  }
+});
+      'data',
+      'cable_tv',
+      'electricity',
+      'betting',
+      'recharge_pin',
+      'data_pin',
+      'exam_pin'
+    ]);
+
+    if (!allowed.has(serviceType)) {
+      return respondError(res, 400, 'Unsupported service type');
+    }
+
+    if (serviceType === 'data' || serviceType === 'cable_tv') {
+      const service_id = String(
+        req.query.service_id ||
+        req.query.network ||
+        req.query.provider ||
+        ''
+      ).trim();
+
+      if (!service_id) {
+        return respondError(res, 400, 'service_id is required');
+      }
+
+      const product = serviceType === 'data' ? 'data' : 'cable';
+      const raw = await iacafe.getVariations({ product, service_id });
+
+      const list = extractArrayFromProviderResponse(raw).map((plan) => {
+        const normalized = normalizeProviderPlan(plan);
+        const pricing = buildRolePricing(serviceType, normalized.rawPrice, req.user.role, {
+          service_id
+        });
+
+        return {
+          ...normalized,
+          price: normalized.rawPrice,
+          pricing: {
+            basePrice: pricing.basePrice,
+            markupPercent: pricing.markupPercent,
+            markupFee: pricing.markupFee,
+            finalPriceBeforeAgentDiscount: pricing.finalPriceBeforeAgentDiscount,
+            agentDiscountPercent: pricing.agentDiscountPercent,
+            agentDiscountAmount: pricing.agentDiscountAmount,
+            finalPrice: pricing.finalPrice
+          }
+        };
+      });
+
+      return respondOk(res, {
+        serviceType: serviceType === 'data' ? 'data' : 'cable_tv',
+        service_id,
+        plans: list
+      }, `${serviceType === 'data' ? 'Data' : 'Cable'} plans loaded`);
+    }
+
+    const providersRes = await iacafe.getProviders().catch((err) => {
+      console.error('PROVIDERS ERROR:', err?.response?.data || err?.message);
+      return null;
+    });
+
+    const providers = providersRes?.data || {};
+    let options = [];
+
+    switch (serviceType) {
+      case 'airtime':
+        options = (providers.airtime || []).map((x) => ({
+          id: x,
+          name: String(x).toUpperCase()
+        }));
+        break;
+
+      case 'electricity':
+        options = (providers.electricity || []).map((x) => ({
+          id: x,
+          name: String(x).replace(/-/g, ' ').toUpperCase()
+        }));
+        break;
+
+      case 'betting':
+        options = (providers.betting || []).map((x) => ({
+          id: x,
+          name: x
+        }));
+        break;
+
+      case 'recharge_pin':
+      case 'data_pin':
+      case 'exam_pin':
+        options = (providers.epins || []).map((x) => ({
+          id: x,
+          name: String(x).toUpperCase()
+        }));
+        break;
+
+      default:
+        options = [];
+        break;
+    }
+
+    return respondOk(res, {
+      serviceType,
+      options
+    }, 'Service options loaded');
+  } catch (err) {
+    console.error('LOAD PLANS ERROR:', err);
+    console.error('MESSAGE:', err?.message);
+    console.error('STACK:', err?.stack);
+    console.error('RESPONSE DATA:', err?.response?.data);
+
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.message || 'Unable to load plans'
+    );
+  }
+});
+
+app.post('/api/services/data', requireAuth, async (req, res) => {
+  return processServicePayment(req, res, 'data', 'Data');
+});
+
+app.post('/api/services/airtime', requireAuth, async (req, res) => {
+  return processServicePayment(req, res, 'airtime', 'Airtime');
+});
+/* WEBHOOK */
+
+app.get('/api/webhooks/flutterwave', (req, res) => {
+  return res.status(200).send('Flutterwave webhook endpoint is live');
+});
+
+app.post('/api/webhooks/flutterwave', async (req, res) => {
+  try {
+    console.log('========== FLW WEBHOOK HIT ==========');
+    console.log('Expected Hash:', process.env.FLW_WEBHOOK_HASH);
+    console.log('Received Hash:', req.headers['verif-hash']);
+    console.log('Received x-flw-secret-hash:', req.headers['x-flw-secret-hash']);
+    console.log('Headers:', req.headers);
+    console.log('Raw Body:', req.rawBody);
+    console.log('Parsed Body:', req.body);
+
+    if (!isValidFlutterwaveWebhook(req)) {
+      console.log('INVALID FLW SIGNATURE');
+      return res.status(401).json({ success: false, message: 'Invalid webhook signature' });
+    }
+
+    console.log('SIGNATURE VERIFIED');
+
+    const body = req.body || {};
+    const eventType = String(body.event || body.event_type || body.type || '').trim().toLowerCase();
+
+    if (eventType && eventType !== 'charge.completed' && eventType !== 'transfer.completed' && eventType !== 'wallet.funding') {
+      return res.status(200).json({ received: true });
+    }
+
+    const data = body.data || body;
+    const amount = Number(data.amount || data.amount_charged || 0);
+    const reference = String(
+      data.tx_ref ||
+      data.reference ||
+      data.meta?.reference ||
+      body.tx_ref ||
+      body.reference ||
+      ''
+    ).trim();
+
+    if (!reference) {
+      console.log('NO REFERENCE IN WEBHOOK');
+      return res.status(200).json({ received: true });
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1
+       LIMIT 1`,
+      [reference]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) {
+      console.log('NO PAYMENT INTENT FOUND FOR', reference);
+      return res.status(200).json({ received: true });
+    }
+
+    const providerStatus = normalizeStatusValue(data.status || data.tx_status || body.status || '');
+
+    if (
+      providerStatus &&
+      !SUCCESS_STATUSES.has(providerStatus) &&
+      providerStatus !== 'successful' &&
+      providerStatus !== 'completed'
+    ) {
+      return res.status(200).json({ received: true });
+    }
+
+    const result = await processFundingSuccess({
+      reference,
+      amount,
+      flutterwaveData: data,
+      rawWebhook: body
+    });
+
+    if (!result.ok) {
+      console.log('FUNDING PROCESSING FAILED:', result.reason);
+      return res.status(200).json({ received: true });
+    }
+
+    clearPendingRequery(reference);
+
+    return res.status(200).json({ received: true, processed: true });
+  } catch (err) {
+    console.error('WEBHOOK ERROR:', err?.response?.data || err?.message || err);
+    return res.status(500).json({ success: false, message: 'Webhook error' });
+  }
+});
+
+app.post('/api/webhooks/iacafe', async (req, res) => {
+  try {
+    const payload = req.body || {};
+
+    const webhookSecret =
+      process.env.IACAFE_WEBHOOK_SECRET ||
+      process.env.ICAFE_WEBHOOK_SECRET ||
+      process.env.IACAFE_SECRET;
+
+    if (!verifyIacafeWebhookSignature(req, webhookSecret)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid webhook signature",
+      });
+    }
+
+    const event =
+      payload?.data && typeof payload.data === "object"
+        ? payload.data
+        : payload;
+
+    const requestId =
+      event.request_id ||
+      event.reference ||
+      event.tx_ref ||
+      event.transaction_id ||
+      event.id;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing request reference",
+      });
+    }
+
+    const providerResponse = {
+      ...payload,
+      ...event,
+    };
+
+    const result = await applyProviderOutcomeByReference({
+      requestId,
+      providerResponse,
+      source: "webhook",
+      webhookPayload: payload,
+    });
+
+    if (!result.found) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+
+    if (result.state === "pending" || result.state === "unknown") {
+      scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+    }
+
+    if (result.state === "success" || result.state === "failed") {
+      clearPendingRequery(requestId);
+    }
+
+    return res.json({
+      success: true,
+      message: "Webhook processed",
+      status: result.state,
+    });
+  } catch (err) {
+    console.error("ICAFE WEBHOOK ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: err?.message || "Webhook error",
+    });
+  }
+});
+
+/* BETTING */
+
+app.get('/api/services/betting/options', requireAuth, async (req, res) => {
+  try {
+    const providersRes = await iacafe.getProviders().catch((err) => {
+      console.error('BETTING PROVIDERS ERROR:', err?.response?.data || err?.message);
+      return null;
+    });
+
+    const providers = providersRes?.data || {};
+    const options = (providers.betting || []).map((x) => ({
+      id: x,
+      name: String(x).trim(),
+    }));
+
+    return respondOk(
+      res,
+      {
+        serviceType: 'betting',
+        options,
+      },
+      'Betting options loaded'
+    );
+  } catch (err) {
+    console.error('LOAD BETTING OPTIONS ERROR:', err);
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.message || 'Unable to load betting options'
+    );
+  }
+});
+
+/**
+ * Step 2: Verify betting customer before funding
+ * If customer_not_found, stop here.
+ */
+app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+
+    const customer_id = String(
+      body.customer_id ||
+      body.customerId ||
+      body.user_id ||
+      body.account_id ||
+      body.betting_id ||
+      ''
+    ).trim();
+
+    const service_id = String(
+      body.service_id ||
+      body.serviceId ||
+      body.provider ||
+      body.platform ||
+      ''
+    ).trim();
+
+    if (!customer_id || !service_id) {
+      return respondError(res, 400, 'customer_id and service_id are required');
+    }
+
+    const result = await iacafe.verifyBettingCustomer({
+      customer_id,
+      service_id,
+    });
+
+    const customerName =
+      result?.customer_name ||
+      result?.data?.customer_name ||
+      result?.name ||
+      result?.data?.name ||
+      result?.customer?.name ||
+      result?.data?.customer?.name ||
+      null;
+
+    return respondOk(
+      res,
+      {
+        verified: true,
+        customer_name: customerName,
+        customer_id,
+        service_id,
+        raw: result,
+      },
+      'Customer verified'
+    );
+  } catch (err) {
+    
