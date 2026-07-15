@@ -3576,28 +3576,39 @@ app.get('/api/services/betting/options', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Step 2: Verify betting customer before funding
+ * If customer_not_found, stop here.
+ */
 app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
   try {
-    const { customer_id, service_id } = pickBettingInputs(req.body);
+    const body = req.body || {};
 
-    const cleanCustomerId = String(customer_id || '').trim();
-    const cleanServiceId = normalizeBettingServiceId(service_id);
+    const customer_id = String(
+      body.customer_id ||
+      body.customerId ||
+      body.user_id ||
+      body.account_id ||
+      body.betting_id ||
+      ''
+    ).trim();
 
-    if (!cleanCustomerId || !cleanServiceId) {
+    const service_id = String(
+      body.service_id ||
+      body.serviceId ||
+      body.provider ||
+      body.platform ||
+      ''
+    ).trim();
+
+    if (!customer_id || !service_id) {
       return respondError(res, 400, 'customer_id and service_id are required');
     }
 
-    console.log('BETTING VERIFY INPUT:', {
-      customer_id: cleanCustomerId,
-      service_id: cleanServiceId
-    });
-
     const result = await iacafe.verifyBettingCustomer({
-      customer_id: cleanCustomerId,
-      service_id: cleanServiceId,
+      customer_id,
+      service_id,
     });
-
-    console.log('BETTING VERIFY RESULT:', result);
 
     const customerName =
       result?.customer_name ||
@@ -3613,8 +3624,8 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       {
         verified: true,
         customer_name: customerName,
-        customer_id: cleanCustomerId,
-        service_id: cleanServiceId,
+        customer_id,
+        service_id,
         raw: result,
       },
       'Customer verified'
@@ -3633,8 +3644,6 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       err?.message ||
       'Unable to verify customer';
 
-    console.error('BETTING VERIFY ERROR:', err?.response?.data || err?.message || err);
-
     return respondError(
       res,
       code === 'customer_not_found' ? 404 : 400,
@@ -3642,7 +3651,6 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
     );
   }
 });
-
 app.post('/api/services/betting', requireAuth, async (req, res) => {
   return processBettingPayment(req, res);
 });
