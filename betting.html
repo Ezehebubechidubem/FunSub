@@ -147,16 +147,33 @@
     { id: "MerryBet", name: "MerryBet", service_id: "MerryBet", logo: "https://i.postimg.cc/xyz/merrybet.png" },
     { id: "NaijaBet", name: "NaijaBet", service_id: "NaijaBet", logo: "https://i.postimg.cc/xyz/naijabet.png" },
     { id: "NairaBet", name: "NairaBet", service_id: "NairaBet", logo: "https://i.postimg.cc/xyz/nairabet.png" },
-    { id: "SupaBet", name: "SupaBet", service_id: "SupaBet", logo:     "https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg"}
+    { id: "SupaBet", name: "SupaBet", service_id: "SupaBet", logo: "https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg" }
   ];
+
   let currentPlatform = BETTING_PLATFORMS[0];
   let showAll = false;
   let verifiedAccountName = "";
-  let enteredPin = ""; let pendingPayload = null; let lastReceipt = null;
+  let enteredPin = "";
+  let pendingPayload = null;
+  let lastReceipt = null;
 
   function getToken() { return localStorage.getItem("funsub_token") || ""; }
-  function generateRequestId(prefix = "BET") { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`; }
+  function generateRequestId(prefix = "BET") {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  }
   function formatNaira(value) { return "₦" + Number(value).toLocaleString("en-NG"); }
+
+  function clearBettingInputs() {
+    const customerId = document.getElementById("customerId");
+    const amount = document.getElementById("amount");
+
+    if (customerId) customerId.value = "";
+    if (amount) amount.value = "";
+
+    verifiedAccountName = "";
+    const userInfo = document.getElementById("userInfo");
+    if (userInfo) userInfo.style.display = "none";
+  }
 
   function renderPlatforms() {
     const grid = document.getElementById("platformGrid");
@@ -164,60 +181,202 @@
     BETTING_PLATFORMS.forEach((p, index) => {
       const card = document.createElement("div");
       card.className = "platform-card";
-      if(index >= 4 &&!showAll) card.classList.add("hidden");
+      if (index >= 4 && !showAll) card.classList.add("hidden");
       card.innerHTML = `<img src="${p.logo}" onerror="this.style.display='none'"><span>${p.name}</span>`;
       card.onclick = () => {
         document.querySelectorAll(".platform-card").forEach(c => c.classList.remove("active"));
-        card.classList.add("active"); currentPlatform = p; resetVerification();
+        card.classList.add("active");
+        currentPlatform = p;
+        resetVerification();
       };
       grid.appendChild(card);
     });
-    document.querySelector('.platform-card').classList.add('active');
-    document.getElementById("showMoreBtn").innerText = showAll? "Show Less" : "Show More";
+
+    const firstCard = document.querySelector(".platform-card");
+    if (firstCard) firstCard.classList.add("active");
+    document.getElementById("showMoreBtn").innerText = showAll ? "Show Less" : "Show More";
   }
-  function togglePlatforms() { showAll =!showAll; renderPlatforms(); }
-  function resetVerification() { verifiedAccountName = ""; document.getElementById("userInfo").style.display = "none"; }
+
+  function togglePlatforms() { showAll = !showAll; renderPlatforms(); }
+  function resetVerification() {
+    verifiedAccountName = "";
+    document.getElementById("userInfo").style.display = "none";
+  }
 
   async function verifyCustomer() {
-    const token = getToken(); const customer_id = document.getElementById("customerId").value.trim();
-    if(!token) return alert("Please login first"); if(!customer_id) return alert("Enter User ID");
-    const btn = document.getElementById("verifyBtn"); btn.disabled = true; btn.innerText = "Verifying...";
+    const token = getToken();
+    const customer_id = document.getElementById("customerId").value.trim();
+    if (!token) return alert("Please login first");
+    if (!customer_id) return alert("Enter User ID");
+
+    const btn = document.getElementById("verifyBtn");
+    btn.disabled = true;
+    btn.innerText = "Verifying...";
+
     try {
-      const res = await fetch(VERIFY_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ customer_id, service_id: currentPlatform.service_id }) });
-      const data = await res.json();
-      if(res.ok) {
-        verifiedAccountName = data.customer_name || "Verified User";
+      const res = await fetch(VERIFY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customer_id,
+          service_id: currentPlatform.service_id
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        verifiedAccountName =
+          data.data?.customer_name ||
+          data.customer_name ||
+          "Verified User";
+
         document.getElementById("accountName").innerText = verifiedAccountName;
         document.getElementById("userInfo").style.display = "block";
-      } else { alert(data.message || "Verification failed"); resetVerification(); }
-    } catch(e){ alert("Unable to verify customer"); resetVerification(); }
-    finally { btn.disabled = false; btn.innerText = "Verify"; }
+      } else {
+        alert(data.message || "Verification failed");
+        resetVerification();
+      }
+    } catch (e) {
+      alert("Unable to verify customer");
+      resetVerification();
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "Verify";
+    }
   }
 
-  function openPinModal(payload) { enteredPin = ""; pendingPayload = payload; renderPinBoxes(); document.getElementById("pinOverlay").style.display = "flex"; }
-  function closePinModal() { document.getElementById("pinOverlay").style.display = "none"; }
-  function renderPinBoxes() { for (let i = 0; i < 4; i++) { const box = document.getElementById(`pinBox${i}`); const hasDigit = i < enteredPin.length; box.textContent = hasDigit? "•" : ""; box.classList.toggle("filled", hasDigit); } }
-  function pressPin(digit) { if (enteredPin.length >= 4) return; enteredPin += digit; renderPinBoxes(); if (enteredPin.length === 4) { const payload = pendingPayload; closePinModal(); sendBettingRequest(payload, enteredPin); } }
-  function backspacePin() { enteredPin = enteredPin.slice(0, -1); renderPinBoxes(); }
+  function openPinModal(payload) {
+    enteredPin = "";
+    pendingPayload = payload;
+    renderPinBoxes();
+    document.getElementById("pinOverlay").style.display = "flex";
+  }
+
+  function closePinModal() {
+    document.getElementById("pinOverlay").style.display = "none";
+  }
+
+  function renderPinBoxes() {
+    for (let i = 0; i < 4; i++) {
+      const box = document.getElementById(`pinBox${i}`);
+      const hasDigit = i < enteredPin.length;
+      box.textContent = hasDigit ? "•" : "";
+      box.classList.toggle("filled", hasDigit);
+    }
+  }
+
+  function pressPin(digit) {
+    if (enteredPin.length >= 4) return;
+    enteredPin += digit;
+    renderPinBoxes();
+
+    if (enteredPin.length === 4) {
+      const payload = pendingPayload;
+      closePinModal();
+      sendBettingRequest(payload, enteredPin);
+    }
+  }
+
+  function backspacePin() {
+    enteredPin = enteredPin.slice(0, -1);
+    renderPinBoxes();
+  }
 
   async function buyBetting() {
-    const token = getToken(); const customer_id = document.getElementById("customerId").value.trim(); const amount = document.getElementById("amount").value;
-    if (!token) return alert("Please login first"); if (!customer_id) return alert("Enter User ID"); if (!verifiedAccountName) return alert("Please verify User ID first"); if (!amount || amount <= 0) return alert("Enter valid amount");
-    openPinModal({ token, customer_id, service_id: currentPlatform.service_id, amount: Number(amount), platformName: currentPlatform.name });
+    const token = getToken();
+    const customer_id = document.getElementById("customerId").value.trim();
+    const amount = document.getElementById("amount").value;
+
+    if (!token) return alert("Please login first");
+    if (!customer_id) return alert("Enter User ID");
+    if (!verifiedAccountName) return alert("Please verify User ID first");
+    if (!amount || amount <= 0) return alert("Enter valid amount");
+
+    openPinModal({
+      token,
+      customer_id,
+      service_id: currentPlatform.service_id,
+      amount: Number(amount),
+      platformName: currentPlatform.name
+    });
   }
 
   async function sendBettingRequest(payload, fundPin) {
-    const { token, customer_id, service_id, amount, platformName } = payload; const request_id = generateRequestId("BET");
-    showProcessingModal(); const buyBtn = document.getElementById("buyBtn"); buyBtn.disabled = true; buyBtn.innerText = "Processing...";
+    const { token, customer_id, service_id, amount, platformName } = payload;
+    const request_id = generateRequestId("BET");
+
+    showProcessingModal();
+
+    const buyBtn = document.getElementById("buyBtn");
+    buyBtn.disabled = true;
+    buyBtn.innerText = "Processing...";
+
+    // Clear inputs immediately after submission is handed off
+    clearBettingInputs();
+
     try {
-      const response = await fetch(BUY_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ request_id, customer_id, service_id, amount, fundPin }) });
-      const data = await response.json(); const status = String(data.status || data.result?.status || "").toLowerCase(); const reference = data.reference || data.result?.reference || request_id;
-      if(response.ok && (data.success || status === "success")) {
-        showSuccessModal(data.message || "Transaction successful"); setReceiptValues({ platformName, customer_id, account_name: verifiedAccountName, amount, reference, status: "success" });
-      } else if(status === "pending") { showPendingModal(data.message || "Transaction pending"); setReceiptValues({ platformName, customer_id, account_name: verifiedAccountName, amount, reference, status: "pending" }); }
-      else { showFailedModal(data.message || "Transaction failed"); }
-    } catch(error){ showFailedModal("Unable to complete transaction"); }
-    finally { buyBtn.disabled = false; buyBtn.innerText = "Pay"; }
+      const response = await fetch(BUY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          request_id,
+          customer_id,
+          service_id,
+          amount,
+          fundPin
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const status = String(
+        data.data?.transaction?.status ||
+        data.transaction?.status ||
+        data.status ||
+        ""
+      ).toLowerCase();
+
+      const reference =
+        data.data?.request_id ||
+        data.data?.transaction?.reference ||
+        data.reference ||
+        request_id;
+
+      if (response.ok && (data.success || status === "success")) {
+        showSuccessModal(data.message || "Transaction successful");
+        setReceiptValues({
+          platformName,
+          customer_id,
+          account_name: verifiedAccountName,
+          amount,
+          reference,
+          status: "success"
+        });
+      } else if (status === "pending") {
+        showPendingModal(data.message || "Transaction pending");
+        setReceiptValues({
+          platformName,
+          customer_id,
+          account_name: verifiedAccountName,
+          amount,
+          reference,
+          status: "pending"
+        });
+      } else {
+        showFailedModal(data.message || "Transaction failed");
+      }
+    } catch (error) {
+      showFailedModal("Unable to complete transaction");
+    } finally {
+      buyBtn.disabled = false;
+      buyBtn.innerText = "Pay";
+    }
   }
 
   function setReceiptValues({ platformName, customer_id, account_name, amount, reference, status }) {
@@ -229,20 +388,97 @@
     document.getElementById("receiptStatus").innerText = status;
     document.getElementById("receiptDate").innerText = new Date().toLocaleString();
     document.getElementById("receiptSection").style.display = "block";
-    lastReceipt = { platformName, customer_id, account_name, amount: formatNaira(amount), reference, status, date: new Date().toLocaleString() };
-  }
-  function buildReceiptText() { if (!lastReceipt) return ""; const r = lastReceipt; return [`FunSub Betting Receipt`,`Platform: ${r.platformName}`,`User ID: ${r.customer_id}`,`Account Name: ${r.account_name}`,`Amount: ${r.amount}`,`Reference: ${r.reference}`,`Status: ${r.status}`,`Date: ${r.date}`].join("\n"); }
-  async function shareReceipt() { const text = buildReceiptText(); if (!text) return; if (navigator.share) { try { await navigator.share({ title: "FunSub Betting Receipt", text }); return; } catch(e){} } alert("Sharing is not supported"); }
 
-  function showProcessingModal() { document.getElementById("transactionModal").style.display = "flex"; document.getElementById("receiptSection").style.display = "none"; document.getElementById("transactionIcon").className = "transaction-icon"; document.getElementById("transactionIcon").innerHTML = "⏳"; document.getElementById("transactionTitle").innerText = "Processing Transaction"; document.getElementById("transactionMessage").innerText = "Please wait..."; }
-  function showPendingModal(message) { document.getElementById("transactionModal").style.display = "flex"; document.getElementById("receiptSection").style.display = "none"; document.getElementById("transactionIcon").className = "transaction-icon pending"; document.getElementById("transactionIcon").innerHTML = "🟡"; document.getElementById("transactionTitle").innerText = "Transaction Pending"; document.getElementById("transactionMessage").innerText = message || "Your transaction is pending."; }
-  function showFailedModal(message) { document.getElementById("transactionModal").style.display = "flex"; document.getElementById("receiptSection").style.display = "none"; document.getElementById("transactionIcon").className = "transaction-icon failed"; document.getElementById("transactionIcon").innerHTML = "❌"; document.getElementById("transactionTitle").innerText = "Transaction Failed"; document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction."; }
-  function showSuccessModal(message) { document.getElementById("transactionModal").style.display = "flex"; document.getElementById("receiptSection").style.display = "block"; document.getElementById("transactionIcon").className = "transaction-icon success"; document.getElementById("transactionIcon").innerHTML = "✅"; document.getElementById("transactionTitle").innerText = "Transaction Successful"; document.getElementById("transactionMessage").innerText = message || "Transaction successful"; }
-  function closeModal() { document.getElementById("transactionModal").style.display = "none"; }
+    lastReceipt = {
+      platformName,
+      customer_id,
+      account_name,
+      amount: formatNaira(amount),
+      reference,
+      status,
+      date: new Date().toLocaleString()
+    };
+  }
+
+  function buildReceiptText() {
+    if (!lastReceipt) return "";
+    const r = lastReceipt;
+    return [
+      "FunSub Betting Receipt",
+      `Platform: ${r.platformName}`,
+      `User ID: ${r.customer_id}`,
+      `Account Name: ${r.account_name}`,
+      `Amount: ${r.amount}`,
+      `Reference: ${r.reference}`,
+      `Status: ${r.status}`,
+      `Date: ${r.date}`
+    ].join("\n");
+  }
+
+  async function shareReceipt() {
+    const text = buildReceiptText();
+    if (!text) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "FunSub Betting Receipt", text });
+        return;
+      } catch (e) {}
+    }
+
+    alert("Sharing is not supported");
+  }
+
+  function showProcessingModal() {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "none";
+    document.getElementById("transactionIcon").className = "transaction-icon";
+    document.getElementById("transactionIcon").innerHTML = "⏳";
+    document.getElementById("transactionTitle").innerText = "Processing Transaction";
+    document.getElementById("transactionMessage").innerText = "Please wait...";
+  }
+
+  function showPendingModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "none";
+    document.getElementById("transactionIcon").className = "transaction-icon pending";
+    document.getElementById("transactionIcon").innerHTML = "🟡";
+    document.getElementById("transactionTitle").innerText = "Transaction Pending";
+    document.getElementById("transactionMessage").innerText = message || "Your transaction is pending.";
+  }
+
+  function showFailedModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "none";
+    document.getElementById("transactionIcon").className = "transaction-icon failed";
+    document.getElementById("transactionIcon").innerHTML = "❌";
+    document.getElementById("transactionTitle").innerText = "Transaction Failed";
+    document.getElementById("transactionMessage").innerText = message || "Unable to complete transaction.";
+  }
+
+  function showSuccessModal(message) {
+    document.getElementById("transactionModal").style.display = "flex";
+    document.getElementById("receiptSection").style.display = "block";
+    document.getElementById("transactionIcon").className = "transaction-icon success";
+    document.getElementById("transactionIcon").innerHTML = "✅";
+    document.getElementById("transactionTitle").innerText = "Transaction Successful";
+    document.getElementById("transactionMessage").innerText = message || "Transaction successful";
+  }
+
+  function closeModal() {
+    document.getElementById("transactionModal").style.display = "none";
+  }
 
   document.getElementById("buyBtn").addEventListener("click", buyBetting);
   window.addEventListener("DOMContentLoaded", renderPlatforms);
-  document.addEventListener("keydown", (e) => { if (document.getElementById("pinOverlay").style.display === "flex") { if (/^\d$/.test(e.key)) pressPin(e.key); if (e.key === "Backspace") backspacePin(); if (e.key === "Escape") closePinModal(); } });
+
+  document.addEventListener("keydown", (e) => {
+    if (document.getElementById("pinOverlay").style.display === "flex") {
+      if (/^\d$/.test(e.key)) pressPin(e.key);
+      if (e.key === "Backspace") backspacePin();
+      if (e.key === "Escape") closePinModal();
+    }
+  });
 </script>
 </body>
 </html>
