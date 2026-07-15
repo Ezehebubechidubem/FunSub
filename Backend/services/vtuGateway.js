@@ -143,6 +143,15 @@ function createVtuGateway({ primary, fallback }) {
   const p = new ProviderClient(primary);
   const f = fallback ? new ProviderClient(fallback) : null;
 
+async function withFallback(primaryFn, fallbackFn) {
+    try {
+      return await primaryFn();
+    } catch (err) {
+      if (!f) throw err;
+      if (!isRetryableError(err)) throw err;
+      return await fallbackFn();
+    }
+  }
   const primaryBettingVerifyPath = primary?.bettingVerifyPath || "/verify-customer";
   const primaryBettingBuyPath = primary?.bettingBuyPath || "/betting";
 
