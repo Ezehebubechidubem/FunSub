@@ -242,7 +242,6 @@ function normalizeBettingServiceId(value) {
 }
 
 function getBettingProviderState(payload) {
-  const success = Boolean(payload?.success);
   const status = String(
     payload?.status ||
     payload?.data?.status ||
@@ -251,16 +250,22 @@ function getBettingProviderState(payload) {
     ''
   ).trim().toLowerCase();
 
-  if (success && (status === 'completed' || status === 'completed-api' || status === 'success')) {
+  const success = Boolean(payload?.success);
+
+  if (status === 'completed-api' || status === 'completed' || status === 'success') {
     return 'success';
   }
 
-  if (success && (status === 'processing' || status === 'processing-api' || status === 'pending' || status === 'unknown')) {
+  if (status === 'refunded-api' || status === 'failed' || status === 'refund' || status === 'declined') {
+    return 'failed';
+  }
+
+  if (status === 'processing-api' || status === 'processing' || status === 'pending' || status === 'unknown') {
     return 'pending';
   }
 
-  if (!success || status === 'failed' || status === 'refunded-api' || status === 'refund' || status === 'declined') {
-    return 'failed';
+  if (success) {
+    return 'pending';
   }
 
   return 'pending';
@@ -279,13 +284,13 @@ function getBettingWebhookReference(payload) {
   ).trim();
 }
 
-async function applyProviderOutcomeByReference(reference, payload = {}) {
+async function applyProviderOutcomeByReference(reference, payload = {}, extraMeta = {}) {
   const ref = String(reference || getBettingWebhookReference(payload)).trim();
   if (!ref) {
     throw new Error('Reference is required');
   }
 
-  const providerState = getBettingProviderState(payload);
+  const state = getBettingProviderState(payload);
   const webhookStatus = String(
     payload?.status ||
     payload?.data?.status ||
@@ -310,13 +315,19 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
     const txRow = txResult.rows[0];
     if (!txRow) {
       await client.query('ROLLBACK');
-      return { found: false, applied: false, message: 'Transaction not found' };
+      return { found: false, applied: false, state: 'unknown', status: 'unknown', message: 'Transaction not found' };
     }
 
     const currentStatus = String(txRow.status || '').toLowerCase();
     if (currentStatus === 'success' || currentStatus === 'failed' || currentStatus === 'reversed') {
       await client.query('ROLLBACK');
-      return { found: true, applied: false, message: `Transaction already ${currentStatus}` };
+      return {
+        found: true,
+        applied: false,
+        state: currentStatus,
+        status: currentStatus,
+        message: `Transaction already ${currentStatus}`
+      };
     }
 
     const meta = safeJsonParse(txRow.meta, {});
@@ -335,7 +346,7 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
       baseAmount
     );
 
-    if (providerState === 'success') {
+    if (state === 'success') {
       const refundAmount = Math.max(0, baseAmount - amountCharged);
 
       if (refundAmount > 0) {
@@ -359,6 +370,7 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
           txRow.description || 'Betting funded successfully',
           JSON.stringify({
             ...meta,
+            ...extraMeta,
             webhookPayload: payload,
             webhookStatus,
             amountRequested,
@@ -370,10 +382,16 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
       );
 
       await client.query('COMMIT');
-      return { found: true, applied: true, status: 'success', transactionId: txRow.id };
+      return {
+        found: true,
+        applied: true,
+        state: 'success',
+        status: 'success',
+        transactionId: txRow.id
+      };
     }
 
-    if (providerState === 'failed') {
+    if (state === 'failed') {
       await client.query(
         `UPDATE wallets
          SET balance = balance + $2,
@@ -393,6 +411,7 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
           txRow.description || 'Betting refunded',
           JSON.stringify({
             ...meta,
+            ...extraMeta,
             webhookPayload: payload,
             webhookStatus,
             amountRequested,
@@ -404,7 +423,13 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
       );
 
       await client.query('COMMIT');
-      return { found: true, applied: true, status: 'failed', transactionId: txRow.id };
+      return {
+        found: true,
+        applied: true,
+        state: 'failed',
+        status: 'failed',
+        transactionId: txRow.id
+      };
     }
 
     await client.query(
@@ -416,6 +441,7 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
         txRow.id,
         JSON.stringify({
           ...meta,
+          ...extraMeta,
           webhookPayload: payload,
           webhookStatus,
           amountRequested,
@@ -426,7 +452,13 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
     );
 
     await client.query('COMMIT');
-    return { found: true, applied: true, status: 'pending', transactionId: txRow.id };
+    return {
+      found: true,
+      applied: true,
+      state: 'pending',
+      status: 'pending',
+      transactionId: txRow.id
+    };
   } catch (err) {
     try {
       await client.query('ROLLBACK');
@@ -436,7 +468,6 @@ async function applyProviderOutcomeByReference(reference, payload = {}) {
     client.release();
   }
 }
-
 function extractProviderText(response) {
   const payload =
     response?.data &&
@@ -3764,12 +3795,13 @@ app.post('/api/webhooks/iacafe', async (req, res) => {
     }
 
     const event =
-      payload?.data && typeof payload.data === "object"
+      payload?.data && typeof payload.data === 'object'
         ? payload.data
         : payload;
 
     const requestId =
       event.request_id ||
+      event.requestId ||
       event.reference ||
       event.tx_ref ||
       event.transaction_id ||
@@ -3787,12 +3819,11 @@ app.post('/api/webhooks/iacafe', async (req, res) => {
       ...event,
     };
 
-    const result = await applyProviderOutcomeByReference({
+    const result = await applyProviderOutcomeByReference(
       requestId,
       providerResponse,
-      source: "webhook",
-      webhookPayload: payload,
-    });
+      { source: "webhook", webhookPayload: payload }
+    );
 
     if (!result.found) {
       return res.status(404).json({
@@ -3801,18 +3832,20 @@ app.post('/api/webhooks/iacafe', async (req, res) => {
       });
     }
 
-    if (result.state === "pending" || result.state === "unknown") {
+    const state = result.state || result.status || 'unknown';
+
+    if (state === "pending" || state === "unknown") {
       scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
     }
 
-    if (result.state === "success" || result.state === "failed") {
+    if (state === "success" || state === "failed") {
       clearPendingRequery(requestId);
     }
 
     return res.json({
       success: true,
       message: "Webhook processed",
-      status: result.state,
+      status: state,
     });
   } catch (err) {
     console.error("ICAFE WEBHOOK ERROR:", err);
