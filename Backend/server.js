@@ -209,8 +209,232 @@ async function verifyFundPin(userId, fundPin) {
   return bcrypt.compare(String(fundPin), user.fund_pin_hash);
 }
 
+function safeJsonParse(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function normalizeBettingServiceId(value) {
-  return String(value || '').trim();
+  const s = String(value || '').trim().toLowerCase();
+
+  const map = {
+    '1xbet': '1xBet',
+    'bangbet': 'BangBet',
+    'bet9ja': 'Bet9ja',
+    'betking': 'BetKing',
+    'betland': 'BetLand',
+    'betlion': 'BetLion',
+    'betway': 'BetWay',
+    'cloudbet': 'CloudBet',
+    'livescorebet': 'LiveScoreBet',
+    'merrybet': 'MerryBet',
+    'naijabet': 'NaijaBet',
+    'nairabet': 'NairaBet',
+    'supabet': 'SupaBet'
+  };
+
+  return map[s] || String(value || '').trim();
+}
+
+function getBettingProviderState(payload) {
+  const success = Boolean(payload?.success);
+  const status = String(
+    payload?.status ||
+    payload?.data?.status ||
+    payload?.result?.status ||
+    payload?.error?.status ||
+    ''
+  ).trim().toLowerCase();
+
+  if (success && (status === 'completed' || status === 'completed-api' || status === 'success')) {
+    return 'success';
+  }
+
+  if (success && (status === 'processing' || status === 'processing-api' || status === 'pending' || status === 'unknown')) {
+    return 'pending';
+  }
+
+  if (!success || status === 'failed' || status === 'refunded-api' || status === 'refund' || status === 'declined') {
+    return 'failed';
+  }
+
+  return 'pending';
+}
+
+function getBettingWebhookReference(payload) {
+  return String(
+    payload?.request_id ||
+    payload?.requestId ||
+    payload?.reference ||
+    payload?.ref ||
+    payload?.data?.request_id ||
+    payload?.data?.requestId ||
+    payload?.data?.reference ||
+    ''
+  ).trim();
+}
+
+async function applyProviderOutcomeByReference(reference, payload = {}) {
+  const ref = String(reference || getBettingWebhookReference(payload)).trim();
+  if (!ref) {
+    throw new Error('Reference is required');
+  }
+
+  const providerState = getBettingProviderState(payload);
+  const webhookStatus = String(
+    payload?.status ||
+    payload?.data?.status ||
+    payload?.result?.status ||
+    ''
+  ).trim().toLowerCase();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const txResult = await client.query(
+      `SELECT *
+       FROM transactions
+       WHERE reference = $1
+          OR (meta::jsonb ->> 'request_id') = $1
+          OR (meta::jsonb ->> 'requestId') = $1
+       FOR UPDATE`,
+      [ref]
+    );
+
+    const txRow = txResult.rows[0];
+    if (!txRow) {
+      await client.query('ROLLBACK');
+      return { found: false, applied: false, message: 'Transaction not found' };
+    }
+
+    const currentStatus = String(txRow.status || '').toLowerCase();
+    if (currentStatus === 'success' || currentStatus === 'failed' || currentStatus === 'reversed') {
+      await client.query('ROLLBACK');
+      return { found: true, applied: false, message: `Transaction already ${currentStatus}` };
+    }
+
+    const meta = safeJsonParse(txRow.meta, {});
+    const baseAmount = Number(txRow.amount || 0);
+    const amountCharged = Number(
+      payload?.amount_charged ??
+      payload?.data?.amount_charged ??
+      payload?.amountCharged ??
+      payload?.data?.amountCharged ??
+      baseAmount
+    );
+
+    const amountRequested = Number(
+      payload?.amount ??
+      payload?.data?.amount ??
+      baseAmount
+    );
+
+    if (providerState === 'success') {
+      const refundAmount = Math.max(0, baseAmount - amountCharged);
+
+      if (refundAmount > 0) {
+        await client.query(
+          `UPDATE wallets
+           SET balance = balance + $2,
+               updated_at = NOW()
+           WHERE user_id = $1`,
+          [txRow.user_id, refundAmount]
+        );
+      }
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'success',
+             description = COALESCE(description, $2),
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          txRow.description || 'Betting funded successfully',
+          JSON.stringify({
+            ...meta,
+            webhookPayload: payload,
+            webhookStatus,
+            amountRequested,
+            amountCharged,
+            refundAmount,
+            settledAt: new Date().toISOString()
+          })
+        ]
+      );
+
+      await client.query('COMMIT');
+      return { found: true, applied: true, status: 'success', transactionId: txRow.id };
+    }
+
+    if (providerState === 'failed') {
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [txRow.user_id, baseAmount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'failed',
+             description = COALESCE(description, $2),
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          txRow.description || 'Betting refunded',
+          JSON.stringify({
+            ...meta,
+            webhookPayload: payload,
+            webhookStatus,
+            amountRequested,
+            amountCharged,
+            refundedAmount: baseAmount,
+            settledAt: new Date().toISOString()
+          })
+        ]
+      );
+
+      await client.query('COMMIT');
+      return { found: true, applied: true, status: 'failed', transactionId: txRow.id };
+    }
+
+    await client.query(
+      `UPDATE transactions
+       SET status = 'pending',
+           meta = $2
+       WHERE id = $1`,
+      [
+        txRow.id,
+        JSON.stringify({
+          ...meta,
+          webhookPayload: payload,
+          webhookStatus,
+          amountRequested,
+          amountCharged,
+          updatedAt: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query('COMMIT');
+    return { found: true, applied: true, status: 'pending', transactionId: txRow.id };
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 function extractProviderText(response) {
