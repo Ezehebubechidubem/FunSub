@@ -19,7 +19,8 @@ const {
   getMarkupPercent,
   applyAgentDiscount,
   normalizeServiceType: normalizeMarkupServiceType,
-  buildRolePricing
+  buildRolePricing,
+normalizeBettingServiceId
 } = require('./markup');
 
 const app = express();
