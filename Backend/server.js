@@ -2115,4 +2115,642 @@ async function ensurePricingRule(serviceType) {
 
   const found = await query(
     `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
-    [normal
+    [normalized]
+  );
+
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, true, NOW(), NOW())
+     RETURNING *`,
+    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
+  );
+
+  return created.rows[0];
+}
+
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
+}
+
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
+
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
+}
+function ensureHttpUrl(value, name) {
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(`${name} is invalid: ${value}`);
+  }
+  return value;
+}
+
+async function ensureWallet(userId) {
+  const found = await query('SELECT * FROM wallets WHERE user_id = $1 LIMIT 1', [userId]);
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO wallets (id, user_id, balance, currency)
+     VALUES ($1, $2, 0, 'NGN')
+     RETURNING *`,
+    [uid('wal_'), userId]
+  );
+  return created.rows[0];
+}
+
+async function addNotification(userId, title, message, meta = {}, isSystem = true) {
+  await query(
+    `INSERT INTO notifications
+     (id, user_id, title, message, meta, is_read, is_system, created_at)
+     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
+    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
+  );
+}
+
+async function addTransaction({
+  userId,
+  type,
+  category,
+  amount,
+  currency = 'NGN',
+  status = 'success',
+  reference,
+  description,
+  meta = {}
+}) {
+  const txRef = reference || uid('ref_');
+
+  const inserted = await query(
+    `INSERT INTO transactions
+     (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+     RETURNING *`,
+    [
+      uid('tx_'),
+      userId,
+      type,
+      category,
+      amount,
+      currency,
+      status,
+      txRef,
+      description,
+      JSON.stringify(meta)
+    ]
+  );
+
+  return inserted.rows[0];
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    console.log('================ AUTH DEBUG ================');
+
+    const authHeaderValue = req.headers.authorization;
+
+    console.log('AUTH HEADER:', authHeaderValue);
+
+    if (!authHeaderValue) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authorization header missing'
+      });
+    }
+
+    if (!authHeaderValue.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authorization format'
+      });
+    }
+
+    const token = authHeaderValue.split(' ')[1];
+
+    console.log('TOKEN:', token);
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    console.log('DECODED TOKEN USER:', decoded);
+
+    const userResult = await query(
+      `SELECT
+         id,
+         role,
+         full_name,
+         email,
+         phone,
+         state,
+         avatar_url,
+         kyc_status,
+         profile_complete,
+         online,
+         last_login_at,
+         created_at,
+         updated_at,
+         fund_pin_hash,
+         fund_pin_set,
+         fund_pin_failed_attempts,
+         fund_pin_locked_until
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [decoded.id]
+    );
+
+    const dbUser = userResult.rows[0];
+
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      ...dbUser
+    };
+
+    console.log('AUTH SUCCESS');
+    console.log('CURRENT USER FROM DB:', req.user);
+    console.log('============================================');
+
+    next();
+  } catch (err) {
+    console.log('AUTH FAILED');
+    console.log('ERROR MESSAGE:', err.message);
+    console.log('============================================');
+
+    return res.status(401).json({
+      success: false,
+      message: err.message || 'Unauthorized'
+    });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  try {
+    const token = authHeader(req);
+    if (!token) return respondError(res, 401, 'Unauthorized');
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') return respondError(res, 403, 'Admin access required');
+
+    if (ADMIN_API_KEY) {
+      const got = req.headers['x-admin-key'] || req.query.admin_key;
+      if (got !== ADMIN_API_KEY) return respondError(res, 403, 'Invalid admin key');
+    }
+
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return respondError(res, 401, 'Unauthorized');
+  }
+}
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const {
+      fullName,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      state,
+      fundPin
+    } = req.body || {};
+
+    if (!fullName || !email || !phone || !password || !confirmPassword || !state || !fundPin) {
+      return respondError(res, 400, 'All fields are required');
+    }
+
+    if (String(password).length < 6) {
+      return respondError(res, 400, 'Password must be at least 6 characters');
+    }
+
+    if (String(password) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const cleanFundPin = String(fundPin).trim();
+    if (!/^\d{4}$/.test(cleanFundPin)) {
+      return respondError(res, 400, 'Fund PIN must be exactly 4 digits');
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const exists = await query(
+      'SELECT id FROM users WHERE email = $1 OR phone = $2 LIMIT 1',
+      [normalizedEmail, normalizedPhone]
+    );
+
+    if (exists.rows[0]) {
+      return respondError(res, 409, 'User already exists');
+    }
+
+    const password_hash = await bcrypt.hash(String(password), 10);
+    const fund_pin_hash = await bcrypt.hash(cleanFundPin, 10);
+    const userId = uid('usr_');
+
+    const inserted = await query(
+      `INSERT INTO users
+       (id, role, full_name, email, phone, password_hash, fund_pin_hash, fund_pin_set, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at)
+       VALUES
+       ($1, 'user', $2, $3, $4, $5, $6, true, $7, NULL, 'unverified', false, false, NOW(), NOW())
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, fund_pin_set`,
+      [
+        userId,
+        fullName.trim(),
+        normalizedEmail,
+        normalizedPhone,
+        password_hash,
+        fund_pin_hash,
+        state.trim()
+      ]
+    );
+
+    await ensureWallet(userId);
+    await addNotification(userId, 'Welcome to PhoneStop', 'Registration successful', { type: 'auth' }, true);
+
+    const token = signToken({ id: userId, role: 'user', fundPinSet: true });
+
+    return respondOk(res, {
+      token,
+      user: inserted.rows[0]
+    }, 'Registration successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { identifier, email, phone, password } = req.body || {};
+    const raw = identifier || email || phone || '';
+    const cleanEmail = normalizeEmail(raw);
+    const cleanPhone = normalizePhone(raw);
+
+    if (!raw || !password) {
+      return respondError(res, 400, 'Identifier and password are required');
+    }
+
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, password_hash, state, avatar_url, kyc_status, profile_complete, online, created_at
+       FROM users
+       WHERE email = $1 OR phone = $2
+       LIMIT 1`,
+      [cleanEmail, cleanPhone]
+    );
+
+    const user = result.rows[0];
+    if (!user) return respondError(res, 401, 'Invalid credentials');
+
+    const ok = await bcrypt.compare(String(password), user.password_hash);
+    if (!ok) return respondError(res, 401, 'Invalid credentials');
+
+    await query(
+      `UPDATE users
+       SET online = true, last_login_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [user.id]
+    );
+
+    const wallet = await ensureWallet(user.id);
+    const token = signToken({ id: user.id, role: user.role });
+
+    await addNotification(user.id, 'Login successful', 'You are now logged in', { type: 'auth' }, true);
+
+    return respondOk(res, {
+      token,
+      user: { ...user, password_hash: undefined },
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    }, 'Login successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/fund-pin', requireAuth, async (req, res) => {
+  try {
+    const { oldPin, newPin } = req.body || {};
+
+    if (!oldPin || !newPin) {
+      return respondError(res, 400, 'oldPin and newPin are required');
+    }
+
+    if (!/^\d{4}$/.test(String(newPin))) {
+      return respondError(res, 400, 'New fund PIN must be exactly 4 digits');
+    }
+
+    const ok = await verifyFundPin(req.user.id, oldPin);
+    if (!ok) {
+      return respondError(res, 400, 'Invalid current fund PIN');
+    }
+
+    const newHash = await bcrypt.hash(String(newPin), 10);
+
+    await query(
+      `UPDATE users
+       SET fund_pin_hash = $2,
+           fund_pin_set = true,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, newHash]
+    );
+
+    return respondOk(res, {}, 'Fund PIN updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to update fund PIN');
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const result = await query(
+    `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at, last_login_at
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  const wallet = await ensureWallet(userId);
+
+  return respondOk(res, {
+    user: result.rows[0],
+    wallet: {
+      id: wallet.id,
+      balance: Number(wallet.balance).toFixed(2),
+      currency: wallet.currency
+    }
+  });
+});
+
+app.patch('/api/auth/profile', requireAuth, async (req, res) => {
+  try {
+    const { fullName, state } = req.body || {};
+
+    const result = await query(
+      `UPDATE users
+       SET full_name = COALESCE($2, full_name),
+           state = COALESCE($3, state),
+           profile_complete = true,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete`,
+      [req.user.id, fullName ? String(fullName).trim() : null, state ? String(state).trim() : null]
+    );
+
+    return respondOk(res, { user: result.rows[0] }, 'Profile updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return respondError(res, 400, 'Avatar file is required');
+
+    const avatar_url = `/uploads/avatars/${req.file.filename}`;
+
+    const result = await query(
+      `UPDATE users
+       SET avatar_url = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, full_name, email, phone, avatar_url`,
+      [req.user.id, avatar_url]
+    );
+
+    await addNotification(req.user.id, 'Profile image updated', 'Your profile picture was updated', { avatar_url }, true);
+
+    return respondOk(res, { user: result.rows[0], avatar_url }, 'Avatar updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return respondError(res, 400, 'All password fields are required');
+    }
+
+    if (String(newPassword).length < 6) {
+      return respondError(res, 400, 'New password must be at least 6 characters');
+    }
+
+    if (String(newPassword) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const result = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return respondError(res, 404, 'User not found');
+
+    const ok = await bcrypt.compare(String(currentPassword), user.password_hash);
+    if (!ok) return respondError(res, 400, 'Current password is incorrect');
+
+    const password_hash = await bcrypt.hash(String(newPassword), 10);
+
+    await query(
+      `UPDATE users
+       SET password_hash = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, password_hash]
+    );
+
+    await addNotification(req.user.id, 'Password changed', 'Your password was updated successfully', { type: 'security' }, true);
+
+    return respondOk(res, {}, 'Password updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/wallet/balance', requireAuth, async (req, res) => {
+  try {
+    const wallet = await ensureWallet(req.user.id);
+    return respondOk(res, {
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
+  try {
+    const { amount } = req.body || {};
+    const amt = toNumber(amount, 0);
+
+    if (amt < 100) {
+      return respondError(res, 400, 'Minimum funding amount is 100');
+    }
+
+    const userResult = await query(
+      `SELECT id, full_name, email, phone
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      return respondError(res, 404, 'User not found');
+    }
+
+    const reference = flutterwaveTxRef('fund');
+
+    const virtualAccount = await flutterwaveCreateVirtualAccount({
+      amount: amt,
+      user,
+      reference
+    });
+
+    const accountNumber =
+      virtualAccount?.account_number ||
+      virtualAccount?.data?.account_number ||
+      null;
+
+    const bankName =
+      virtualAccount?.bank_name ||
+      virtualAccount?.data?.bank_name ||
+      null;
+
+    const accountName =
+      virtualAccount?.account_name ||
+      virtualAccount?.data?.account_name ||
+      user.full_name ||
+      user.email ||
+      'Wallet funding';
+
+    const expiryDate =
+      virtualAccount?.expiry_date ||
+      virtualAccount?.data?.expiry_date ||
+      null;
+
+    const intentMeta = {
+      purpose: 'wallet_funding',
+      accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+      virtualAccount
+    };
+
+    await query(
+      `INSERT INTO payment_intents
+       (id, user_id, tx_ref, amount, currency, provider, status, meta, created_at)
+       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, NOW())`,
+      [
+        uid('pit_'),
+        user.id,
+        reference,
+        Number(amt).toFixed(2),
+        JSON.stringify(intentMeta)
+      ]
+    );
+
+    await addTransaction({
+      userId: user.id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(amt).toFixed(2),
+      status: 'pending',
+      reference,
+      description: 'Wallet funding initiated',
+      meta: {
+        provider: 'flutterwave',
+        accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+        virtualAccount
+      }
+    });
+
+    return respondOk(res, {
+      reference,
+      amount: Number(amt).toFixed(2),
+      account_number: accountNumber,
+      bank_name: bankName,
+      account_name: accountName,
+      expiry_date: expiryDate,
+      account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
+    }, 'Funding details generated');
+  } catch (err) {
+    console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
+    return respondError(res, 500, err?.message || 'Unable to initiate funding');
+  }
+});
+
+/**
+ * Optional: frontend can poll this route to know whether the transfer has been matched.
+ */
+app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
+  try {
+    const reference = String(req.params.reference || '').trim();
+    if (!reference) {
+      return respondError(res, 400, 'reference is required');
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1 AND user_id = $2
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    const transactionResult = await query(
+      `SELECT * FROM transactions
+       WHERE reference = $1 AND user_id = $2
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    const wallet = await ensureWallet(req.user.id);
+
+    const intent = intentResult.rows[0] || null;
+    const transaction = transactionResult.rows[0] || null;
+
+    return respondOk(
+      res,
+      {
+        reference,
+        intent,
+        transaction,
+        wallet: {
+          id: wallet.id,
+          balance: Number(wallet.balance).toFixed(2),
+          currency: wallet.currency
+        }
+      },
+      'Funding status loaded'
+    );
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to load funding status');
+  }
+});
