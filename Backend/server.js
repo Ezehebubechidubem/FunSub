@@ -718,3 +718,721 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   `);
 }
+
+function flutterwaveHeaders() {
+  if (!FLW_SECRET_KEY) {
+    throw new Error('FLW_SECRET_KEY is missing');
+  }
+
+  return {
+    Authorization: `Bearer ${FLW_SECRET_KEY}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
+  };
+}
+
+function flutterwaveTxRef(prefix = 'PS') {
+  return `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function splitFullName(fullName = '') {
+  const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
+  const first = parts.shift() || 'User';
+  const last = parts.join(' ') || first;
+  return { first, last };
+}
+
+function isValidFlutterwaveWebhook(req) {
+  if (!process.env.FLW_WEBHOOK_HASH) return true;
+
+  const got =
+    String(req.headers['verif-hash'] || req.headers['x-flw-secret-hash'] || '').trim();
+
+  return got && got === process.env.FLW_WEBHOOK_HASH;
+}
+
+async function flutterwaveCreateCustomer(user) {
+  if (!user?.email) {
+    throw new Error('User email is required to create Flutterwave customer');
+  }
+
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
+
+  const customerPayload = {
+    email: user.email,
+    name: {
+      first,
+      last
+    },
+    phone: user.phone
+      ? { number: String(user.phone) }
+      : undefined,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding'
+    }
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(customerPayload).filter(([, value]) =>
+      value !== undefined && value !== null && value !== ''
+    )
+  );
+
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, cleanedPayload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return customerRes.data?.data || customerRes.data;
+}
+async function pollFundingStatus(reference, amount) {
+  stopPolling();
+  fundingPollTimer = setInterval(async () => {
+    const res = await fetch(
+      `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('funsub_token') || ''}` }
+      }
+    );
+
+    const data = await res.json().catch(() => ({}));
+    const intentStatus = String(data?.intent?.status || '').toLowerCase();
+    const txStatus = String(data?.transaction?.status || '').toLowerCase();
+
+    if (intentStatus === 'successful' || txStatus === 'success') {
+      stopPolling();
+      showToast('Success', `₦${Number(amount).toLocaleString('en-NG')} funded successfully`);
+      setStatus(`₦${Number(amount).toLocaleString('en-NG')} funded successfully`, 'success');
+      setTimeout(() => window.location.href = 'dashboard.html', 1800);
+    }
+  }, 3000);
+}
+
+function providerAuthPayload() {
+  return {};
+}
+
+function normalizeStatus(value) {
+  return normalizeStatusValue(value);
+}
+
+function normalizeServiceType(v) {
+  const s = String(v || '').toLowerCase().trim();
+
+  const map = {
+    cable: 'cable_tv',
+    'cable-tv': 'cable_tv',
+    cabletv: 'cable_tv',
+    'cable_tv': 'cable_tv',
+
+    'recharge-pin': 'recharge_pin',
+    rechargepin: 'recharge_pin',
+    recharge_pin: 'recharge_pin',
+
+    'data-pin': 'data_pin',
+    datapin: 'data_pin',
+    data_pin: 'data_pin',
+
+    'exam-pin': 'exam_pin',
+    exampin: 'exam_pin',
+    exam_pin: 'exam_pin'
+  };
+
+  return map[s] || s;
+}
+
+function getProviderConfig(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+  return {
+    serviceType: normalized,
+    ...PROVIDER_ENDPOINTS[normalized]
+  };
+}
+
+function compactObject(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
+function extractArrayFromProviderResponse(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content?.variations)) return data.content.variations;
+  if (Array.isArray(data?.data?.content?.variations)) return data.data.content.variations;
+  if (Array.isArray(data?.data?.variations)) return data.data.variations;
+  if (Array.isArray(data?.variations)) return data.variations;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.plans)) return data.plans;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.response)) return data.response;
+  return [];
+}
+
+function normalizeProviderPlan(plan) {
+  const rawPrice = plan.variation_amount ?? plan.price ?? plan.amount ?? plan.cost ?? plan.value ?? 0;
+
+  return {
+    id: plan.variation_code || plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
+    name: plan.name || plan.variation_name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
+    rawPrice: Number(rawPrice),
+    meta: plan
+  };
+}
+async function processServicePayment(req, res, serviceType, serviceName) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
+
+  async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
+    if (!txRow?.id) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const txCheck = await client.query(
+        `SELECT status, meta
+         FROM transactions
+         WHERE id = $1
+         FOR UPDATE`,
+        [txRow.id]
+      );
+
+      if (!txCheck.rows.length) {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const currentStatus = String(txCheck.rows[0].status || '').toLowerCase();
+      if (currentStatus !== 'pending') {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const currentMeta = normalizeMeta(txCheck.rows[0].meta);
+      const mergedMeta = mergeMeta(currentMeta, {
+        reverseReason: reason,
+        ...extraMeta,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'reversed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [txRow.id, reason, JSON.stringify(mergedMeta)]
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const stateResult = await client.query(
+        `SELECT
+           COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts,
+           fund_pin_locked_until
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const row = stateResult.rows[0];
+      if (!row) {
+        await client.query('ROLLBACK');
+        return { ok: false, status: 404, message: 'User not found' };
+      }
+
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until ? new Date(row.fund_pin_locked_until) : null;
+      const now = Date.now();
+
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+        failedAttempts = 0;
+      }
+
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          status: 423,
+          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
+          locked: true,
+          minutesLeft
+        };
+      }
+
+      const pinOk = await verifyFundPin(userId, fundPin);
+
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1;
+        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock ? new Date(Date.now() + PIN_LOCK_MS) : null;
+
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = $2,
+               fund_pin_locked_until = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
+        );
+
+        await client.query('COMMIT');
+
+        return {
+          ok: false,
+          status: shouldLock ? 423 : 401,
+          message: shouldLock
+            ? 'Invalid PIN. Your account has been locked for 1 hour after 4 failed attempts.'
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left before lock.`,
+          attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
+          locked: shouldLock,
+          minutesLeft: shouldLock ? 60 : 0
+        };
+      }
+
+      await client.query(
+        `UPDATE users
+         SET fund_pin_failed_attempts = 0,
+             fund_pin_locked_until = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await client.query('COMMIT');
+      return { ok: true };
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) {
+      return respondError(res, 401, 'Unauthorized');
+    }
+
+    const fundPin = String(body.fundPin || body.fund_pin || '').trim();
+    if (!fundPin) {
+      return respondError(res, 400, 'Transaction PIN is required');
+    }
+
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) {
+      return respondError(res, pinCheck.status || 401, pinCheck.message || 'Invalid fund PIN');
+    }
+
+    let pricing = null;
+    let selectedPlan = null;
+    let description = `${serviceName} purchase`;
+
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      '';
+
+    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    let providerAmount = 0;
+    let purchaseAmount = 0;
+    const role = req.user?.role;
+    const requestId = String(body.request_id || body.requestId || body.reference || buildTxnRef(normalizedServiceType.toUpperCase())).trim();
+
+    if (normalizedServiceType === 'airtime') {
+      providerAmount = toNumber(body.amount, 0);
+
+      if (providerAmount <= 0 || !destination) {
+        return respondError(res, 400, 'amount and phone are required');
+      }
+
+      pricing = buildRolePricing('airtime', providerAmount, role);
+      purchaseAmount = pricing.finalPrice;
+
+      if (purchaseAmount <= 0) {
+        purchaseAmount = providerAmount;
+      }
+    } else {
+      const variationCode = String(
+        body.variation_code ||
+        body.planId ||
+        body.plan_id ||
+        body.planCode ||
+        body.code ||
+        ''
+      ).trim();
+
+      providerAmount = toNumber(
+        body.base_price ||
+        body.rawPrice ||
+        body.raw_price ||
+        body.amount,
+        0
+      );
+
+      if (!variationCode) {
+        return respondError(res, 400, 'variation_code is required');
+      }
+
+      if (providerAmount <= 0) {
+        return respondError(res, 400, 'base_price is required');
+      }
+
+      const pricingOptions = {
+        network: body.network || body.service_id || body.serviceId,
+        provider: body.provider,
+        service_id: body.service_id || body.serviceId
+      };
+
+      pricing = buildRolePricing(normalizedServiceType, providerAmount, role, pricingOptions);
+      purchaseAmount = pricing.finalPrice;
+
+      selectedPlan = {
+        id: variationCode,
+        name: body.plan_name || `${serviceName} Plan`,
+        rawPrice: providerAmount,
+        purchase_amount: purchaseAmount,
+        purchase_route:
+          String(body.purchase_route || body.plan_source || body.source || '').toLowerCase() === 'budget-data'
+            ? '/budget-data'
+            : '/data',
+        purchase_key: variationCode,
+        meta: {
+          service_id: body.service_id || body.serviceId,
+          provider: body.provider,
+          network: body.network
+        }
+      };
+
+      description = `${serviceName} - ${selectedPlan.name}`;
+    }
+
+    if (!pricing) {
+      return respondError(res, 400, 'Unable to prepare purchase');
+    }
+
+    const client = await pool.connect();
+    let txRow = null;
+
+    try {
+      await client.query('BEGIN');
+
+      const walletResult = await client.query(
+        'SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE',
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query('ROLLBACK');
+        return respondError(res, 404, 'Wallet not found');
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < purchaseAmount) {
+        await client.query('ROLLBACK');
+        return respondError(res, 400, 'Insufficient wallet balance');
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
+         RETURNING *`,
+        [
+          uid('tx_'),
+          userId,
+          'purchase',
+          normalizedServiceType,
+          purchaseAmount,
+          requestId,
+          description,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            status: 'pending',
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
+          })
+        ]
+      );
+
+      txRow = inserted.rows[0];
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const providerBody = {
+      ...body,
+      request_id: requestId,
+      amount: providerAmount,
+      plan_amount: providerAmount,
+      base_price: providerAmount,
+      final_amount: purchaseAmount
+    };
+
+    let providerResponse;
+
+    try {
+      providerResponse = await withTimeout(
+        buyServiceThroughGateway({
+          serviceType: normalizedServiceType,
+          body: providerBody,
+          selectedPlan,
+          requestId
+        }),
+        PROVIDER_TIMEOUT_MS,
+        'Provider timeout'
+      );
+    } catch (err) {
+      console.error('PROVIDER CALL TIMEOUT/ERROR:', err?.message);
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerError: err?.message || 'Provider timeout',
+            status: 'pending',
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
+          })
+        ]
+      );
+
+      scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: err?.message || 'Provider timeout. Transaction is pending.',
+        transaction: {
+          ...txRow,
+          status: 'pending'
+        },
+        pricing,
+        requestId
+      });
+    }
+
+    console.log('PROVIDER RESPONSE:', JSON.stringify(providerResponse, null, 2));
+
+    const providerState = classifyProviderResponse(providerResponse);
+    const providerText = extractProviderText(providerResponse);
+
+    if (providerState === 'pending' || providerState === 'unknown') {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerResponse,
+            status: 'pending',
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString()
+          })
+        ]
+      );
+
+      scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerText || 'Purchase pending',
+        transaction: {
+          ...txRow,
+          status: 'pending'
+        },
+        pricing,
+        requestId,
+        providerResponse
+      });
+    }
+
+    if (providerState === 'failed') {
+      await reverseAndRefund(
+        txRow,
+        userId,
+        purchaseAmount,
+        `${description} failed`,
+        {
+          requestId,
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          providerResponse
+        }
+      );
+
+      return respondError(
+        res,
+        400,
+        providerText || providerResponse?.response_description || providerResponse?.message || 'Purchase failed'
+      );
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [
+        txRow.id,
+        description,
+        JSON.stringify({
+          requestId,
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          providerResponse,
+          status: 'success'
+        })
+      ]
+    );
+
+    clearPendingRequery(requestId);
+
+    await addNotification(
+      userId,
+      `${serviceName} purchased`,
+      `${description} was successful`,
+      {
+        transactionId: txRow.id,
+        requestId,
+        serviceType: normalizedServiceType,
+        pricing,
+        providerAmount,
+        purchaseAmount,
+        providerResponse
+      },
+      true
+    );
+
+    return respondOk(
+      res,
+      {
+        transaction: {
+          ...txRow,
+          status: 'success',
+          amount: purchaseAmount
+        },
+        pricing,
+        requestId,
+        providerResponse
+      },
+      `${serviceName} purchased successfully`
+    );
+  } catch (err) {
+    console.error('PROCESS SERVICE PAYMENT ERROR:', err);
+    console.error('ERROR MESSAGE:', err?.message);
+    console.error('ERROR STACK:', err?.stack);
+    console.error('ERROR RESPONSE DATA:', err?.response?.data);
+
+    return respondError(
+      res,
+      500,
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
+    );
+  }
+}
