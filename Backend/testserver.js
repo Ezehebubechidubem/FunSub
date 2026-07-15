@@ -2961,3 +2961,450 @@ app.post('/api/auth/register', async (req, res) => {
     return respondError(res, 500, 'Server error');
   }
 });
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { identifier, email, phone, password } = req.body || {};
+    const raw = identifier || email || phone || '';
+    const cleanEmail = normalizeEmail(raw);
+    const cleanPhone = normalizePhone(raw);
+
+    if (!raw || !password) {
+      return respondError(res, 400, 'Identifier and password are required');
+    }
+
+    const result = await query(
+      `SELECT id, role, full_name, email, phone, password_hash, state, avatar_url, kyc_status, profile_complete, online, created_at
+       FROM users
+       WHERE email = $1 OR phone = $2
+       LIMIT 1`,
+      [cleanEmail, cleanPhone]
+    );
+
+    const user = result.rows[0];
+    if (!user) return respondError(res, 401, 'Invalid credentials');
+
+    const ok = await bcrypt.compare(String(password), user.password_hash);
+    if (!ok) return respondError(res, 401, 'Invalid credentials');
+
+    await query(
+      `UPDATE users
+       SET online = true, last_login_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [user.id]
+    );
+
+    const wallet = await ensureWallet(user.id);
+    const token = signToken({ id: user.id, role: user.role });
+
+    await addNotification(user.id, 'Login successful', 'You are now logged in', { type: 'auth' }, true);
+
+    return respondOk(res, {
+      token,
+      user: { ...user, password_hash: undefined },
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    }, 'Login successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/fund-pin', requireAuth, async (req, res) => {
+  try {
+    const { oldPin, newPin } = req.body || {};
+
+    if (!oldPin || !newPin) {
+      return respondError(res, 400, 'oldPin and newPin are required');
+    }
+
+    if (!/^\d{4}$/.test(String(newPin))) {
+      return respondError(res, 400, 'New fund PIN must be exactly 4 digits');
+    }
+
+    const ok = await verifyFundPin(req.user.id, oldPin);
+    if (!ok) {
+      return respondError(res, 400, 'Invalid current fund PIN');
+    }
+
+    const newHash = await bcrypt.hash(String(newPin), 10);
+
+    await query(
+      `UPDATE users
+       SET fund_pin_hash = $2,
+           fund_pin_set = true,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, newHash]
+    );
+
+    return respondOk(res, {}, 'Fund PIN updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to update fund PIN');
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const result = await query(
+    `SELECT id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at, last_login_at
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+
+  const wallet = await ensureWallet(userId);
+
+  return respondOk(res, {
+    user: result.rows[0],
+    wallet: {
+      id: wallet.id,
+      balance: Number(wallet.balance).toFixed(2),
+      currency: wallet.currency
+    }
+  });
+});
+
+app.patch('/api/auth/profile', requireAuth, async (req, res) => {
+  try {
+    const { fullName, state } = req.body || {};
+
+    const result = await query(
+      `UPDATE users
+       SET full_name = COALESCE($2, full_name),
+           state = COALESCE($3, state),
+           profile_complete = true,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete`,
+      [req.user.id, fullName ? String(fullName).trim() : null, state ? String(state).trim() : null]
+    );
+
+    return respondOk(res, { user: result.rows[0] }, 'Profile updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/avatar', requireAuth, avatarUpload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return respondError(res, 400, 'Avatar file is required');
+
+    const avatar_url = `/uploads/avatars/${req.file.filename}`;
+
+    const result = await query(
+      `UPDATE users
+       SET avatar_url = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, full_name, email, phone, avatar_url`,
+      [req.user.id, avatar_url]
+    );
+
+    await addNotification(req.user.id, 'Profile image updated', 'Your profile picture was updated', { avatar_url }, true);
+
+    return respondOk(res, { user: result.rows[0], avatar_url }, 'Avatar updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.post('/api/auth/password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return respondError(res, 400, 'All password fields are required');
+    }
+
+    if (String(newPassword).length < 6) {
+      return respondError(res, 400, 'New password must be at least 6 characters');
+    }
+
+    if (String(newPassword) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const result = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return respondError(res, 404, 'User not found');
+
+    const ok = await bcrypt.compare(String(currentPassword), user.password_hash);
+    if (!ok) return respondError(res, 400, 'Current password is incorrect');
+
+    const password_hash = await bcrypt.hash(String(newPassword), 10);
+
+    await query(
+      `UPDATE users
+       SET password_hash = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [req.user.id, password_hash]
+    );
+
+    await addNotification(req.user.id, 'Password changed', 'Your password was updated successfully', { type: 'security' }, true);
+
+    return respondOk(res, {}, 'Password updated');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+app.get('/api/wallet/balance', requireAuth, async (req, res) => {
+  try {
+    const wallet = await ensureWallet(req.user.id);
+    return respondOk(res, {
+      wallet: {
+        id: wallet.id,
+        balance: Number(wallet.balance).toFixed(2),
+        currency: wallet.currency
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+app.post('/api/wallet/fund/initiate', requireAuth, async (req, res) => {
+  try {
+    const { amount } = req.body || {};
+    const amt = toNumber(amount, 0);
+
+    if (amt < 100) {
+      return respondError(res, 400, 'Minimum funding amount is 100');
+    }
+
+    const userResult = await query(
+      `SELECT id, full_name, email, phone
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [req.user.id]
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      return respondError(res, 404, 'User not found');
+    }
+
+    const reference = flutterwaveTxRef('fund');
+
+    const virtualAccount = await flutterwaveCreateVirtualAccount({
+      amount: amt,
+      user,
+      reference
+    });
+
+    const accountNumber =
+      virtualAccount?.account_number ||
+      virtualAccount?.data?.account_number ||
+      null;
+
+    const bankName =
+      virtualAccount?.bank_name ||
+      virtualAccount?.data?.bank_name ||
+      null;
+
+    const accountName =
+      virtualAccount?.account_name ||
+      virtualAccount?.data?.account_name ||
+      user.full_name ||
+      user.email ||
+      'Wallet funding';
+
+    const expiryDate =
+      virtualAccount?.expiry_date ||
+      virtualAccount?.data?.expiry_date ||
+      null;
+
+    const intentMeta = {
+      purpose: 'wallet_funding',
+      accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+      virtualAccount
+    };
+
+    await query(
+      `INSERT INTO payment_intents
+       (id, user_id, tx_ref, amount, currency, provider, status, meta, created_at)
+       VALUES ($1, $2, $3, $4, 'NGN', 'flutterwave', 'initiated', $5, NOW())`,
+      [
+        uid('pit_'),
+        user.id,
+        reference,
+        Number(amt).toFixed(2),
+        JSON.stringify(intentMeta)
+      ]
+    );
+
+    await addTransaction({
+      userId: user.id,
+      type: 'funding',
+      category: 'wallet',
+      amount: Number(amt).toFixed(2),
+      status: 'pending',
+      reference,
+      description: 'Wallet funding initiated',
+      meta: {
+        provider: 'flutterwave',
+        accountType: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic',
+        virtualAccount
+      }
+    });
+
+    return respondOk(res, {
+      reference,
+      amount: Number(amt).toFixed(2),
+      account_number: accountNumber,
+      bank_name: bankName,
+      account_name: accountName,
+      expiry_date: expiryDate,
+      account_type: FLW_ACCOUNT_TYPE === 'static' ? 'static' : 'dynamic'
+    }, 'Funding details generated');
+  } catch (err) {
+    console.error('FUND INITIATE ERROR:', err?.response?.data || err?.message || err);
+    return respondError(res, 500, err?.message || 'Unable to initiate funding');
+  }
+});
+
+/**
+ * Optional: frontend can poll this route to know whether the transfer has been matched.
+ */
+app.get('/api/wallet/fund/status/:reference', requireAuth, async (req, res) => {
+  try {
+    const reference = String(req.params.reference || '').trim();
+    if (!reference) {
+      return respondError(res, 400, 'reference is required');
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1 AND user_id = $2
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    const transactionResult = await query(
+      `SELECT * FROM transactions
+       WHERE reference = $1 AND user_id = $2
+       LIMIT 1`,
+      [reference, req.user.id]
+    );
+
+    const wallet = await ensureWallet(req.user.id);
+
+    const intent = intentResult.rows[0] || null;
+    const transaction = transactionResult.rows[0] || null;
+
+    return respondOk(
+      res,
+      {
+        reference,
+        intent,
+        transaction,
+        wallet: {
+          id: wallet.id,
+          balance: Number(wallet.balance).toFixed(2),
+          currency: wallet.currency
+        }
+      },
+      'Funding status loaded'
+    );
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Unable to load funding status');
+  }
+});
+/**
+ * Flutterwave webhook for virtual account payments.
+ */
+
+app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) => {
+  try {
+    const transactionId = String(req.params.transactionId || '').trim();
+    if (!transactionId) {
+      return respondError(res, 400, 'transactionId is required');
+    }
+
+    const data = await flutterwaveVerify(transactionId);
+    if (!data) return respondError(res, 400, 'Unable to verify payment');
+
+    const providerStatus = normalizeStatusValue(data.status || data.tx_status || '');
+    const amount = toNumber(data.amount, 0);
+    const txRef = String(data.tx_ref || data.reference || '').trim();
+
+    if (!txRef) {
+      return respondError(res, 400, 'Missing transaction reference');
+    }
+
+    const intentResult = await query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1 AND user_id = $2
+       LIMIT 1`,
+      [txRef, req.user.id]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) return respondError(res, 404, 'Payment intent not found');
+
+    if (SUCCESS_STATUSES.has(providerStatus) || providerStatus === 'completed' || providerStatus === 'successful') {
+      const result = await processFundingSuccess({
+        reference: txRef,
+        amount,
+        flutterwaveData: data,
+        rawWebhook: { source: 'manual_verify' }
+      });
+
+      if (!result.ok) {
+        return respondError(res, 400, result.reason || 'Unable to complete funding');
+      }
+
+      return respondOk(res, { verified: true, amount, reference: txRef }, 'Payment verified and wallet funded');
+    }
+
+    return respondError(res, 400, `Payment status is ${providerStatus || 'unknown'}`);
+  } catch (err) {
+    console.error('FLW VERIFY ERROR:', err?.response?.data || err?.message || err);
+    return respondError(res, 500, err?.message || 'Unable to verify payment');
+  }
+});
+
+/* SERVICES LIST */
+
+app.get('/api/services', requireAuth, async (req, res) => {
+  try {
+    return respondOk(res, {
+      services: SERVICE_CATALOG
+    }, 'Services loaded');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
+
+function toNetworkId(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function getNetworkServiceId(networkId) {
+  const map = {
+    1: 'mtn',
+    2: 'glo',
+    3: '9mobile',
+    4: 'airtel'
+  };
+  return map[networkId] || null;
+}
+
+function extractArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.plans)) return payload.plans;
+  return [];
+}
