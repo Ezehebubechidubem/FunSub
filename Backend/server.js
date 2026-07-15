@@ -845,7 +845,7 @@ function normalizeServiceType(v) {
 }
 async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
   const normalizedServiceType = normalizeServiceType(serviceType);
-  const service_id = body.service_id || body.serviceId;
+  const service_id = String(body.service_id || body.serviceId || "").trim().toLowerCase();
 
   switch (normalizedServiceType) {
     case "airtime":
@@ -898,7 +898,7 @@ async function buyServiceThroughGateway({ serviceType, body, selectedPlan, reque
       return iacafe.buyBetting({
         request_id: requestId,
         customer_id: String(body.customer_id).trim(),
-        service_id: String(service_id).trim(),
+        service_id,
         amount: toNumber(body.plan_amount || body.amount, 0),
         skip_verify: true,
       });
