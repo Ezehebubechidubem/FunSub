@@ -221,7 +221,6 @@ function safeJsonParse(value, fallback = {}) {
 
 function normalizeBettingServiceId(value) {
   const s = String(value || '').trim().toLowerCase();
-
   const map = {
     '1xbet': '1xBet',
     'bangbet': 'BangBet',
