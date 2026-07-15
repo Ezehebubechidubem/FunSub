@@ -165,15 +165,7 @@ function normalizeMeta(meta) {
 
   return {};
 }
-function withFallback(primaryFn, fallbackFn) {
-    try {
-      return await primaryFn();
-    } catch (err) {
-      if (!f) throw err;
-      if (!isRetryableError(err)) throw err;
-      return await fallbackFn();
-    }
-  }
+
 
 function clearPendingRequery(requestId) {
   if (!requestId) return;
