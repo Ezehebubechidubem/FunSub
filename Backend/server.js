@@ -3576,14 +3576,24 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
   try {
     const { customer_id, service_id } = pickBettingInputs(req.body);
 
-    if (!customer_id || !service_id) {
+    const cleanCustomerId = String(customer_id || '').trim();
+    const cleanServiceId = normalizeBettingServiceId(service_id);
+
+    if (!cleanCustomerId || !cleanServiceId) {
       return respondError(res, 400, 'customer_id and service_id are required');
     }
 
-    const result = await iacafe.verifyBettingCustomer({
-      customer_id,
-      service_id,
+    console.log('BETTING VERIFY INPUT:', {
+      customer_id: cleanCustomerId,
+      service_id: cleanServiceId
     });
+
+    const result = await iacafe.verifyBettingCustomer({
+      customer_id: cleanCustomerId,
+      service_id: cleanServiceId,
+    });
+
+    console.log('BETTING VERIFY RESULT:', result);
 
     const customerName =
       result?.customer_name ||
@@ -3599,8 +3609,8 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       {
         verified: true,
         customer_name: customerName,
-        customer_id,
-        service_id,
+        customer_id: cleanCustomerId,
+        service_id: cleanServiceId,
         raw: result,
       },
       'Customer verified'
