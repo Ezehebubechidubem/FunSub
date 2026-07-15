@@ -775,3 +775,692 @@ async function addTransaction({
 
   return inserted.rows[0];
 }
+async function requireAuth(req, res, next) {
+  try {
+    console.log('================ AUTH DEBUG ================');
+
+    const authHeaderValue = req.headers.authorization;
+
+    console.log('AUTH HEADER:', authHeaderValue);
+
+    if (!authHeaderValue) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authorization header missing'
+      });
+    }
+
+    if (!authHeaderValue.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authorization format'
+      });
+    }
+
+    const token = authHeaderValue.split(' ')[1];
+
+    console.log('TOKEN:', token);
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    console.log('DECODED TOKEN USER:', decoded);
+
+    const userResult = await query(
+      `SELECT
+         id,
+         role,
+         full_name,
+         email,
+         phone,
+         state,
+         avatar_url,
+         kyc_status,
+         profile_complete,
+         online,
+         last_login_at,
+         created_at,
+         updated_at,
+         fund_pin_hash,
+         fund_pin_set,
+         fund_pin_failed_attempts,
+         fund_pin_locked_until
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [decoded.id]
+    );
+
+    const dbUser = userResult.rows[0];
+
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      ...dbUser
+    };
+
+    console.log('AUTH SUCCESS');
+    console.log('CURRENT USER FROM DB:', req.user);
+    console.log('============================================');
+
+    next();
+  } catch (err) {
+    console.log('AUTH FAILED');
+    console.log('ERROR MESSAGE:', err.message);
+    console.log('============================================');
+
+    return res.status(401).json({
+      success: false,
+      message: err.message || 'Unauthorized'
+    });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  try {
+    const token = authHeader(req);
+    if (!token) return respondError(res, 401, 'Unauthorized');
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') return respondError(res, 403, 'Admin access required');
+
+    if (ADMIN_API_KEY) {
+      const got = req.headers['x-admin-key'] || req.query.admin_key;
+      if (got !== ADMIN_API_KEY) return respondError(res, 403, 'Invalid admin key');
+    }
+
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return respondError(res, 401, 'Unauthorized');
+  }
+}
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, AVATAR_DIR),
+    filename: (req, file, cb) => {
+      const safe = file.originalname.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+      cb(null, `avatar-${Date.now()}-${safe}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+const kycUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, KYC_DIR),
+    filename: (req, file, cb) => {
+      const safe = file.originalname.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+      cb(null, `kyc-${Date.now()}-${safe}`);
+    }
+  }),
+  limits: { fileSize: 12 * 1024 * 1024 }
+});
+async function initDb() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'user',
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      phone TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      state TEXT,
+      avatar_url TEXT,
+      kyc_status TEXT NOT NULL DEFAULT 'unverified',
+      profile_complete BOOLEAN NOT NULL DEFAULT FALSE,
+      online BOOLEAN NOT NULL DEFAULT FALSE,
+      last_login_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      fund_pin_hash TEXT,
+      fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
+      fund_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
+      fund_pin_locked_until TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS wallets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      balance NUMERIC(14,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      status TEXT NOT NULL DEFAULT 'success',
+      reference TEXT NOT NULL UNIQUE,
+      description TEXT,
+      meta JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      meta JSONB DEFAULT '{}'::jsonb,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS kyc_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      id_type TEXT NOT NULL,
+      id_number TEXT NOT NULL,
+      selfie_url TEXT,
+      id_front_url TEXT,
+      id_back_url TEXT,
+      utility_bill_url TEXT,
+      address TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT,
+      submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      reviewed_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_intents (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tx_ref TEXT NOT NULL UNIQUE,
+      amount NUMERIC(14,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      provider TEXT NOT NULL DEFAULT 'flutterwave',
+      status TEXT NOT NULL DEFAULT 'initiated',
+      meta JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      verified_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      meta JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS pricing_rules (
+      id TEXT PRIMARY KEY,
+      service_type TEXT NOT NULL UNIQUE,
+      markup_percent NUMERIC(5,2) NOT NULL DEFAULT 2,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS fund_pin_hash TEXT,
+      ADD COLUMN IF NOT EXISTS fund_pin_set BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS fund_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS fund_pin_locked_until TIMESTAMPTZ;
+  `);
+
+  await query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  await query(`
+    ALTER TABLE payment_intents
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+}
+
+function flutterwaveHeaders() {
+  if (!FLW_SECRET_KEY) {
+    throw new Error('FLW_SECRET_KEY is missing');
+  }
+
+  return {
+    Authorization: `Bearer ${FLW_SECRET_KEY}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
+  };
+}
+
+function flutterwaveTxRef(prefix = 'PS') {
+  return `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function splitFullName(fullName = '') {
+  const parts = String(fullName).trim().split(/\s+/).filter(Boolean);
+  const first = parts.shift() || 'User';
+  const last = parts.join(' ') || first;
+  return { first, last };
+}
+
+function isValidFlutterwaveWebhook(req) {
+  if (!process.env.FLW_WEBHOOK_HASH) return true;
+
+  const got =
+    String(req.headers['verif-hash'] || req.headers['x-flw-secret-hash'] || '').trim();
+
+  return got && got === process.env.FLW_WEBHOOK_HASH;
+}
+
+async function flutterwaveCreateCustomer(user) {
+  if (!user?.email) {
+    throw new Error('User email is required to create Flutterwave customer');
+  }
+
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
+
+  const customerPayload = {
+    email: user.email,
+    name: {
+      first,
+      last
+    },
+    phone: user.phone
+      ? { number: String(user.phone) }
+      : undefined,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding'
+    }
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(customerPayload).filter(([, value]) =>
+      value !== undefined && value !== null && value !== ''
+    )
+  );
+
+  const customerRes = await axios.post(FLW_CUSTOMER_URL, cleanedPayload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return customerRes.data?.data || customerRes.data;
+}
+async function pollFundingStatus(reference, amount) {
+  stopPolling();
+  fundingPollTimer = setInterval(async () => {
+    const res = await fetch(
+      `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('funsub_token') || ''}` }
+      }
+    );
+
+    const data = await res.json().catch(() => ({}));
+    const intentStatus = String(data?.intent?.status || '').toLowerCase();
+    const txStatus = String(data?.transaction?.status || '').toLowerCase();
+
+    if (intentStatus === 'successful' || txStatus === 'success') {
+      stopPolling();
+      showToast('Success', `₦${Number(amount).toLocaleString('en-NG')} funded successfully`);
+      setStatus(`₦${Number(amount).toLocaleString('en-NG')} funded successfully`, 'success');
+      setTimeout(() => window.location.href = 'dashboard.html', 1800);
+    }
+  }, 3000);
+}
+
+function providerAuthPayload() {
+  return {};
+}
+
+function normalizeStatus(value) {
+  return normalizeStatusValue(value);
+}
+
+function normalizeServiceType(v) {
+  const s = String(v || '').toLowerCase().trim();
+
+  const map = {
+    cable: 'cable_tv',
+    'cable-tv': 'cable_tv',
+    cabletv: 'cable_tv',
+    'cable_tv': 'cable_tv',
+
+    'recharge-pin': 'recharge_pin',
+    rechargepin: 'recharge_pin',
+    recharge_pin: 'recharge_pin',
+
+    'data-pin': 'data_pin',
+    datapin: 'data_pin',
+    data_pin: 'data_pin',
+
+    'exam-pin': 'exam_pin',
+    exampin: 'exam_pin',
+    exam_pin: 'exam_pin'
+  };
+
+  return map[s] || s;
+}
+async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const service_id = String(body.service_id || body.serviceId || "").trim().toLowerCase();
+
+  switch (normalizedServiceType) {
+    case "airtime":
+      return iacafe.buyAirtime({
+        request_id: requestId,
+        phone: body.phone,
+        service_id,
+        amount: toNumber(body.amount, 0),
+      });
+
+    case "data":
+      return iacafe.buyData({
+        request_id: requestId,
+        phone: body.phone,
+        plan: selectedPlan,
+        service_id,
+      });
+
+    case "cable_tv":
+      return iacafe.buyCable({
+        request_id: requestId,
+        customer_id:
+          body.smartcard_number ||
+          body.customer_id ||
+          body.accountNumber ||
+          body.billersCode,
+        service_id,
+        plan: selectedPlan,
+      });
+
+    case "electricity":
+      return iacafe.buyElectricity({
+        request_id: requestId,
+        customer_id:
+          body.meter_number ||
+          body.meterNumber ||
+          body.customer_id ||
+          body.billersCode,
+        service_id,
+        meter_number: body.meter_number || body.meterNumber,
+        account_number: body.accountNumber,
+        amount: toNumber(body.amount, 0),
+      });
+
+    case "betting":
+      if (!body.customer_id || !service_id) {
+        throw new Error("customer_id and service_id are required");
+      }
+
+      return iacafe.buyBetting({
+        request_id: requestId,
+        customer_id: String(body.customer_id).trim(),
+        service_id,
+        amount: toNumber(body.plan_amount || body.amount, 0),
+        skip_verify: true,
+      });
+
+    default:
+      throw new Error(`${normalizedServiceType} is not supported yet`);
+  }
+}
+function getProviderConfig(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+  return {
+    serviceType: normalized,
+    ...PROVIDER_ENDPOINTS[normalized]
+  };
+}
+
+function compactObject(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v !== undefined && v !== null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
+function extractArrayFromProviderResponse(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content?.variations)) return data.content.variations;
+  if (Array.isArray(data?.data?.content?.variations)) return data.data.content.variations;
+  if (Array.isArray(data?.data?.variations)) return data.data.variations;
+  if (Array.isArray(data?.variations)) return data.variations;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.plans)) return data.plans;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.response)) return data.response;
+  return [];
+}
+
+function normalizeProviderPlan(plan) {
+  const rawPrice = plan.variation_amount ?? plan.price ?? plan.amount ?? plan.cost ?? plan.value ?? 0;
+
+  return {
+    id: plan.variation_code || plan.id || plan.plan_id || plan.code || plan.slug || plan.bundle_id || uid('plan_'),
+    name: plan.name || plan.variation_name || plan.title || plan.network || plan.bundle || plan.description || 'Plan',
+    rawPrice: Number(rawPrice),
+    meta: plan
+  };
+}
+async function processServicePayment(req, res, serviceType, serviceName) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
+
+  async function reverseAndRefund(txRow, userId, purchaseAmount, reason, extraMeta = {}) {
+    if (!txRow?.id) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const txCheck = await client.query(
+        `SELECT status, meta
+         FROM transactions
+         WHERE id = $1
+         FOR UPDATE`,
+        [txRow.id]
+      );
+
+      if (!txCheck.rows.length) {
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const currentStatus = String(txCheck.rows[0].status || "").toLowerCase();
+      if (currentStatus !== "pending") {
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const currentMeta = normalizeMeta(txCheck.rows[0].meta);
+      const mergedMeta = mergeMeta(currentMeta, {
+        reverseReason: reason,
+        ...extraMeta,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'reversed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [txRow.id, reason, JSON.stringify(mergedMeta)]
+      );
+
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const stateResult = await client.query(
+        `SELECT
+           COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts,
+           fund_pin_locked_until
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const row = stateResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 404, message: "User not found" };
+      }
+
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until ? new Date(row.fund_pin_locked_until) : null;
+      const now = Date.now();
+
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+        failedAttempts = 0;
+      }
+
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
+        await client.query("ROLLBACK");
+        return {
+          ok: false,
+          status: 423,
+          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
+          locked: true,
+          minutesLeft,
+        };
+      }
+
+      const pinOk = await verifyFundPin(userId, fundPin);
+
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1;
+        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock ? new Date(Date.now() + PIN_LOCK_MS) : null;
+
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = $2,
+               fund_pin_locked_until = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+          ok: false,
+          status: shouldLock ? 423 : 401,
+          message: shouldLock
+            ? "Invalid PIN. Your account has been locked for 1 hour after 4 failed attempts."
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left before lock.`,
+          attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - nextAttempts),
+          locked: shouldLock,
+          minutesLeft: shouldLock ? 60 : 0,
+        };
+      }
+
+      await client.query(
+        `UPDATE users
+         SET fund_pin_failed_attempts = 0,
+             fund_pin_locked_until = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await client.query("COMMIT");
+      return { ok: true };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) {
+      return respondError(res, 401, "Unauthorized");
+    }
+
+    const fundPin = String(body.fundPin || body.fund_pin || "").trim();
+    if (!fundPin) {
+      return respondError(res, 400, "Transaction PIN is required");
+    }
+
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) {
+      return respondError(res, pinCheck.status || 401, pinCheck.message || "Invalid fund PIN");
+    }
+
+    let pricing = null;
+    let selectedPlan = null;
+    let description = `${serviceName} purchase`;
+
+    const rawDestination =
+      body.phone ||
+      body.smartcard_number ||
+      body.meter_number ||
+      body.customer_id ||
+      body.accountNumber ||
+      body.billersCode ||
+      "";
+
+    const destination = normalizePhone(rawDestination) || String(rawDestination).trim();
+
+    let providerAmount = 0;
+    let purchaseAmount = 0;
+    const role = req.user?.role;
+    const requestId = String(
+      body.request_id || body.requestId || body.reference || buildTxnRef(normalizedServiceType.toUpperCase())
+    ).trim();
+
+    if (normalizedServiceType === "airtime
