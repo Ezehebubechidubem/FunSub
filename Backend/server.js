@@ -3546,8 +3546,10 @@ app.post('/api/webhooks/iacafe', async (req, res) => {
 
 /* BETTING */
 
-
-
+/**
+ * Step 1: Load betting providers/options
+ * This follows the same pattern as your data/airtime loaders.
+ */
 app.get('/api/services/betting/options', requireAuth, async (req, res) => {
   try {
     const providersRes = await iacafe.getProviders().catch((err) => {
@@ -3557,13 +3559,16 @@ app.get('/api/services/betting/options', requireAuth, async (req, res) => {
 
     const providers = providersRes?.data || {};
     const options = (providers.betting || []).map((x) => ({
-      id: String(x).trim(),
+      id: x,
       name: String(x).trim(),
     }));
 
     return respondOk(
       res,
-      { serviceType: 'betting', options },
+      {
+        serviceType: 'betting',
+        options,
+      },
       'Betting options loaded'
     );
   } catch (err) {
@@ -3654,39 +3659,7 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
 app.post('/api/services/betting', requireAuth, async (req, res) => {
   return processBettingPayment(req, res);
 });
-/* PROVIDER DEBUG */
 
-app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
-  try {
-    return respondOk(res, {
-      provider: SERVICE_PROVIDER,
-      baseUrlSet: Boolean(VTPASS_BASE_URL),
-      hasApiKey: Boolean(VTPASS_API_KEY),
-      hasPublicKey: Boolean(VTPASS_PUBLIC_KEY),
-      hasSecretKey: Boolean(VTPASS_SECRET_KEY),
-      variationsPathSet: Boolean(VTPASS_VARIATIONS_PATH),
-      payPathSet: Boolean(VTPASS_PAY_PATH),
-      requeryPathSet: Boolean(VTPASS_REQUERY_PATH),
-      services: PROVIDER_ENDPOINTS
-    }, 'Provider config loaded');
-  } catch (err) {
-    console.error(err);
-    return respondError(res, 500, 'Server error');
-  }
-});
-
-app.post('/api/provider/vtpass/requery', requireAuth, async (req, res) => {
-  try {
-    const { requestId } = req.body || {};
-    if (!requestId) return respondError(res, 400, 'requestId is required');
-
-    const result = await requeryVtpassTransaction(requestId);
-    return respondOk(res, { result }, 'Transaction status loaded');
-  } catch (err) {
-    console.error(err.response?.data || err.message || err);
-    return respondError(res, 500, 'Unable to query transaction status');
-  }
-});
 /* TRANSACTIONS */
 
 app.get('/api/wallet/transactions', requireAuth, async (req, res) => {
