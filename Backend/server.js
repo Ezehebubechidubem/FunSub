@@ -164,7 +164,26 @@ function normalizeMeta(meta) {
 
   return {};
 }
+function pickBettingInputs(body = {}) {
+  const customer_id = String(
+    body.customer_id ||
+    body.customerId ||
+    body.user_id ||
+    body.account_id ||
+    body.betting_id ||
+    ""
+  ).trim();
 
+  const service_id = String(
+    body.service_id ||
+    body.serviceId ||
+    body.provider ||
+    body.platform ||
+    ""
+  ).trim();
+
+  return { customer_id, service_id };
+}
 function clearPendingRequery(requestId) {
   if (!requestId) return;
 
@@ -3523,6 +3542,8 @@ app.post('/api/webhooks/iacafe', async (req, res) => {
 
 /* BETTING */
 
+
+
 app.get('/api/services/betting/options', requireAuth, async (req, res) => {
   try {
     const providersRes = await iacafe.getProviders().catch((err) => {
@@ -3532,16 +3553,13 @@ app.get('/api/services/betting/options', requireAuth, async (req, res) => {
 
     const providers = providersRes?.data || {};
     const options = (providers.betting || []).map((x) => ({
-      id: x,
+      id: String(x).trim(),
       name: String(x).trim(),
     }));
 
     return respondOk(
       res,
-      {
-        serviceType: 'betting',
-        options,
-      },
+      { serviceType: 'betting', options },
       'Betting options loaded'
     );
   } catch (err) {
@@ -3554,30 +3572,9 @@ app.get('/api/services/betting/options', requireAuth, async (req, res) => {
   }
 });
 
-/**
- * Step 2: Verify betting customer before funding
- * If customer_not_found, stop here.
- */
 app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
   try {
-    const body = req.body || {};
-
-    const customer_id = String(
-      body.customer_id ||
-      body.customerId ||
-      body.user_id ||
-      body.account_id ||
-      body.betting_id ||
-      ''
-    ).trim();
-
-    const service_id = String(
-      body.service_id ||
-      body.serviceId ||
-      body.provider ||
-      body.platform ||
-      ''
-    ).trim();
+    const { customer_id, service_id } = pickBettingInputs(req.body);
 
     if (!customer_id || !service_id) {
       return respondError(res, 400, 'customer_id and service_id are required');
@@ -3622,6 +3619,8 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       err?.message ||
       'Unable to verify customer';
 
+    console.error('BETTING VERIFY ERROR:', err?.response?.data || err?.message || err);
+
     return respondError(
       res,
       code === 'customer_not_found' ? 404 : 400,
@@ -3630,13 +3629,9 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
   }
 });
 
-/**
- * Step 3: Fund betting account only after verification succeeds
- */
 app.post('/api/services/betting', requireAuth, async (req, res) => {
   return processBettingPayment(req, res);
 });
-
 /* PROVIDER DEBUG */
 
 app.get('/api/provider/vtpass/debug', requireAuth, async (req, res) => {
