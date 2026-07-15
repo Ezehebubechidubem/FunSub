@@ -2449,3 +2449,515 @@ function requireDebugAccess(req, res, next) {
 
   next();
 }
+async function applyWalletCreditWithFee(userId, grossAmount) {
+  const fee = applyWalletFundingFee(grossAmount);
+
+  await query(
+    `UPDATE wallets
+     SET balance = balance + $2, updated_at = NOW()
+     WHERE user_id = $1`,
+    [userId, Number(fee.netAmount).toFixed(2)]
+  );
+
+  return fee;
+}
+
+async function processFundingSuccess({ reference, amount, flutterwaveData = {}, rawWebhook = null }) {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const intentResult = await client.query(
+      `SELECT * FROM payment_intents
+       WHERE tx_ref = $1
+       FOR UPDATE`,
+      [reference]
+    );
+
+    const intent = intentResult.rows[0];
+    if (!intent) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'Payment intent not found' };
+    }
+
+    if (String(intent.status).toLowerCase() === 'successful') {
+      await client.query('COMMIT');
+      return { ok: true, alreadyProcessed: true };
+    }
+
+    const expectedAmount = Number(intent.amount || 0);
+    const paidAmount = Number(amount || 0);
+
+    if (expectedAmount && paidAmount && expectedAmount !== paidAmount) {
+      await client.query(
+        `UPDATE payment_intents
+         SET status = 'failed',
+             meta = $2
+         WHERE tx_ref = $1`,
+        [
+          reference,
+          JSON.stringify({
+            reason: 'amount_mismatch',
+            expectedAmount,
+            paidAmount,
+            flutterwaveData,
+            rawWebhook
+          })
+        ]
+      );
+
+      await client.query('COMMIT');
+      return { ok: false, reason: 'Amount mismatch' };
+    }
+
+    const fee = applyWalletFundingFee(paidAmount || expectedAmount);
+    const creditedAmount = Number(fee.netAmount || 0);
+
+    await client.query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [intent.user_id, creditedAmount]
+    );
+
+    await client.query(
+      `UPDATE payment_intents
+       SET status = 'successful',
+           verified_at = NOW(),
+           meta = $2
+       WHERE tx_ref = $1`,
+      [
+        reference,
+        JSON.stringify({
+          flutterwaveData,
+          rawWebhook,
+          creditedAmount,
+          fee
+        })
+      ]
+    );
+
+    await client.query(
+      `UPDATE transactions
+       SET status = 'success',
+           meta = $2
+       WHERE reference = $1
+         AND user_id = $3`,
+      [
+        reference,
+        JSON.stringify({
+          flutterwaveData,
+          rawWebhook,
+          creditedAmount,
+          fee
+        }),
+        intent.user_id
+      ]
+    );
+
+    await addNotification(
+      intent.user_id,
+      'Wallet funded',
+      `₦${Number(creditedAmount).toFixed(2)} has been added to your wallet`,
+      {
+        reference,
+        creditedAmount
+      },
+      true
+    );
+
+    await client.query('COMMIT');
+    return { ok: true, creditedAmount };
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function flutterwaveCreateVirtualAccount({ amount, user, reference }) {
+  const { first, last } = splitFullName(
+    user.full_name || user.fullName || user.name || 'User'
+  );
+
+  const isStatic = String(FLW_ACCOUNT_TYPE || 'dynamic').toLowerCase() === 'static';
+
+  const vaPayload = {
+    email: user.email,
+    amount: isStatic ? 0 : Number(amount),
+    tx_ref: reference,
+    firstname: first,
+    lastname: last,
+    phonenumber: user.phone ? String(user.phone) : undefined,
+    narration: user.full_name || user.fullName || user.name || 'Wallet funding',
+    expiry: isStatic ? undefined : Number(FLW_VA_EXPIRY || 3600),
+    is_permanent: isStatic,
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding',
+      reference
+    }
+  };
+
+  const cleanedPayload = Object.fromEntries(
+    Object.entries(vaPayload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+
+  console.log('FLW_VA_URL:', FLW_VA_URL);
+  console.log('VA PAYLOAD:', cleanedPayload);
+
+  const vaRes = await axios.post(FLW_VA_URL, cleanedPayload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return vaRes.data?.data || vaRes.data;
+}
+
+async function flutterwaveInitialize({ amount, user, description = 'Wallet funding' }) {
+  if (!FLW_SECRET_KEY) {
+    throw new Error('Flutterwave secret key not set');
+  }
+  if (!FLW_BASE_URL) {
+    throw new Error('FLW_BASE_URL is missing');
+  }
+
+  const tx_ref = flutterwaveTxRef();
+
+  const payload = {
+    tx_ref,
+    amount: Number(amount).toFixed(2),
+    currency: 'NGN',
+    redirect_url: process.env.FLW_REDIRECT_URL || '',
+    customer: {
+      email: user.email,
+      phonenumber: user.phone,
+      name: user.full_name
+    },
+    customizations: {
+      title: 'PhoneStop',
+      description
+    },
+    meta: {
+      user_id: user.id,
+      purpose: 'wallet_funding'
+    }
+  };
+
+  const response = await axios.post(`${FLW_BASE_URL}/payments`, payload, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return {
+    tx_ref,
+    payment_link: response.data?.data?.link || null,
+    raw: response.data
+  };
+}
+
+async function flutterwaveVerify(transactionId) {
+  if (!FLW_SECRET_KEY) {
+    throw new Error('Flutterwave secret key not set');
+  }
+  if (!FLW_BASE_URL) {
+    throw new Error('FLW_BASE_URL is missing');
+  }
+
+  const response = await axios.get(`${FLW_BASE_URL}/transactions/${transactionId}/verify`, {
+    headers: flutterwaveHeaders(),
+    timeout: 30000
+  });
+
+  return response.data?.data || null;
+}
+
+async function ensurePricingRule(serviceType) {
+  const normalized = normalizeServiceType(serviceType);
+
+  const found = await query(
+    `SELECT * FROM pricing_rules WHERE service_type = $1 LIMIT 1`,
+    [normalized]
+  );
+
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO pricing_rules (id, service_type, markup_percent, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, true, NOW(), NOW())
+     RETURNING *`,
+    [uid('prc_'), normalized, getDefaultMarkupPercent(normalized)]
+  );
+
+  return created.rows[0];
+}
+
+function getDefaultMarkupPercent(serviceType) {
+  const key = normalizeServiceType(serviceType);
+  return Number.isFinite(SERVICE_MARKUP_DEFAULTS[key]) ? SERVICE_MARKUP_DEFAULTS[key] : DEFAULT_MARKUP_PERCENT;
+}
+
+function applyWalletFundingFee(grossAmount) {
+  const gross = toNumber(grossAmount, 0);
+  const feePercent = FLW_WALLET_FEE_PERCENT;
+  const feeAmount = (gross * feePercent) / 100;
+  const netAmount = gross - feeAmount;
+
+  return {
+    grossAmount: Number(gross.toFixed(2)),
+    feePercent: Number(feePercent.toFixed(2)),
+    feeAmount: Number(feeAmount.toFixed(2)),
+    netAmount: Number(netAmount.toFixed(2))
+  };
+}
+function ensureHttpUrl(value, name) {
+  if (!/^https?:\/\//i.test(value)) {
+    throw new Error(`${name} is invalid: ${value}`);
+  }
+  return value;
+}
+
+async function ensureWallet(userId) {
+  const found = await query('SELECT * FROM wallets WHERE user_id = $1 LIMIT 1', [userId]);
+  if (found.rows[0]) return found.rows[0];
+
+  const created = await query(
+    `INSERT INTO wallets (id, user_id, balance, currency)
+     VALUES ($1, $2, 0, 'NGN')
+     RETURNING *`,
+    [uid('wal_'), userId]
+  );
+  return created.rows[0];
+}
+
+async function addNotification(userId, title, message, meta = {}, isSystem = true) {
+  await query(
+    `INSERT INTO notifications
+     (id, user_id, title, message, meta, is_read, is_system, created_at)
+     VALUES ($1, $2, $3, $4, $5, false, $6, NOW())`,
+    [uid('not_'), userId, title, message, JSON.stringify(meta), isSystem]
+  );
+}
+
+async function addTransaction({
+  userId,
+  type,
+  category,
+  amount,
+  currency = 'NGN',
+  status = 'success',
+  reference,
+  description,
+  meta = {}
+}) {
+  const txRef = reference || uid('ref_');
+
+  const inserted = await query(
+    `INSERT INTO transactions
+     (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+     RETURNING *`,
+    [
+      uid('tx_'),
+      userId,
+      type,
+      category,
+      amount,
+      currency,
+      status,
+      txRef,
+      description,
+      JSON.stringify(meta)
+    ]
+  );
+
+  return inserted.rows[0];
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    console.log('================ AUTH DEBUG ================');
+
+    const authHeaderValue = req.headers.authorization;
+
+    console.log('AUTH HEADER:', authHeaderValue);
+
+    if (!authHeaderValue) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authorization header missing'
+      });
+    }
+
+    if (!authHeaderValue.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authorization format'
+      });
+    }
+
+    const token = authHeaderValue.split(' ')[1];
+
+    console.log('TOKEN:', token);
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    console.log('DECODED TOKEN USER:', decoded);
+
+    const userResult = await query(
+      `SELECT
+         id,
+         role,
+         full_name,
+         email,
+         phone,
+         state,
+         avatar_url,
+         kyc_status,
+         profile_complete,
+         online,
+         last_login_at,
+         created_at,
+         updated_at,
+         fund_pin_hash,
+         fund_pin_set,
+         fund_pin_failed_attempts,
+         fund_pin_locked_until
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [decoded.id]
+    );
+
+    const dbUser = userResult.rows[0];
+
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      ...dbUser
+    };
+
+    console.log('AUTH SUCCESS');
+    console.log('CURRENT USER FROM DB:', req.user);
+    console.log('============================================');
+
+    next();
+  } catch (err) {
+    console.log('AUTH FAILED');
+    console.log('ERROR MESSAGE:', err.message);
+    console.log('============================================');
+
+    return res.status(401).json({
+      success: false,
+      message: err.message || 'Unauthorized'
+    });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  try {
+    const token = authHeader(req);
+    if (!token) return respondError(res, 401, 'Unauthorized');
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') return respondError(res, 403, 'Admin access required');
+
+    if (ADMIN_API_KEY) {
+      const got = req.headers['x-admin-key'] || req.query.admin_key;
+      if (got !== ADMIN_API_KEY) return respondError(res, 403, 'Invalid admin key');
+    }
+
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return respondError(res, 401, 'Unauthorized');
+  }
+}
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const {
+      fullName,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      state,
+      fundPin
+    } = req.body || {};
+
+    if (!fullName || !email || !phone || !password || !confirmPassword || !state || !fundPin) {
+      return respondError(res, 400, 'All fields are required');
+    }
+
+    if (String(password).length < 6) {
+      return respondError(res, 400, 'Password must be at least 6 characters');
+    }
+
+    if (String(password) !== String(confirmPassword)) {
+      return respondError(res, 400, 'Passwords do not match');
+    }
+
+    const cleanFundPin = String(fundPin).trim();
+    if (!/^\d{4}$/.test(cleanFundPin)) {
+      return respondError(res, 400, 'Fund PIN must be exactly 4 digits');
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const exists = await query(
+      'SELECT id FROM users WHERE email = $1 OR phone = $2 LIMIT 1',
+      [normalizedEmail, normalizedPhone]
+    );
+
+    if (exists.rows[0]) {
+      return respondError(res, 409, 'User already exists');
+    }
+
+    const password_hash = await bcrypt.hash(String(password), 10);
+    const fund_pin_hash = await bcrypt.hash(cleanFundPin, 10);
+    const userId = uid('usr_');
+
+    const inserted = await query(
+      `INSERT INTO users
+       (id, role, full_name, email, phone, password_hash, fund_pin_hash, fund_pin_set, state, avatar_url, kyc_status, profile_complete, online, created_at, updated_at)
+       VALUES
+       ($1, 'user', $2, $3, $4, $5, $6, true, $7, NULL, 'unverified', false, false, NOW(), NOW())
+       RETURNING id, role, full_name, email, phone, state, avatar_url, kyc_status, profile_complete, online, created_at, fund_pin_set`,
+      [
+        userId,
+        fullName.trim(),
+        normalizedEmail,
+        normalizedPhone,
+        password_hash,
+        fund_pin_hash,
+        state.trim()
+      ]
+    );
+
+    await ensureWallet(userId);
+    await addNotification(userId, 'Welcome to PhoneStop', 'Registration successful', { type: 'auth' }, true);
+
+    const token = signToken({ id: userId, role: 'user', fundPinSet: true });
+
+    return respondOk(res, {
+      token,
+      user: inserted.rows[0]
+    }, 'Registration successful');
+  } catch (err) {
+    console.error(err);
+    return respondError(res, 500, 'Server error');
+  }
+});
