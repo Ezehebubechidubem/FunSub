@@ -174,7 +174,66 @@ function clearPendingRequery(requestId) {
   if (timer) clearTimeout(timer);
   pendingRequeryTimers.delete(requestId);
 }
+async function reverseAndRefund(txRow, userId, amount, reason, extraMeta = {}) {
+  if (!txRow?.id) return;
 
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const txCheck = await client.query(
+      `SELECT status, meta
+       FROM transactions
+       WHERE id = $1
+       FOR UPDATE`,
+      [txRow.id]
+    );
+
+    if (!txCheck.rows.length) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const currentStatus = String(txCheck.rows[0].status || "").toLowerCase();
+    if (currentStatus !== "pending") {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const currentMeta = normalizeMeta(txCheck.rows[0].meta);
+    const mergedMeta = mergeMeta(currentMeta, {
+      reverseReason: reason,
+      ...extraMeta,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await client.query(
+      `UPDATE wallets
+       SET balance = balance + $2,
+           updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId, amount]
+    );
+
+    await client.query(
+      `UPDATE transactions
+       SET status = 'reversed',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [txRow.id, reason, JSON.stringify(mergedMeta)]
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 async function verifyFundPin(userId, fundPin) {
   if (!fundPin) return false;
 
