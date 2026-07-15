@@ -164,6 +164,28 @@ function normalizeMeta(meta) {
 
   return {};
 }
+function normalizeBettingServiceId(value) {
+  const s = String(value || '').trim().toLowerCase();
+
+  const map = {
+    'bet9ja': 'Bet9ja',
+    'betking': 'BetKing',
+    'nairabet': 'NairaBet',
+    'naijabet': 'NaijaBet',
+    'betway': 'BetWay',
+    'betlion': 'BetLion',
+    'betland': 'BetLand',
+    'bangbet': 'BangBet',
+    'cloudbet': 'CloudBet',
+    'merrybet': 'MerryBet',
+    'supabet': 'SupaBet',
+    'livescorebet': 'LiveScoreBet',
+    '1xbet': '1xBet',
+    '1xbetng': '1xBet'
+  };
+
+  return map[s] || value;
+}
 
 function clearPendingRequery(requestId) {
   if (!requestId) return;
