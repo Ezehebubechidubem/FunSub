@@ -2067,4 +2067,385 @@ async function requeryPendingServiceTransactions() {
 
 setInterval(() => {
   requeryPendingServiceTransactions().catch((err) => {
-    console.error
+    console.error('Pending requery worker error:', err?.message);
+  });
+}, 60_000);
+async function processBettingPayment(req, res) {
+  const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MS = 60 * 60 * 1000; // 1 hour
+
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const stateResult = await client.query(
+        `SELECT COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts, fund_pin_locked_until
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const row = stateResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 404, message: "User not found" };
+      }
+
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until ? new Date(row.fund_pin_locked_until) : null;
+      const now = Date.now();
+
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+        failedAttempts = 0;
+      }
+
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
+        await client.query("ROLLBACK");
+        return {
+          ok: false,
+          status: 423,
+          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
+          locked: true,
+        };
+      }
+
+      const pinOk = await verifyFundPin(userId, fundPin);
+
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1;
+        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock ? new Date(Date.now() + PIN_LOCK_MS) : null;
+
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = $2,
+               fund_pin_locked_until = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+          ok: false,
+          status: shouldLock ? 423 : 401,
+          message: shouldLock
+            ? "Invalid PIN. Locked for 1 hour."
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left`,
+          locked: shouldLock,
+        };
+      }
+
+      await client.query(
+        `UPDATE users
+         SET fund_pin_failed_attempts = 0,
+             fund_pin_locked_until = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await client.query("COMMIT");
+      return { ok: true };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) return respondError(res, 401, "Unauthorized");
+
+    const fundPin = String(body.fundPin || "").trim();
+    if (!fundPin) return respondError(res, 400, "Transaction PIN is required");
+
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) return respondError(res, pinCheck.status || 401, pinCheck.message || "Invalid fund PIN");
+
+    const customer_id = String(body.customer_id || "").trim();
+    const service_id = String(body.service_id || "").trim();
+    const amount = toNumber(body.amount, 0);
+    const request_id = String(body.request_id || body.requestId || body.reference || buildTxnRef("BET")).trim();
+
+    if (!customer_id || !service_id) return respondError(res, 400, "customer_id and service_id are required");
+    if (amount < 100) return respondError(res, 400, "Minimum betting amount is ₦100");
+
+    const description = `Betting Funding - ${service_id}`;
+
+    const client = await pool.connect();
+    let txRow = null;
+
+    try {
+      await client.query("BEGIN");
+
+      const walletResult = await client.query(
+        "SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE",
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query("ROLLBACK");
+        return respondError(res, 404, "Wallet not found");
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < amount) {
+        await client.query("ROLLBACK");
+        return respondError(res, 400, "Insufficient wallet balance");
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, amount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES ($1, $2, 'purchase', 'betting', $3, 'NGN', 'pending', $4, $5, $6, NOW())
+         RETURNING *`,
+        [
+          uid("tx_"),
+          userId,
+          amount,
+          request_id,
+          description,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            amount,
+            request_id,
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      txRow = inserted.rows[0];
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    let providerResponse;
+
+    try {
+      providerResponse = await withTimeout(
+        iacafe.buyBetting({
+          request_id,
+          customer_id,
+          service_id,
+          amount,
+          skip_verify: true,
+        }),
+        PROVIDER_TIMEOUT_MS,
+        "Provider timeout"
+      );
+    } catch (err) {
+      console.error("BETTING PROVIDER CALL ERROR:", err?.message);
+      console.error("BETTING PROVIDER ERROR DATA:", err?.response?.data);
+
+      const status = Number(err?.response?.status || 0);
+      const providerMessage =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Provider error";
+
+      if (status && status >= 400 && status < 500 && ![408, 425, 429].includes(status)) {
+        await reverseAndRefund(
+          txRow,
+          userId,
+          amount,
+          `${description} failed`,
+          {
+            request_id,
+            customer_id,
+            service_id,
+            providerResponse: err?.response?.data || err?.message,
+          }
+        );
+
+        return respondError(res, status, providerMessage);
+      }
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            amount,
+            request_id,
+            providerError: err?.response?.data || err?.message || "Provider timeout",
+            provider: "iacafe",
+            status: "pending",
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(request_id, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerMessage,
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        request_id,
+      });
+    }
+
+    const providerState = classifyProviderResponse(providerResponse);
+    const providerText = extractProviderText(providerResponse);
+
+    if (providerState === "pending" || providerState === "unknown") {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          description,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            amount,
+            request_id,
+            providerResponse,
+            provider: "iacafe",
+            status: "pending",
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(request_id, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerText || "Betting funding pending",
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        providerResponse,
+        request_id,
+      });
+    }
+
+    if (providerState === "failed") {
+      await reverseAndRefund(
+        txRow,
+        userId,
+        amount,
+        `${description} failed`,
+        {
+          customer_id,
+          service_id,
+          request_id,
+          providerResponse,
+        }
+      );
+
+      return respondError(res, 400, providerText || providerResponse?.message || "Betting funding failed");
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [
+        txRow.id,
+        description,
+        JSON.stringify({
+          customer_id,
+          service_id,
+          amount,
+          request_id,
+          providerResponse,
+          provider: "iacafe",
+          status: "success",
+        }),
+      ]
+    );
+
+    clearPendingRequery(request_id);
+
+    await addNotification(
+      userId,
+      "Betting Funded",
+      `${description} of ₦${amount.toLocaleString("en-NG")} was successful`,
+      { transactionId: txRow.id, request_id, providerResponse },
+      true
+    );
+
+    return respondOk(
+      res,
+      {
+        transaction: {
+          ...txRow,
+          status: "success",
+        },
+        providerResponse,
+        request_id,
+      },
+      "Betting funded successfully"
+    );
+  } catch (err) {
+    console.error("PROCESS BETTING PAYMENT ERROR:", err);
+    return respondError(res, 500, err?.message || "Unable to process betting purchase");
+  }
+}
+function requireDebugAccess(req, res, next) {
+  const got = req.headers['x-debug-key'] || req.query.debug_key;
+  const expected = process.env.DEBUG_KEY;
+
+  if (!expected || got !== expected) {
+    return respondError(res, 403, 'Debug access denied');
+  }
+
+  next();
+}
