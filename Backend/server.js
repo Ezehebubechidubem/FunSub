@@ -209,6 +209,10 @@ async function verifyFundPin(userId, fundPin) {
   return bcrypt.compare(String(fundPin), user.fund_pin_hash);
 }
 
+function normalizeBettingServiceId(value) {
+  return String(value || '').trim();
+}
+
 function extractProviderText(response) {
   const payload =
     response?.data &&
