@@ -3883,32 +3883,28 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       ''
     ).trim();
 
-    const service_id = normalizeBettingServiceId(
+    const service_id = String(
       body.service_id ||
       body.serviceId ||
       body.provider ||
       body.platform ||
       ''
-    );
+    ).trim();
 
     if (!customer_id || !service_id) {
       return respondError(res, 400, 'customer_id and service_id are required');
     }
 
-    const result = await withTimeout(
-      iacafe.verifyBettingCustomer({
-        customer_id,
-        service_id,
-      }),
-      30000,
-      'Betting verification timed out'
-    );
+    const result = await iacafe.verifyBettingCustomer({
+      customer_id,
+      service_id,
+    });
 
     const customerName =
-      result?.data?.customer_name ||
-      result?.data?.name ||
       result?.customer_name ||
+      result?.data?.customer_name ||
       result?.name ||
+      result?.data?.name ||
       result?.customer?.name ||
       result?.data?.customer?.name ||
       null;
@@ -3933,16 +3929,14 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
     ).trim().toLowerCase();
 
     const message =
-      err?.message === 'Betting verification timed out'
-        ? 'Verification timed out. Please try again.'
-        : err?.response?.data?.error?.message ||
-          err?.response?.data?.message ||
-          err?.message ||
-          'Unable to verify customer';
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Unable to verify customer';
 
     return respondError(
       res,
-      code === 'customer_not_found' ? 404 : err?.message === 'Betting verification timed out' ? 504 : 400,
+      code === 'customer_not_found' ? 404 : 400,
       message
     );
   }
