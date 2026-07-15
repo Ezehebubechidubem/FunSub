@@ -2121,13 +2121,38 @@ async function processBettingPayment(req, res) {
     const pinCheck = await verifyAndTrackPin(userId, fundPin);
     if (!pinCheck.ok) return respondError(res, pinCheck.status || 401, pinCheck.message || "Invalid fund PIN");
 
-    const customer_id = String(body.customer_id || "").trim();
-    const service_id = String(body.service_id || "").trim();
-    const amount = toNumber(body.amount, 0);
-    const request_id = String(body.request_id || body.requestId || body.reference || buildTxnRef("BET")).trim();
+    const customer_id = String(
+      body.customer_id ||
+      body.customerId ||
+      body.user_id ||
+      body.account_id ||
+      body.betting_id ||
+      ''
+    ).trim();
 
-    if (!customer_id || !service_id) return respondError(res, 400, "customer_id and service_id are required");
-    if (amount < 100) return respondError(res, 400, "Minimum betting amount is ₦100");
+    const service_id = normalizeBettingServiceId(
+      body.service_id ||
+      body.serviceId ||
+      body.provider ||
+      body.platform ||
+      ''
+    );
+
+    const amount = toNumber(body.amount, 0);
+    const request_id = String(
+      body.request_id ||
+      body.requestId ||
+      body.reference ||
+      buildTxnRef("BET")
+    ).trim();
+
+    if (!customer_id || !service_id) {
+      return respondError(res, 400, "customer_id and service_id are required");
+    }
+
+    if (amount < 100) {
+      return respondError(res, 400, "Minimum betting amount is ₦100");
+    }
 
     const description = `Betting Funding - ${service_id}`;
 
@@ -2273,10 +2298,21 @@ async function processBettingPayment(req, res) {
       });
     }
 
-    const providerState = classifyProviderResponse(providerResponse);
-    const providerText = extractProviderText(providerResponse);
+    const providerState = getBettingProviderState(providerResponse);
+    const providerText =
+      providerResponse?.message ||
+      providerResponse?.data?.message ||
+      providerResponse?.error?.message ||
+      "Betting request processed";
 
-    if (providerState === "pending" || providerState === "unknown") {
+    const providerData = providerResponse?.data || providerResponse?.result || {};
+    const amountCharged = Number(
+      providerData?.amount_charged ||
+      providerResponse?.amount_charged ||
+      amount
+    );
+
+    if (providerState === "pending") {
       await pool.query(
         `UPDATE transactions
          SET status = 'pending',
@@ -2294,6 +2330,7 @@ async function processBettingPayment(req, res) {
             providerResponse,
             provider: "iacafe",
             status: "pending",
+            amount_charged: amountCharged || null,
           }),
         ]
       );
@@ -2327,7 +2364,23 @@ async function processBettingPayment(req, res) {
         }
       );
 
-      return respondError(res, 400, providerText || providerResponse?.message || "Betting funding failed");
+      return respondError(
+        res,
+        422,
+        providerText || providerResponse?.error?.message || providerResponse?.message || "Betting funding failed"
+      );
+    }
+
+    const refundAmount = Math.max(0, amount - amountCharged);
+
+    if (refundAmount > 0) {
+      await pool.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, refundAmount]
+      );
     }
 
     await pool.query(
@@ -2343,6 +2396,8 @@ async function processBettingPayment(req, res) {
           customer_id,
           service_id,
           amount,
+          amount_charged: amountCharged,
+          refundAmount,
           request_id,
           providerResponse,
           provider: "iacafe",
@@ -3822,28 +3877,32 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
       ''
     ).trim();
 
-    const service_id = String(
+    const service_id = normalizeBettingServiceId(
       body.service_id ||
       body.serviceId ||
       body.provider ||
       body.platform ||
       ''
-    ).trim();
+    );
 
     if (!customer_id || !service_id) {
       return respondError(res, 400, 'customer_id and service_id are required');
     }
 
-    const result = await iacafe.verifyBettingCustomer({
-      customer_id,
-      service_id,
-    });
+    const result = await withTimeout(
+      iacafe.verifyBettingCustomer({
+        customer_id,
+        service_id,
+      }),
+      30000,
+      'Betting verification timed out'
+    );
 
     const customerName =
-      result?.customer_name ||
       result?.data?.customer_name ||
-      result?.name ||
       result?.data?.name ||
+      result?.customer_name ||
+      result?.name ||
       result?.customer?.name ||
       result?.data?.customer?.name ||
       null;
@@ -3868,14 +3927,16 @@ app.post('/api/services/betting/verify', requireAuth, async (req, res) => {
     ).trim().toLowerCase();
 
     const message =
-      err?.response?.data?.error?.message ||
-      err?.response?.data?.message ||
-      err?.message ||
-      'Unable to verify customer';
+      err?.message === 'Betting verification timed out'
+        ? 'Verification timed out. Please try again.'
+        : err?.response?.data?.error?.message ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Unable to verify customer';
 
     return respondError(
       res,
-      code === 'customer_not_found' ? 404 : 400,
+      code === 'customer_not_found' ? 404 : err?.message === 'Betting verification timed out' ? 504 : 400,
       message
     );
   }
