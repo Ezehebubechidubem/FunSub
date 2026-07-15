@@ -1322,7 +1322,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
     }
   }
 
-  async function verifyAndTrackPin(userId, fundPin) {
+    async function verifyAndTrackPin(userId, fundPin) {
     const client = await pool.connect();
 
     try {
@@ -1463,4 +1463,608 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       body.request_id || body.requestId || body.reference || buildTxnRef(normalizedServiceType.toUpperCase())
     ).trim();
 
-    if (normalizedServiceType === "airtime
+    if (normalizedServiceType === "airtime") {
+      providerAmount = toNumber(body.amount, 0);
+
+      if (providerAmount <= 0 || !destination) {
+        return respondError(res, 400, "amount and phone are required");
+      }
+
+      pricing = buildRolePricing("airtime", providerAmount, role);
+      purchaseAmount = pricing.finalPrice;
+
+      if (purchaseAmount <= 0) {
+        purchaseAmount = providerAmount;
+      }
+    } else {
+      const variationCode = String(
+        body.variation_code ||
+        body.planId ||
+        body.plan_id ||
+        body.planCode ||
+        body.code ||
+        ""
+      ).trim();
+
+      providerAmount = toNumber(
+        body.base_price ||
+        body.rawPrice ||
+        body.raw_price ||
+        body.amount,
+        0
+      );
+
+      if (!variationCode) {
+        return respondError(res, 400, "variation_code is required");
+      }
+
+      if (providerAmount <= 0) {
+        return respondError(res, 400, "base_price is required");
+      }
+
+      const pricingOptions = {
+        network: body.network || body.service_id || body.serviceId,
+        provider: body.provider,
+        service_id: body.service_id || body.serviceId,
+      };
+
+      pricing = buildRolePricing(normalizedServiceType, providerAmount, role, pricingOptions);
+      purchaseAmount = pricing.finalPrice;
+
+      selectedPlan = {
+        id: variationCode,
+        name: body.plan_name || `${serviceName} Plan`,
+        rawPrice: providerAmount,
+        purchase_amount: purchaseAmount,
+        purchase_route:
+          String(body.purchase_route || body.plan_source || body.source || "").toLowerCase() === "budget-data"
+            ? "/budget-data"
+            : "/data",
+        purchase_key: variationCode,
+        meta: {
+          service_id: body.service_id || body.serviceId,
+          provider: body.provider,
+          network: body.network,
+        },
+      };
+
+      description = `${serviceName} - ${selectedPlan.name}`;
+    }
+
+    if (!pricing) {
+      return respondError(res, 400, "Unable to prepare purchase");
+    }
+
+    const client = await pool.connect();
+    let txRow = null;
+
+    try {
+      await client.query("BEGIN");
+
+      const walletResult = await client.query(
+        "SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE",
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query("ROLLBACK");
+        return respondError(res, 404, "Wallet not found");
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < purchaseAmount) {
+        await client.query("ROLLBACK");
+        return respondError(res, 400, "Insufficient wallet balance");
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, purchaseAmount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES
+         ($1, $2, $3, $4, $5, 'NGN', 'pending', $6, $7, $8, NOW())
+         RETURNING *`,
+        [
+          uid("tx_"),
+          userId,
+          "purchase",
+          normalizedServiceType,
+          purchaseAmount,
+          requestId,
+          description,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      txRow = inserted.rows[0];
+
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const providerBody = {
+      ...body,
+      request_id: requestId,
+      amount: providerAmount,
+      plan_amount: providerAmount,
+      base_price: providerAmount,
+      final_amount: purchaseAmount,
+    };
+
+    let providerResponse;
+
+    try {
+      providerResponse = await withTimeout(
+        buyServiceThroughGateway({
+          serviceType: normalizedServiceType,
+          body: providerBody,
+          selectedPlan,
+          requestId,
+        }),
+        PROVIDER_TIMEOUT_MS,
+        "Provider timeout"
+      );
+    } catch (err) {
+      console.error("PROVIDER CALL ERROR:", err?.message);
+      console.error("PROVIDER ERROR DATA:", err?.response?.data);
+
+      const status = Number(err?.response?.status || 0);
+      const providerMessage =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Provider error";
+
+      if (status && status >= 400 && status < 500 && ![408, 425, 429].includes(status)) {
+        await reverseAndRefund(
+          txRow,
+          userId,
+          purchaseAmount,
+          `${description} failed`,
+          {
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerError: err?.response?.data || err?.message || "Provider rejected request",
+          }
+        );
+
+        return respondError(res, status, providerMessage);
+      }
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerError: err?.response?.data || err?.message || "Provider timeout",
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerMessage,
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        pricing,
+        requestId,
+      });
+    }
+
+    console.log("PROVIDER RESPONSE:", JSON.stringify(providerResponse, null, 2));
+
+    const providerState = classifyProviderResponse(providerResponse);
+    const providerText = extractProviderText(providerResponse);
+
+    if (providerState === "pending" || providerState === "unknown") {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            requestId,
+            serviceType: normalizedServiceType,
+            serviceName,
+            selectedPlan,
+            pricing,
+            providerAmount,
+            purchaseAmount,
+            providerResponse,
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(requestId, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerText || "Purchase pending",
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        pricing,
+        requestId,
+        providerResponse,
+      });
+    }
+
+    if (providerState === "failed") {
+      await reverseAndRefund(
+        txRow,
+        userId,
+        purchaseAmount,
+        `${description} failed`,
+        {
+          requestId,
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          providerResponse,
+        }
+      );
+
+      return respondError(
+        res,
+        400,
+        providerText || providerResponse?.response_description || providerResponse?.message || "Purchase failed"
+      );
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [
+        txRow.id,
+        description,
+        JSON.stringify({
+          requestId,
+          serviceType: normalizedServiceType,
+          serviceName,
+          selectedPlan,
+          pricing,
+          providerAmount,
+          purchaseAmount,
+          providerResponse,
+          provider: "iacafe",
+          status: "success",
+        }),
+      ]
+    );
+
+    clearPendingRequery(requestId);
+
+    await addNotification(
+      userId,
+      `${serviceName} purchased`,
+      `${description} was successful`,
+      {
+        transactionId: txRow.id,
+        requestId,
+        serviceType: normalizedServiceType,
+        pricing,
+        providerAmount,
+        purchaseAmount,
+        providerResponse,
+      },
+      true
+    );
+
+    return respondOk(
+      res,
+      {
+        transaction: {
+          ...txRow,
+          status: "success",
+          amount: purchaseAmount,
+        },
+        pricing,
+        requestId,
+        providerResponse,
+      },
+      `${serviceName} purchased successfully`
+    );
+  } catch (err) {
+    console.error("PROCESS SERVICE PAYMENT ERROR:", err);
+    console.error("ERROR MESSAGE:", err?.message);
+    console.error("ERROR STACK:", err?.stack);
+    console.error("ERROR RESPONSE DATA:", err?.response?.data);
+
+    return respondError(
+      res,
+      500,
+      err?.message || `Unable to process ${serviceName.toLowerCase()} purchase`
+    );
+  }
+}
+async function requeryTransactionByRequestId(requestId, { source = 'requery' } = {}) {
+  if (!requestId) return { found: false, state: 'unknown' };
+
+  const providerResponse = await iacafe.requery(requestId);
+  return applyProviderOutcomeByReference({
+    requestId,
+    providerResponse,
+    source,
+  });
+}
+
+function scheduleIacafeRequery(
+  requestId,
+  {
+    delayMs = ICAFE_REQUERY_DELAY_MS,
+    attempt = 1,
+    maxAttempts = ICAFE_REQUERY_MAX_ATTEMPTS,
+  } = {}
+) {
+  if (!requestId) return;
+
+  const existing = pendingRequeryTimers.get(requestId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    pendingRequeryTimers.delete(requestId);
+
+    try {
+      const result = await requeryTransactionByRequestId(requestId, {
+        source: `timer_${attempt}`,
+      });
+
+      if (
+        (result?.state === 'pending' || result?.state === 'unknown') &&
+        attempt < maxAttempts
+      ) {
+        scheduleIacafeRequery(requestId, {
+          delayMs: delayMs * 2,
+          attempt: attempt + 1,
+          maxAttempts,
+        });
+      }
+    } catch (err) {
+      console.error('Scheduled requery failed:', requestId, err?.message);
+
+      if (attempt < maxAttempts) {
+        scheduleIacafeRequery(requestId, {
+          delayMs: delayMs * 2,
+          attempt: attempt + 1,
+          maxAttempts,
+        });
+      }
+    }
+  }, delayMs);
+
+  pendingRequeryTimers.set(requestId, timer);
+}
+
+async function requeryPendingServiceTransactions() {
+  const client = await pool.connect();
+
+  function safeMeta(meta) {
+    if (!meta) return {};
+
+    if (typeof meta === "object" && !Array.isArray(meta)) {
+      return meta;
+    }
+
+    if (typeof meta === "string") {
+      try {
+        const parsed = JSON.parse(meta);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        return { rawMeta: meta };
+      }
+    }
+
+    return {};
+  }
+
+  try {
+    const result = await client.query(
+      `SELECT id, user_id, reference, amount, category, meta, status
+       FROM transactions
+       WHERE status = 'pending'
+         AND category IN (
+           'airtime',
+           'data',
+           'cable_tv',
+           'electricity',
+           'betting',
+           'recharge_pin',
+           'data_pin',
+           'exam_pin'
+         )
+         AND COALESCE(meta->>'provider', '') = 'iacafe'
+         AND created_at <= NOW() - INTERVAL '20 seconds'
+       ORDER BY created_at ASC
+       LIMIT 50`
+    );
+
+    for (const tx of result.rows) {
+      const requestId = String(tx.reference || "").trim();
+      if (!requestId) continue;
+
+      const meta = safeMeta(tx.meta);
+
+      let providerResponse;
+      try {
+        providerResponse = await iacafe.requery(requestId);
+      } catch (err) {
+        console.error("Requery failed for:", requestId, err?.message);
+        continue;
+      }
+
+      const state = classifyProviderResponse(providerResponse);
+
+      if (state === "pending" || state === "unknown") {
+        await client.query(
+          `UPDATE transactions
+           SET meta = $2,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [
+            tx.id,
+            JSON.stringify({
+              ...meta,
+              providerResponse,
+              providerState: state,
+              requeryResult: "pending",
+              updatedAt: new Date().toISOString(),
+            }),
+          ]
+        );
+        continue;
+      }
+
+      if (state === "success") {
+        await client.query(
+          `UPDATE transactions
+           SET status = 'success',
+               meta = $2,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [
+            tx.id,
+            JSON.stringify({
+              ...meta,
+              providerResponse,
+              providerState: state,
+              requeryResult: "success",
+              updatedAt: new Date().toISOString(),
+            }),
+          ]
+        );
+
+        clearPendingRequery(requestId);
+        continue;
+      }
+
+      if (state === "failed") {
+        await client.query("BEGIN");
+        try {
+          const locked = await client.query(
+            `SELECT id, user_id, amount, status, meta
+             FROM transactions
+             WHERE id = $1
+             FOR UPDATE`,
+            [tx.id]
+          );
+
+          if (!locked.rows.length) {
+            await client.query("ROLLBACK");
+            continue;
+          }
+
+          const currentStatus = String(locked.rows[0].status || "").toLowerCase();
+          if (currentStatus !== "pending") {
+            await client.query("ROLLBACK");
+            continue;
+          }
+
+          await client.query(
+            `UPDATE wallets
+             SET balance = balance + $2,
+                 updated_at = NOW()
+             WHERE user_id = $1`,
+            [tx.user_id, tx.amount]
+          );
+
+          await client.query(
+            `UPDATE transactions
+             SET status = 'reversed',
+                 meta = $2,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [
+              tx.id,
+              JSON.stringify({
+                ...meta,
+                providerResponse,
+                providerState: state,
+                requeryResult: "failed",
+                updatedAt: new Date().toISOString(),
+              }),
+            ]
+          );
+
+          await client.query("COMMIT");
+          clearPendingRequery(requestId);
+        } catch (err) {
+          try {
+            await client.query("ROLLBACK");
+          } catch (_) {}
+          console.error("Requery reverse failed:", tx.id, err?.message);
+        }
+      }
+    }
+  } finally {
+    client.release();
+  }
+}
+
+setInterval(() => {
+  requeryPendingServiceTransactions().catch((err) => {
+    console.error
