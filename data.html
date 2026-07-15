@@ -614,6 +614,16 @@
     });
   }
 
+  function clearDataInputs() {
+    const phone = document.getElementById("phone");
+    const planSelect = document.getElementById("planSelect");
+
+    if (phone) phone.value = "";
+    if (planSelect) planSelect.selectedIndex = 0;
+
+    currentPlan = null;
+  }
+
   function buildReceiptText() {
     if (!lastReceipt) return "";
 
@@ -654,6 +664,7 @@
       document.querySelectorAll(".network-card").forEach(c => c.classList.remove("active"));
       card.classList.add("active");
       currentNetwork = card.dataset.network;
+      clearDataInputs();
       loadPlans(currentNetwork);
     });
   });
@@ -934,8 +945,8 @@
           service_id,
           serviceId: service_id,
           variation_code,
-          plan_amount,          // this is now the marked-up amount
-          base_price,           // optional, for reference only
+          plan_amount,
+          base_price,
           plan_name,
           source,
           plan_source,
@@ -952,6 +963,9 @@
       const tx = data.transaction || data.data?.transaction || data.result || {};
       const statusText = String(tx.status || data.status || "").toLowerCase();
       const reference = tx.reference || tx.tx_ref || data.reference || request_id;
+
+      // clear inputs immediately after submission
+      clearDataInputs();
 
       if (
         response.ok &&
@@ -1038,6 +1052,10 @@
       };
     } catch (error) {
       console.error(error);
+
+      // clear inputs even if request errors
+      clearDataInputs();
+
       showFailedModal("Unable to complete transaction");
 
       setReceiptValues({
@@ -1078,5 +1096,6 @@
     }
   });
 </script>
+
 </body>
 </html>
