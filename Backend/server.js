@@ -843,7 +843,70 @@ function normalizeServiceType(v) {
 
   return map[s] || s;
 }
+async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
+  const normalizedServiceType = normalizeServiceType(serviceType);
+  const service_id = body.service_id || body.serviceId;
 
+  switch (normalizedServiceType) {
+    case "airtime":
+      return iacafe.buyAirtime({
+        request_id: requestId,
+        phone: body.phone,
+        service_id,
+        amount: toNumber(body.amount, 0),
+      });
+
+    case "data":
+      return iacafe.buyData({
+        request_id: requestId,
+        phone: body.phone,
+        plan: selectedPlan,
+        service_id,
+      });
+
+    case "cable_tv":
+      return iacafe.buyCable({
+        request_id: requestId,
+        customer_id:
+          body.smartcard_number ||
+          body.customer_id ||
+          body.accountNumber ||
+          body.billersCode,
+        service_id,
+        plan: selectedPlan,
+      });
+
+    case "electricity":
+      return iacafe.buyElectricity({
+        request_id: requestId,
+        customer_id:
+          body.meter_number ||
+          body.meterNumber ||
+          body.customer_id ||
+          body.billersCode,
+        service_id,
+        meter_number: body.meter_number || body.meterNumber,
+        account_number: body.accountNumber,
+        amount: toNumber(body.amount, 0),
+      });
+
+    case "betting":
+      if (!body.customer_id || !service_id) {
+        throw new Error("customer_id and service_id are required");
+      }
+
+      return iacafe.buyBetting({
+        request_id: requestId,
+        customer_id: String(body.customer_id).trim(),
+        service_id: String(service_id).trim(),
+        amount: toNumber(body.plan_amount || body.amount, 0),
+        skip_verify: true,
+      });
+
+    default:
+      throw new Error(`${normalizedServiceType} is not supported yet`);
+  }
+}
 function getProviderConfig(serviceType) {
   const normalized = normalizeServiceType(serviceType);
   return {
@@ -950,70 +1013,7 @@ async function processServicePayment(req, res, serviceType, serviceName) {
       client.release();
     }
   }
-async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
-  const normalizedServiceType = normalizeServiceType(serviceType);
-  const service_id = body.service_id || body.serviceId;
 
-  switch (normalizedServiceType) {
-    case "airtime":
-      return iacafe.buyAirtime({
-        request_id: requestId,
-        phone: body.phone,
-        service_id,
-        amount: toNumber(body.amount, 0),
-      });
-
-    case "data":
-      return iacafe.buyData({
-        request_id: requestId,
-        phone: body.phone,
-        plan: selectedPlan,
-        service_id,
-      });
-
-    case "cable_tv":
-      return iacafe.buyCable({
-        request_id: requestId,
-        customer_id:
-          body.smartcard_number ||
-          body.customer_id ||
-          body.accountNumber ||
-          body.billersCode,
-        service_id,
-        plan: selectedPlan,
-      });
-
-    case "electricity":
-      return iacafe.buyElectricity({
-        request_id: requestId,
-        customer_id:
-          body.meter_number ||
-          body.meterNumber ||
-          body.customer_id ||
-          body.billersCode,
-        service_id,
-        meter_number: body.meter_number || body.meterNumber,
-        account_number: body.accountNumber,
-        amount: toNumber(body.amount, 0),
-      });
-
-    case "betting":
-      if (!body.customer_id || !service_id) {
-        throw new Error("customer_id and service_id are required");
-      }
-
-      return iacafe.buyBetting({
-        request_id: requestId,
-        customer_id: String(body.customer_id).trim(),
-        service_id: String(service_id).trim(),
-        amount: toNumber(body.plan_amount || body.amount, 0),
-        skip_verify: true,
-      });
-
-    default:
-      throw new Error(`${normalizedServiceType} is not supported yet`);
-  }
-}
   async function verifyAndTrackPin(userId, fundPin) {
     const client = await pool.connect();
 
@@ -1563,14 +1563,14 @@ async function requeryPendingServiceTransactions() {
   function safeMeta(meta) {
     if (!meta) return {};
 
-    if (typeof meta === 'object' && !Array.isArray(meta)) {
+    if (typeof meta === "object" && !Array.isArray(meta)) {
       return meta;
     }
 
-    if (typeof meta === 'string') {
+    if (typeof meta === "string") {
       try {
         const parsed = JSON.parse(meta);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
       } catch (_) {
         return { rawMeta: meta };
       }
@@ -1584,38 +1584,51 @@ async function requeryPendingServiceTransactions() {
       `SELECT id, user_id, reference, amount, category, meta, status
        FROM transactions
        WHERE status = 'pending'
+         AND category IN (
+           'airtime',
+           'data',
+           'cable_tv',
+           'electricity',
+           'betting',
+           'recharge_pin',
+           'data_pin',
+           'exam_pin'
+         )
+         AND COALESCE(meta->>'provider', '') = 'iacafe'
          AND created_at <= NOW() - INTERVAL '20 seconds'
        ORDER BY created_at ASC
        LIMIT 50`
     );
 
     for (const tx of result.rows) {
-      const meta = safeMeta(tx.meta);
-      const requestId = tx.reference;
-
+      const requestId = String(tx.reference || "").trim();
       if (!requestId) continue;
+
+      const meta = safeMeta(tx.meta);
 
       let providerResponse;
       try {
         providerResponse = await iacafe.requery(requestId);
       } catch (err) {
-        console.error('Requery failed for:', requestId, err?.message);
+        console.error("Requery failed for:", requestId, err?.message);
         continue;
       }
 
       const state = classifyProviderResponse(providerResponse);
 
-      if (state === 'pending' || state === 'unknown') {
+      if (state === "pending" || state === "unknown") {
         await client.query(
           `UPDATE transactions
-           SET meta = $2
+           SET meta = $2,
+               updated_at = NOW()
            WHERE id = $1`,
           [
             tx.id,
             JSON.stringify({
               ...meta,
               providerResponse,
-              requeryResult: 'pending',
+              providerState: state,
+              requeryResult: "pending",
               updatedAt: new Date().toISOString(),
             }),
           ]
@@ -1623,45 +1636,48 @@ async function requeryPendingServiceTransactions() {
         continue;
       }
 
-      if (state === 'success') {
+      if (state === "success") {
         await client.query(
           `UPDATE transactions
            SET status = 'success',
-               meta = $2
+               meta = $2,
+               updated_at = NOW()
            WHERE id = $1`,
           [
             tx.id,
             JSON.stringify({
               ...meta,
               providerResponse,
-              requeryResult: 'success',
+              providerState: state,
+              requeryResult: "success",
               updatedAt: new Date().toISOString(),
             }),
           ]
         );
+
         clearPendingRequery(requestId);
         continue;
       }
 
-      if (state === 'failed') {
-        await client.query('BEGIN');
+      if (state === "failed") {
+        await client.query("BEGIN");
         try {
-          const check = await client.query(
-            `SELECT status, user_id, amount, meta
+          const locked = await client.query(
+            `SELECT id, user_id, amount, status, meta
              FROM transactions
              WHERE id = $1
              FOR UPDATE`,
             [tx.id]
           );
 
-          if (!check.rows.length) {
-            await client.query('ROLLBACK');
+          if (!locked.rows.length) {
+            await client.query("ROLLBACK");
             continue;
           }
 
-          const currentStatus = String(check.rows[0].status || '').toLowerCase();
-          if (currentStatus !== 'pending') {
-            await client.query('ROLLBACK');
+          const currentStatus = String(locked.rows[0].status || "").toLowerCase();
+          if (currentStatus !== "pending") {
+            await client.query("ROLLBACK");
             continue;
           }
 
@@ -1676,26 +1692,28 @@ async function requeryPendingServiceTransactions() {
           await client.query(
             `UPDATE transactions
              SET status = 'reversed',
-                 meta = $2
+                 meta = $2,
+                 updated_at = NOW()
              WHERE id = $1`,
             [
               tx.id,
               JSON.stringify({
                 ...meta,
                 providerResponse,
-                requeryResult: 'failed',
+                providerState: state,
+                requeryResult: "failed",
                 updatedAt: new Date().toISOString(),
               }),
             ]
           );
 
-          await client.query('COMMIT');
+          await client.query("COMMIT");
           clearPendingRequery(requestId);
         } catch (err) {
           try {
-            await client.query('ROLLBACK');
+            await client.query("ROLLBACK");
           } catch (_) {}
-          console.error('Requery reverse failed:', tx.id, err?.message);
+          console.error("Requery reverse failed:", tx.id, err?.message);
         }
       }
     }
