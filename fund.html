@@ -570,352 +570,386 @@
   </main>
 <script src="theme.js" defer></script>
 <script>
-    const API_ROOT = 'https://funsub.onrender.com';
-    const tokenKey = 'funsub_token';
-    const userKey = 'funsub_user';
+  const API_ROOT = 'https://funsub.onrender.com';
+  const tokenKey = 'funsub_token';
+  const userKey = 'funsub_user';
 
-    const loader = document.getElementById('loader');
-    const toast = document.getElementById('toast');
-    const toastTitle = document.getElementById('toastTitle');
-    const toastMessage = document.getElementById('toastMessage');
+  const loader = document.getElementById('loader');
+  const toast = document.getElementById('toast');
+  const toastTitle = document.getElementById('toastTitle');
+  const toastMessage = document.getElementById('toastMessage');
 
-    const amountInput = document.getElementById('amountInput');
-    const generateBtn = document.getElementById('generateBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const detailsCard = document.getElementById('detailsCard');
-    const detailAmount = document.getElementById('detailAmount');
-    const detailBank = document.getElementById('detailBank');
-    const detailAccountName = document.getElementById('detailAccountName');
-    const detailAccountNumber = document.getElementById('detailAccountNumber');
-    const detailReferenceNote = document.getElementById('detailReferenceNote');
-    const copyAccountBtn = document.getElementById('copyAccountBtn');
-    const fundStatus = document.getElementById('fundStatus');
-    const verifyBox = document.getElementById('verifyBox');
-    const verifyText = document.getElementById('verifyText');
-    const countdownValue = document.getElementById('countdownValue');
-    const countdownNote = document.getElementById('countdownNote');
-    const feePreview = document.getElementById('feePreview');
-    const feeNote = document.getElementById('feeNote');
+  const amountInput = document.getElementById('amountInput');
+  const generateBtn = document.getElementById('generateBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const detailsCard = document.getElementById('detailsCard');
+  const detailAmount = document.getElementById('detailAmount');
+  const detailBank = document.getElementById('detailBank');
+  const detailAccountName = document.getElementById('detailAccountName');
+  const detailAccountNumber = document.getElementById('detailAccountNumber');
+  const detailReferenceNote = document.getElementById('detailReferenceNote');
+  const copyAccountBtn = document.getElementById('copyAccountBtn');
+  const fundStatus = document.getElementById('fundStatus');
+  const verifyBox = document.getElementById('verifyBox');
+  const verifyText = document.getElementById('verifyText');
+  const countdownValue = document.getElementById('countdownValue');
+  const countdownNote = document.getElementById('countdownNote');
+  const feePreview = document.getElementById('feePreview');
+  const feeNote = document.getElementById('feeNote');
 
-    let currentFundingSession = null;
-    let fundingPollTimer = null;
-    let countdownTimer = null;
-    let countdownEndsAt = null;
+  let currentFundingSession = null;
+  let fundingPollTimer = null;
+  let countdownTimer = null;
+  let countdownEndsAt = null;
 
-    function getToken() {
-      return localStorage.getItem(tokenKey) || '';
+  function getToken() {
+    return localStorage.getItem(tokenKey) || '';
+  }
+
+  function getUser() {
+    try {
+      return JSON.parse(localStorage.getItem(userKey) || 'null');
+    } catch {
+      return null;
+    }
+  }
+
+  function showLoader() {
+    loader.classList.add('show');
+  }
+
+  function hideLoader() {
+    loader.classList.remove('show');
+  }
+
+  function showToast(title, message) {
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2200);
+  }
+
+  function setStatus(message, type = 'info') {
+    fundStatus.className = `status ${type}`;
+    fundStatus.textContent = message;
+  }
+
+  function money(value) {
+    const num = Number(value || 0);
+    return `₦${num.toLocaleString('en-NG', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    })}`;
+  }
+
+  function safe(v, fallback = '—') {
+    const s = String(v ?? '').trim();
+    return s || fallback;
+  }
+
+  function calculateFundingCharge(requestedAmount) {
+    const base = Number(requestedAmount || 0);
+    const fee = Math.round(base * 0.02);
+    const payable = base + fee;
+
+    return {
+      requestedAmount: base,
+      feeAmount: fee,
+      payableAmount: payable
+    };
+  }
+
+  function updateFeePreview() {
+    const requestedAmount = Number(amountInput.value || 0);
+
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      feePreview.textContent = '2% fee of ₦0 = ₦0';
+      feeNote.textContent = 'Enter the amount you want to fund. The app will add 2% fee and show the total you must pay for a successful transaction.';
+      return;
     }
 
-    function getUser() {
-      try {
-        return JSON.parse(localStorage.getItem(userKey) || 'null');
-      } catch {
-        return null;
-      }
+    const charge = calculateFundingCharge(requestedAmount);
+
+    feePreview.textContent = `To fund ${money(charge.requestedAmount)}, pay ${money(charge.payableAmount)} (fee ${money(charge.feeAmount)})`;
+    feeNote.textContent = `The amount sent to the backend will match the total payable amount: ${money(charge.payableAmount)}.`;
+  }
+
+  async function copyText(text, label = 'Copied') {
+    try {
+      await navigator.clipboard.writeText(String(text || ''));
+      showToast('Success', `${label} to clipboard`);
+    } catch {
+      showToast('Error', 'Unable to copy');
+    }
+  }
+
+  function renderFundingDetails(details = {}) {
+    const hasAny = Boolean(
+      details.account_number ||
+      details.account_name ||
+      details.bank_name ||
+      details.reference ||
+      details.expires_at
+    );
+
+    if (!hasAny) {
+      detailsCard.style.display = 'none';
+      return;
     }
 
-    function showLoader() {
-      loader.classList.add('show');
+    detailsCard.style.display = 'block';
+
+    const requestedAmount = Number(
+      details.requested_amount ??
+      details.amount ??
+      0
+    );
+
+    const feeAmount = Number(
+      details.fee_amount ??
+      details.feeAmount ??
+      0
+    );
+
+    const payableAmount = Number(
+      details.payable_amount ??
+      details.gross_amount ??
+      details.total_amount ??
+      details.amount_due ??
+      details.amount ??
+      (requestedAmount + feeAmount)
+    );
+
+    detailAmount.textContent = money(payableAmount);
+    detailBank.textContent = safe(details.bank_name || details.bank || details.provider_bank);
+    detailAccountName.textContent = safe(details.account_name || details.accountName || details.customer_name);
+    detailAccountNumber.textContent = safe(details.account_number || details.accountNumber || details.virtual_account_number);
+    detailReferenceNote.textContent = `Reference: ${safe(details.reference || details.tx_ref || details.txRef)}`;
+
+    verifyBox.style.display = 'block';
+    verifyText.textContent = 'Waiting for payment confirmation...';
+
+    if (details.expires_at) {
+      countdownEndsAt = new Date(details.expires_at).getTime();
+    } else {
+      countdownEndsAt = Date.now() + (60 * 60 * 1000);
     }
 
-    function hideLoader() {
-      loader.classList.remove('show');
-    }
+    startCountdown();
+  }
 
-    function showToast(title, message) {
-      toastTitle.textContent = title;
-      toastMessage.textContent = message;
-      toast.classList.add('show');
-      clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => {
-        toast.classList.remove('show');
-      }, 2200);
-    }
+  function stopCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
 
-    function setStatus(message, type = 'info') {
-      fundStatus.className = `status ${type}`;
-      fundStatus.textContent = message;
-    }
+  function startCountdown() {
+    stopCountdown();
 
-    function money(value) {
-      const num = Number(value || 0);
-      return `₦${num.toLocaleString('en-NG', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      })}`;
-    }
-
-    function safe(v, fallback = '—') {
-      const s = String(v ?? '').trim();
-      return s || fallback;
-    }
-
-    function updateFeePreview() {
-      const amount = Number(amountInput.value || 0);
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        feePreview.textContent = '2% fee of ₦0 = ₦0';
-        feeNote.textContent = 'Enter the amount you want to fund. The app will add 2% fee and show the total you must pay for a successful transaction.';
+    const updateCountdown = () => {
+      if (!countdownEndsAt) {
+        countdownValue.textContent = '--:--:--';
+        countdownNote.textContent = 'Waiting for payment';
         return;
       }
 
-      const fee = Math.round(amount * 0.02);
-      const gross = amount + fee;
+      const remaining = Math.max(0, countdownEndsAt - Date.now());
+      const totalSeconds = Math.floor(remaining / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
 
-      feePreview.textContent = `2% fee of ${money(amount)} = ${money(gross)}`;
-      feeNote.textContent = `To fund ${money(amount)}, you must pay ${money(gross)}. This includes the 2% fee of ${money(fee)} for a successful transaction.`;
-    }
+      countdownValue.textContent = `${hours}:${minutes}:${seconds}`;
 
-    async function copyText(text, label = 'Copied') {
-      try {
-        await navigator.clipboard.writeText(String(text || ''));
-        showToast('Success', `${label} to clipboard`);
-      } catch {
-        showToast('Error', 'Unable to copy');
-      }
-    }
-
-    function renderFundingDetails(details = {}) {
-      const hasAny = Boolean(
-        details.account_number ||
-        details.account_name ||
-        details.bank_name ||
-        details.reference ||
-        details.expires_at
-      );
-
-      if (!hasAny) {
-        detailsCard.style.display = 'none';
-        return;
-      }
-
-      detailsCard.style.display = 'block';
-
-      const net = Number(details.amount || 0);
-      const feeAmount = Number(details.fee_amount || 0);
-      const gross = Number(details.gross_amount || net + feeAmount);
-
-      detailAmount.textContent = money(gross);
-      detailBank.textContent = safe(details.bank_name || details.bank || details.provider_bank);
-      detailAccountName.textContent = safe(details.account_name || details.accountName || details.customer_name);
-      detailAccountNumber.textContent = safe(details.account_number || details.accountNumber || details.virtual_account_number);
-      detailReferenceNote.textContent = `Reference: ${safe(details.reference || details.tx_ref || details.txRef)}`;
-
-      verifyBox.style.display = 'block';
-      verifyText.textContent = 'Waiting for payment confirmation...';
-
-      if (details.expires_at) {
-        countdownEndsAt = new Date(details.expires_at).getTime();
+      if (remaining <= 0) {
+        countdownNote.textContent = 'This account has expired';
+        stopPolling();
+        stopCountdown();
       } else {
-        countdownEndsAt = Date.now() + (60 * 60 * 1000);
+        countdownNote.textContent = 'Account valid and waiting for payment';
       }
+    };
 
-      startCountdown();
+    updateCountdown();
+    countdownTimer = setInterval(updateCountdown, 1000);
+  }
+
+  async function apiFetch(url, options = {}) {
+    const token = getToken();
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { rawResponse: text };
     }
 
-    function stopCountdown() {
-      if (countdownTimer) clearInterval(countdownTimer);
-      countdownTimer = null;
-    }
+    return { res, data };
+  }
 
-    function startCountdown() {
-      stopCountdown();
+  function stopPolling() {
+    if (fundingPollTimer) clearInterval(fundingPollTimer);
+    fundingPollTimer = null;
+  }
 
-      const updateCountdown = () => {
-        if (!countdownEndsAt) {
-          countdownValue.textContent = '--:--:--';
-          countdownNote.textContent = 'Waiting for payment';
-          return;
-        }
+  async function pollFundingStatus(reference, payableAmount) {
+    stopPolling();
 
-        const remaining = Math.max(0, countdownEndsAt - Date.now());
+    const token = getToken();
+    if (!token || !reference) return;
 
-        const totalSeconds = Math.floor(remaining / 1000);
-        const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-        const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-        const seconds = String(totalSeconds % 60).padStart(2, '0');
+    fundingPollTimer = setInterval(async () => {
+      try {
+        const { res, data } = await apiFetch(
+          `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`
+        );
 
-        countdownValue.textContent = `${hours}:${minutes}:${seconds}`;
+        if (!res.ok) return;
 
-        if (remaining <= 0) {
-          countdownNote.textContent = 'This account has expired';
+        const intentStatus = String(data?.intent?.status || '').toLowerCase();
+        const txStatus = String(data?.transaction?.status || '').toLowerCase();
+
+        if (intentStatus === 'successful' || txStatus === 'success') {
           stopPolling();
           stopCountdown();
-        } else {
-          countdownNote.textContent = 'Account valid and waiting for payment';
-        }
-      };
 
-      updateCountdown();
-      countdownTimer = setInterval(updateCountdown, 1000);
-    }
+          const fundedAmount = Number(data?.transaction?.amount || payableAmount || 0);
+          const amountText = Number.isFinite(fundedAmount)
+            ? `₦${fundedAmount.toLocaleString('en-NG')}`
+            : 'Your wallet';
 
-    async function apiFetch(url, options = {}) {
-      const token = getToken();
-      const res = await fetch(url, {
-        ...options,
-        headers: {
-          ...(options.headers || {}),
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      });
+          verifyText.textContent = `${amountText} funded successfully`;
+          setStatus(`${amountText} funded successfully`, 'success');
+          showToast('Success', `${amountText} funded successfully`);
 
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { rawResponse: text };
-      }
-
-      return { res, data };
-    }
-
-    function stopPolling() {
-      if (fundingPollTimer) clearInterval(fundingPollTimer);
-      fundingPollTimer = null;
-    }
-
-    async function pollFundingStatus(reference, amount) {
-      stopPolling();
-
-      const token = getToken();
-      if (!token || !reference) return;
-
-      fundingPollTimer = setInterval(async () => {
-        try {
-          const { res, data } = await apiFetch(
-            `${API_ROOT}/api/wallet/fund/status/${encodeURIComponent(reference)}`
-          );
-
-          if (!res.ok) return;
-
-          const intentStatus = String(data?.intent?.status || '').toLowerCase();
-          const txStatus = String(data?.transaction?.status || '').toLowerCase();
-
-          if (intentStatus === 'successful' || txStatus === 'success') {
-            stopPolling();
-            stopCountdown();
-
-            const fundedAmount = Number(data?.transaction?.amount || amount || 0);
-            const amountText = Number.isFinite(fundedAmount)
-              ? `₦${fundedAmount.toLocaleString('en-NG')}`
-              : 'Your wallet';
-
-            verifyText.textContent = `${amountText} funded successfully`;
-            setStatus(`${amountText} funded successfully`, 'success');
-            showToast('Success', `${amountText} funded successfully`);
-
-            setTimeout(() => {
-              window.location.href = 'dashboard.html';
-            }, 1800);
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }, 3000);
-    }
-
-    async function initiateFunding() {
-      const amount = Number(amountInput.value || 0);
-      if (!Number.isFinite(amount) || amount < 100) {
-        setStatus('Minimum funding amount is 100', 'error');
-        return;
-      }
-
-      showLoader();
-      setStatus('Creating funding details...', 'info');
-
-      try {
-        const { res, data } = await apiFetch(`${API_ROOT}/api/wallet/fund/initiate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ amount })
-        });
-
-        if (!res.ok) {
-          setStatus(data?.message || 'Unable to initiate funding', 'error');
-          showToast('Error', data?.message || 'Unable to initiate funding');
-          hideLoader();
-          return;
-        }
-
-        currentFundingSession = {
-          amount: Number(data?.amount || amount || 0),
-          fee_amount: Number(data?.fee_amount || 0),
-          gross_amount: Number(data?.gross_amount || 0),
-          net_amount: Number(data?.net_amount || 0),
-          reference: data?.reference || data?.tx_ref || data?.txRef || null,
-          bank_name: data?.bank_name || data?.bankName || null,
-          account_name: data?.account_name || data?.accountName || null,
-          account_number: data?.account_number || data?.accountNumber || null,
-          expiry_date: data?.expiry_date || data?.expires_at || null
-        };
-
-        renderFundingDetails(currentFundingSession);
-        setStatus('Funding details ready. Pay from your bank app and wait for confirmation.', 'success');
-        showToast('Success', 'Funding session created');
-        hideLoader();
-
-        if (currentFundingSession.reference) {
-          pollFundingStatus(currentFundingSession.reference, amount);
+          setTimeout(() => {
+            window.location.href = 'dashboard.html';
+          }, 1800);
         }
       } catch (err) {
         console.error(err);
-        hideLoader();
-        setStatus('Unable to initiate funding', 'error');
-        showToast('Error', 'Unable to initiate funding');
       }
+    }, 3000);
+  }
+
+  async function initiateFunding() {
+    const requestedAmount = Number(amountInput.value || 0);
+    if (!Number.isFinite(requestedAmount) || requestedAmount < 100) {
+      setStatus('Minimum funding amount is 100', 'error');
+      return;
     }
 
-    function clearFundingUI() {
-      currentFundingSession = null;
-      amountInput.value = '';
-      detailsCard.style.display = 'none';
-      verifyBox.style.display = 'none';
-      countdownValue.textContent = '--:--:--';
-      countdownNote.textContent = 'Waiting for payment';
-      countdownEndsAt = null;
-      stopCountdown();
-      stopPolling();
-      updateFeePreview();
-      setStatus('Ready', 'info');
-      showToast('Cleared', 'Funding details cleared');
-    }
+    const charge = calculateFundingCharge(requestedAmount);
 
-    copyAccountBtn.addEventListener('click', () => {
-      if (!currentFundingSession) return;
-      const value = currentFundingSession.account_number || currentFundingSession.reference || '';
-      copyText(value, currentFundingSession.account_number ? 'Account number copied' : 'Reference copied');
-    });
+    showLoader();
+    setStatus('Creating funding details...', 'info');
 
-    amountInput.addEventListener('input', updateFeePreview);
-    generateBtn.addEventListener('click', initiateFunding);
-    clearBtn.addEventListener('click', clearFundingUI);
+    try {
+      const { res, data } = await apiFetch(`${API_ROOT}/api/wallet/fund/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: charge.payableAmount,
+          requested_amount: charge.requestedAmount,
+          fee_amount: charge.feeAmount,
+          gross_amount: charge.payableAmount
+        })
+      });
 
-    window.addEventListener('DOMContentLoaded', () => {
-      const token = getToken();
-      updateFeePreview();
-
-      if (!token) {
-        setStatus('Please log in first', 'error');
-        showToast('Error', 'Please log in first');
+      if (!res.ok) {
+        setStatus(data?.message || 'Unable to initiate funding', 'error');
+        showToast('Error', data?.message || 'Unable to initiate funding');
+        hideLoader();
         return;
       }
 
-      setStatus('Ready', 'info');
-      const user = getUser();
-      if (user?.full_name || user?.name || user?.username) {
-        // no visible greeting here
-      }
-    });
+      currentFundingSession = {
+        requested_amount: Number(data?.requested_amount || charge.requestedAmount),
+        fee_amount: Number(data?.fee_amount || charge.feeAmount),
+        gross_amount: Number(data?.gross_amount || data?.amount || charge.payableAmount),
+        payable_amount: Number(data?.payable_amount || data?.gross_amount || data?.amount || charge.payableAmount),
+        reference: data?.reference || data?.tx_ref || data?.txRef || null,
+        bank_name: data?.bank_name || data?.bankName || null,
+        account_name: data?.account_name || data?.accountName || null,
+        account_number: data?.account_number || data?.accountNumber || null,
+        expiry_date: data?.expiry_date || data?.expires_at || null
+      };
 
-    window.addEventListener('beforeunload', () => {
-      stopPolling();
-      stopCountdown();
-    });
-  </script>
+      renderFundingDetails(currentFundingSession);
+      setStatus('Funding details ready. Pay from your bank app and wait for confirmation.', 'success');
+      showToast('Success', 'Funding session created');
+      hideLoader();
+
+      if (currentFundingSession.reference) {
+        pollFundingStatus(currentFundingSession.reference, currentFundingSession.payable_amount);
+      }
+    } catch (err) {
+      console.error(err);
+      hideLoader();
+      setStatus('Unable to initiate funding', 'error');
+      showToast('Error', 'Unable to initiate funding');
+    }
+  }
+
+  function clearFundingUI() {
+    currentFundingSession = null;
+    amountInput.value = '';
+    detailsCard.style.display = 'none';
+    verifyBox.style.display = 'none';
+    countdownValue.textContent = '--:--:--';
+    countdownNote.textContent = 'Waiting for payment';
+    countdownEndsAt = null;
+    stopCountdown();
+    stopPolling();
+    updateFeePreview();
+    setStatus('Ready', 'info');
+    showToast('Cleared', 'Funding details cleared');
+  }
+
+  copyAccountBtn.addEventListener('click', () => {
+    if (!currentFundingSession) return;
+    const value = currentFundingSession.account_number || currentFundingSession.reference || '';
+    copyText(value, currentFundingSession.account_number ? 'Account number copied' : 'Reference copied');
+  });
+
+  amountInput.addEventListener('input', updateFeePreview);
+  generateBtn.addEventListener('click', initiateFunding);
+  clearBtn.addEventListener('click', clearFundingUI);
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const token = getToken();
+    updateFeePreview();
+
+    if (!token) {
+      setStatus('Please log in first', 'error');
+      showToast('Error', 'Please log in first');
+      return;
+    }
+
+    setStatus('Ready', 'info');
+    const user = getUser();
+    if (user?.full_name || user?.name || user?.username) {
+      // no visible greeting here
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    stopPolling();
+    stopCountdown();
+  });
+</script>
 </body>
 </html>
