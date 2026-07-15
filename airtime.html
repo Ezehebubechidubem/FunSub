@@ -555,7 +555,7 @@
     </div>
   </div>
 <script src="theme.js" defer></script>
-<script>
+  <script>
   const BUY_URL = "https://funsub.onrender.com/api/services/airtime";
   let currentNetwork = "mtn";
   let lastReceipt = null;
@@ -610,6 +610,14 @@
       minimumFractionDigits: 0,
       maximumFractionDigits: 2
     });
+  }
+
+  function clearAirtimeInputs() {
+    const phone = document.getElementById("phone");
+    const amount = document.getElementById("amount");
+
+    if (phone) phone.value = "";
+    if (amount) amount.value = "";
   }
 
   function buildReceiptText() {
@@ -822,6 +830,8 @@
     buyBtn.disabled = true;
     buyBtn.innerText = "Processing...";
 
+    clearAirtimeInputs();
+
     try {
       const response = await fetch(BUY_URL, {
         method: "POST",
@@ -935,6 +945,7 @@
       };
     } catch (error) {
       console.error(error);
+      clearAirtimeInputs();
       showFailedModal("Unable to complete transaction");
 
       setReceiptValues({
@@ -970,6 +981,6 @@
       if (e.key === "Escape") closePinModal();
     }
   });
-</script>
+</script>      
 </body>
 </html>
