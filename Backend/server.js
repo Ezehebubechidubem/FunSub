@@ -165,7 +165,7 @@ function normalizeMeta(meta) {
 
   return {};
 }
-async function withFallback(primaryFn, fallbackFn) {
+function withFallback(primaryFn, fallbackFn) {
     try {
       return await primaryFn();
     } catch (err) {
