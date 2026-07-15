@@ -305,75 +305,8 @@ function createVtuGateway({ primary, fallback }) {
     );
   }
 
-  async function buyBetting({
-    request_id,
-    customer_id,
-    service_id,
-    amount,
-    skip_verify = false,
-  }) {
-    const verifyPayload = {
-      customer_id,
-      service_id,
-    };
-
-    if (!skip_verify) {
-      const verification = await withFallback(
-        () => p.post(primaryBettingVerifyPath, verifyPayload),
-        () => f.post(fallbackBettingVerifyPath, verifyPayload)
-      );
-
-      if (!isSuccessfulResponse(verification)) {
-        const code = getErrorCode(verification);
-        const message = getErrorMessage(verification);
-
-        const err = new Error(message || "Betting verification failed");
-        err.response = { data: verification };
-
-        if (code === "customer_not_found") {
-          err.code = "customer_not_found";
-          throw err;
-        }
-
-        throw err;
-      }
-    }
-
-    const body = {
-      request_id: request_id || makeRequestId("BETTING"),
-      customer_id,
-      service_id,
-      amount,
-    };
-
-    return withFallback(
-      () => p.post(primaryBettingBuyPath, body),
-      () => f.post(fallbackBettingBuyPath, body)
-    );
-  }
-
-  async function verifyBettingCustomer({ customer_id, service_id }) {
-    const body = {
-      customer_id,
-      service_id,
-    };
-
-    const verification = await withFallback(
-      () => p.post(primaryBettingVerifyPath, body),
-      () => f.post(fallbackBettingVerifyPath, body)
-    );
-
-    if (!isSuccessfulResponse(verification)) {
-      const code = getErrorCode(verification);
-      const message = getErrorMessage(verification);
-      const err = new Error(message || "Betting verification failed");
-      err.response = { data: verification };
-      if (code) err.code = code;
-      throw err;
-    }
-
-    return verification;
-  }
+  
+  
 
   async function requery(request_id) {
     return withFallback(
@@ -400,6 +333,104 @@ function createVtuGateway({ primary, fallback }) {
   };
 }
 
+
+async function buyBetting({
+  request_id,
+  customer_id,
+  service_id,
+  amount,
+  skip_verify = false,
+}) {
+  const customer = String(customer_id || "").trim();
+  const platform = normalizeBettingServiceId(service_id);
+  const ref = String(request_id || makeRequestId("BETTING")).trim();
+  const amt = Number(amount);
+
+  if (!customer || !platform) {
+    throw new Error("customer_id and service_id are required");
+  }
+
+  if (!Number.isFinite(amt) || amt < 100) {
+    throw new Error("amount must be at least 100");
+  }
+
+  if (!ref || ref.length > 50) {
+    throw new Error("request_id must be 50 characters or less");
+  }
+
+  if (!skip_verify) {
+    const verification = await withFallback(
+      () => p.post(primaryBettingVerifyPath, {
+        customer_id: customer,
+        service_id: platform,
+      }),
+      () => f.post(fallbackBettingVerifyPath, {
+        customer_id: customer,
+        service_id: platform,
+      })
+    );
+
+    if (!isSuccessfulResponse(verification)) {
+      const code = getErrorCode(verification);
+      const message = getErrorMessage(verification);
+
+      const err = new Error(message || "Betting verification failed");
+      err.response = { data: verification };
+
+      if (code === "customer_not_found") {
+        err.code = "customer_not_found";
+      }
+
+      throw err;
+    }
+  }
+
+  return withFallback(
+    () => p.post(primaryBettingBuyPath, {
+      request_id: ref,
+      customer_id: customer,
+      service_id: platform,
+      amount: amt,
+    }),
+    () => f.post(fallbackBettingBuyPath, {
+      request_id: ref,
+      customer_id: customer,
+      service_id: platform,
+      amount: amt,
+    })
+  );
+}
+
+async function verifyBettingCustomer({ customer_id, service_id }) {
+  const customer = String(customer_id || "").trim();
+  const platform = normalizeBettingServiceId(service_id);
+
+  if (!customer || !platform) {
+    throw new Error("customer_id and service_id are required");
+  }
+
+  const verification = await withFallback(
+    () => p.post(primaryBettingVerifyPath, {
+      customer_id: customer,
+      service_id: platform,
+    }),
+    () => f.post(fallbackBettingVerifyPath, {
+      customer_id: customer,
+      service_id: platform,
+    })
+  );
+
+  if (!isSuccessfulResponse(verification)) {
+    const code = getErrorCode(verification);
+    const message = getErrorMessage(verification);
+    const err = new Error(message || "Betting verification failed");
+    err.response = { data: verification };
+    if (code) err.code = code;
+    throw err;
+  }
+
+  return verification;
+}
 function createIacafeGateway({ baseURL, apiKey, authType = "bearer", timeout = 30000, fallback } = {}) {
   return createVtuGateway({
     primary: {
