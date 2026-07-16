@@ -331,7 +331,7 @@ async function timeoutStaleFundingIntents() {
         await client.query(
           `
           UPDATE payment_intents
-          SET status = 'initiated transaction timeout',
+          SET status = 'fund timeout',
               updated_at = NOW(),
               meta = jsonb_set(
                 COALESCE(meta, '{}'::jsonb),
@@ -347,7 +347,7 @@ async function timeoutStaleFundingIntents() {
         await client.query(
           `
           UPDATE transactions
-          SET status = 'initiated transaction timeout',
+          SET status =fund timeout',
               description = $2,
               updated_at = NOW()
           WHERE reference = $1
@@ -356,7 +356,7 @@ async function timeoutStaleFundingIntents() {
           `,
           [
             current.tx_ref,
-            'Initiated transaction timeout',
+            'fund timeout',
             current.user_id
           ]
         );
