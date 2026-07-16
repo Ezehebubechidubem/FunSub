@@ -331,7 +331,7 @@ async function timeoutStaleFundingIntents() {
         await client.query(
           `
           UPDATE payment_intents
-          SET status = 'fund timeout',
+          SET status = 'funding timeout',
               updated_at = NOW(),
               meta = jsonb_set(
                 COALESCE(meta, '{}'::jsonb),
@@ -341,13 +341,13 @@ async function timeoutStaleFundingIntents() {
               )
           WHERE id = $1
           `,
-          [current.id, 'Funding session expired after 1 hour']
+          [current.id, 'Funding timeout after 1 hour']
         );
 
         await client.query(
           `
           UPDATE transactions
-          SET status =fund timeout',
+          SET status = 'funding timeout',
               description = $2,
               updated_at = NOW()
           WHERE reference = $1
@@ -356,7 +356,7 @@ async function timeoutStaleFundingIntents() {
           `,
           [
             current.tx_ref,
-            'fund timeout',
+            'Funding timeout',
             current.user_id
           ]
         );
@@ -385,7 +385,7 @@ setInterval(() => {
   timeoutStaleFundingIntents().catch((err) => {
     console.error('INTERVAL FUNDING TIMEOUT ERROR:', err?.message || err);
   });
-}, 5 * 60 * 1000); // every 5 minutes
+}, 5 * 60 * 1000);
 
 async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
   const normalizedServiceType = normalizeServiceType(serviceType);
