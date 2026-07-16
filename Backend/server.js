@@ -285,6 +285,108 @@ function extractProviderText(response) {
     .trim()
     .toLowerCase();
 }
+async function timeoutStaleFundingIntents() {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, user_id, tx_ref, amount, status, meta, created_at
+      FROM payment_intents
+      WHERE status IN ('initiated', 'pending', 'processing')
+        AND created_at < NOW() - INTERVAL '1 hour'
+      ORDER BY created_at ASC
+      `
+    );
+
+    if (!result.rows.length) return;
+
+    for (const intent of result.rows) {
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        const locked = await client.query(
+          `
+          SELECT id, user_id, tx_ref, amount, status, meta, created_at
+          FROM payment_intents
+          WHERE id = $1
+          FOR UPDATE
+          `,
+          [intent.id]
+        );
+
+        if (!locked.rows.length) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        const current = locked.rows[0];
+        const currentStatus = String(current.status || '').toLowerCase();
+
+        if (!['initiated', 'pending', 'processing'].includes(currentStatus)) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        await client.query(
+          `
+          UPDATE payment_intents
+          SET status = 'initiated transaction timeout',
+              updated_at = NOW(),
+              meta = jsonb_set(
+                COALESCE(meta, '{}'::jsonb),
+                '{timeout_reason}',
+                to_jsonb($2::text),
+                true
+              )
+          WHERE id = $1
+          `,
+          [current.id, 'Funding session expired after 1 hour']
+        );
+
+        await client.query(
+          `
+          UPDATE transactions
+          SET status = 'initiated transaction timeout',
+              description = $2,
+              updated_at = NOW()
+          WHERE reference = $1
+            AND user_id = $3
+            AND status IN ('initiated', 'pending', 'processing')
+          `,
+          [
+            current.tx_ref,
+            'Initiated transaction timeout',
+            current.user_id
+          ]
+        );
+
+        await client.query('COMMIT');
+        console.log(`Funding intent timed out: ${current.tx_ref}`);
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (_) {}
+        console.error('FUNDING TIMEOUT ERROR:', err?.message || err);
+      } finally {
+        client.release();
+      }
+    }
+  } catch (err) {
+    console.error('FUNDING TIMEOUT JOB ERROR:', err?.message || err);
+  }
+}
+
+timeoutStaleFundingIntents().catch((err) => {
+  console.error('INITIAL FUNDING TIMEOUT ERROR:', err?.message || err);
+});
+
+setInterval(() => {
+  timeoutStaleFundingIntents().catch((err) => {
+    console.error('INTERVAL FUNDING TIMEOUT ERROR:', err?.message || err);
+  });
+}, 5 * 60 * 1000); // every 5 minutes
+
 async function buyServiceThroughGateway({ serviceType, body, selectedPlan, requestId }) {
   const normalizedServiceType = normalizeServiceType(serviceType);
   const service_id = String(body.service_id || body.serviceId || "").trim().toLowerCase();
