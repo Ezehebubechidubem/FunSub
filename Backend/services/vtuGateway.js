@@ -292,7 +292,7 @@ function createVtuGateway({ primary, fallback }) {
       request_id: request_id || makeRequestId("CABLE"),
       customer_id,
       service_id,
-      variation_id: variation_id || plan?.purchase_key ?? plan?.id,
+      variation_id: variation_id || (plan?.purchase_key ?? plan?.id),
       subscription_type,
     };
 
