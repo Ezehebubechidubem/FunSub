@@ -350,8 +350,7 @@
       background:#111827;
       color:#fff;
     }
-
-    .pending{
+.pending{
       background:#FFF8E1;
       color:#8a6d00;
     }
@@ -576,6 +575,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <h1>FunSub Cable TV</h1>
@@ -790,6 +790,37 @@
       return map[p] || { name: p.toUpperCase(), logo: "" };
     }
 
+    function getPlanDurationLabel(plan){
+      const raw =
+        plan.durationLabel ??
+        plan.duration_text ??
+        plan.durationText ??
+        plan.billing_cycle ??
+        plan.billingCycle ??
+        plan.cycle ??
+        plan.period ??
+        plan.validity ??
+        plan.validity_text ??
+        plan.validityText ??
+        "";
+
+      if (raw) return String(raw).trim();
+
+      const durationValue = plan.duration ?? plan.validity_value ?? plan.period_value ?? "";
+      const durationUnit =
+        plan.duration_unit ??
+        plan.validity_unit ??
+        plan.period_unit ??
+        plan.unit ??
+        "";
+
+      if (durationValue && durationUnit) {
+        return `${durationValue} ${String(durationUnit).replace(/s?$/, "s")}`;
+      }
+
+      return "1 Month";
+    }
+
     function setTheme(theme){
       document.body.classList.toggle("dark", theme === "dark");
       localStorage.setItem("funsub_theme", theme);
@@ -963,8 +994,7 @@
       enteredPin = enteredPin.slice(0, -1);
       renderPinBoxes();
     }
-
-    function closeChoiceModal(){
+function closeChoiceModal(){
       choiceModal.style.display = "none";
     }
 
@@ -1036,7 +1066,9 @@
         packageList = list.map(item => ({
           id: item.id || item.variation_id || item.code || item.plan_id,
           name: item.name || item.title || item.label || "Package",
-          price: Number(item.price || item.amount || item.cost || 0)
+          price: Number(item.price || item.amount || item.cost || 0),
+          duration: getPlanDurationLabel(item),
+          raw: item
         })).filter(x => x.id);
 
         return true;
@@ -1070,13 +1102,18 @@
       renderChoiceList(
         packageList.map(pkg => ({
           title: pkg.name,
-          subtitle: formatNaira(pkg.price),
+          subtitle: [
+            formatNaira(pkg.price),
+            pkg.duration ? pkg.duration : "1 Month"
+          ].filter(Boolean).join(" • "),
           active: selectedPackage && selectedPackage.id === pkg.id,
           pkg
         })),
         (item) => {
           selectedPackage = item.pkg;
-          packageText.innerText = item.pkg.name;
+          packageText.innerText = item.pkg.duration
+            ? `${item.pkg.name} (${item.pkg.duration})`
+            : `${item.pkg.name} (1 Month)`;
           closeChoiceModal();
         }
       );
@@ -1178,6 +1215,7 @@
         providerLabel: getProviderMeta(currentProvider).name,
         variation_id: selectedPackage.id,
         packageName: selectedPackage.name,
+        packageDuration: selectedPackage.duration || "1 Month",
         amount: selectedPackage.price,
         subscription_type: selectedType.value,
         subscription_type_label: selectedType.label
@@ -1194,6 +1232,7 @@
         providerLabel,
         variation_id,
         packageName,
+        packageDuration,
         amount,
         subscription_type,
         subscription_type_label
@@ -1220,10 +1259,15 @@
             provider: providerLabel,
             variation_id,
             package_name: packageName,
+            package_duration: packageDuration,
             amount,
             subscription_type,
             subscription_type_label,
-            fundPin
+
+            fundPin,
+            pin: fundPin,
+            transaction_pin: fundPin,
+            transactionPin: fundPin
           })
         });
 
@@ -1250,7 +1294,7 @@
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName,
+            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
             type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
@@ -1261,7 +1305,7 @@
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName,
+            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
             type: subscription_type_label,
             amount: formatNaira(tx.amount || amount),
             reference,
@@ -1283,7 +1327,7 @@
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName,
+            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
             type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
@@ -1294,7 +1338,7 @@
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName,
+            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
             type: subscription_type_label,
             amount: formatNaira(tx.amount || amount),
             reference,
@@ -1311,7 +1355,7 @@
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName,
+          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
           type: subscription_type_label,
           amount: tx.amount || amount,
           reference,
@@ -1322,7 +1366,7 @@
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName,
+          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
           type: subscription_type_label,
           amount: formatNaira(tx.amount || amount),
           reference,
@@ -1340,7 +1384,7 @@
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName,
+          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
           type: subscription_type_label,
           amount,
           reference: request_id,
@@ -1351,7 +1395,7 @@
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName,
+          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
           type: subscription_type_label,
           amount: formatNaira(amount),
           reference: request_id,
