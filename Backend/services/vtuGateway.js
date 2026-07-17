@@ -1,4 +1,3 @@
-// services/vtuGateway.js
 const axios = require("axios");
 const crypto = require("crypto");
 
@@ -8,7 +7,7 @@ function makeRequestId(prefix = "FUNSUB") {
 
 function isRetryableError(err) {
   const status = err?.response?.status;
-  if (!status) return true; // network / timeout / DNS
+  if (!status) return true;
   return status >= 500 || status === 408 || status === 425 || status === 429;
 }
 
@@ -150,8 +149,8 @@ function createVtuGateway({ primary, fallback }) {
 
   function normalizeCablePlan(item, source = "primary") {
     return {
-      id: item.variation_id ?? item.id ?? item.code,
-      name: item.name ?? item.variation_name ?? "Plan",
+      id: item.variation_id ?? item.id ?? item.code ?? item.plan_id,
+      name: item.name ?? item.variation_name ?? item.title ?? "Plan",
       price: Number(item.reseller_price ?? item.price ?? item.amount ?? 0),
       availability: item.availability ?? "Available",
       source,
@@ -179,6 +178,26 @@ function createVtuGateway({ primary, fallback }) {
       () => p.get("/budget-data/plans", clean({ network_id, provider })),
       () => f.get("/budget-data/plans", clean({ network_id, provider }))
     );
+  }
+
+  async function getCablePlans({ service_id } = {}) {
+    const result = await withFallback(
+      () => p.get("/variations", { product: "cable", service_id }),
+      () => f.get("/variations", { product: "cable", service_id })
+    );
+
+    const list = pickArray(result);
+
+    return {
+      product: "cable",
+      service_id,
+      plans: list.map((x) => ({
+        ...normalizeCablePlan(x, "cable"),
+        purchase_route: "/cable",
+        purchase_key: x.variation_id ?? x.id ?? x.code ?? x.plan_id,
+      })),
+      raw: result,
+    };
   }
 
   async function getPlans({ product, service_id, network_id, provider } = {}) {
@@ -213,18 +232,7 @@ function createVtuGateway({ primary, fallback }) {
     }
 
     if (product === "cable") {
-      const cable = await getVariations({ product: "cable", service_id }).catch(() => null);
-      const list = pickArray(cable);
-
-      return {
-        product: "cable",
-        service_id,
-        plans: list.map((x) => ({
-          ...normalizeCablePlan(x, "cable"),
-          purchase_route: "/cable",
-          purchase_key: x.variation_id ?? x.id ?? x.code,
-        })),
-      };
+      return getCablePlans({ service_id });
     }
 
     return getProviders();
@@ -279,12 +287,13 @@ function createVtuGateway({ primary, fallback }) {
     );
   }
 
-  async function buyCable({ request_id, customer_id, service_id, plan }) {
+  async function buyCable({ request_id, customer_id, service_id, plan, variation_id, subscription_type }) {
     const body = {
       request_id: request_id || makeRequestId("CABLE"),
       customer_id,
       service_id,
-      variation_id: plan?.purchase_key ?? plan?.id,
+      variation_id: variation_id || plan?.purchase_key ?? plan?.id,
+      subscription_type,
     };
 
     return withFallback(
@@ -375,6 +384,26 @@ function createVtuGateway({ primary, fallback }) {
     return verification;
   }
 
+  async function verifyCableCustomer({ customer_id, service_id }) {
+    const body = { customer_id, service_id };
+
+    const verification = await withFallback(
+      () => p.post("/verify-customer", body),
+      () => f.post("/verify-customer", body)
+    );
+
+    if (!isSuccessfulResponse(verification)) {
+      const code = getErrorCode(verification);
+      const message = getErrorMessage(verification);
+      const err = new Error(message || "Cable verification failed");
+      err.response = { data: verification };
+      if (code) err.code = code;
+      throw err;
+    }
+
+    return verification;
+  }
+
   async function requery(request_id) {
     return withFallback(
       () => p.post("/requery", { request_id }),
@@ -388,6 +417,7 @@ function createVtuGateway({ primary, fallback }) {
     getProviders,
     getVariations,
     getBudgetPlans,
+    getCablePlans,
     getPlans,
     buyAirtime,
     buyBudgetData,
@@ -396,6 +426,7 @@ function createVtuGateway({ primary, fallback }) {
     buyElectricity,
     buyBetting,
     verifyBettingCustomer,
+    verifyCableCustomer,
     requery,
   };
 }
