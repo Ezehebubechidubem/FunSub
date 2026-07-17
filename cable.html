@@ -713,7 +713,6 @@
   </div>
 
   <script src="theme.js" defer></script>
-  <script>
 const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
     const BUY_URL = "https://funsub.onrender.com/api/services/cable";
     const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
@@ -1061,13 +1060,15 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
         else if (Array.isArray(data.data?.options)) list = data.data.options;
         else if (Array.isArray(data.data?.plans)) list = data.data.plans;
 
-        packageList = list.map(item => ({
-          id: item.id || item.variation_id || item.code || item.plan_id,
-          name: item.name || item.title || item.label || "Package",
-          price: Number(item.price || item.amount || item.cost || 0),
-          duration: getPlanDurationLabel(item),
-          raw: item
-        })).filter(x => x.id);
+        packageList = list
+          .map(item => ({
+            id: item.id || item.variation_id || item.code || item.plan_id,
+            name: item.name || item.title || item.label || "Package",
+            price: Number(item.price || item.amount || item.cost || 0),
+            duration: getPlanDurationLabel(item),
+            raw: item
+          }))
+          .filter(x => x.id);
 
         return true;
       } catch (e) {
@@ -1232,6 +1233,12 @@ async function verifyCustomer(){
         subscription_type_label
       } = payload;
 
+      const pinValue = String(fundPin || "").trim();
+      if (!pinValue) {
+        showFailedModal("Transaction PIN is required");
+        return;
+      }
+
       showProcessingModal();
 
       buyBtn.disabled = true;
@@ -1259,11 +1266,11 @@ async function verifyCustomer(){
             subscription_type,
             subscription_type_label,
 
-            fundPin,
-            fund_pin: fundPin,
-            pin: fundPin,
-            transaction_pin: fundPin,
-            transactionPin: fundPin
+            fundPin: pinValue,
+            fund_pin: pinValue,
+            transaction_pin: pinValue,
+            transactionPin: pinValue,
+            pin: pinValue
           })
         });
 
@@ -1371,7 +1378,7 @@ async function verifyCustomer(){
         };
 
         clearCableInputs();
-      } catch (error){
+      } catch(error){
         console.error(error);
 
         showFailedModal("Unable to complete transaction");
