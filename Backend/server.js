@@ -2278,6 +2278,29 @@ async function processCablePayment(req, res) {
   const PIN_MAX_ATTEMPTS = 4;
   const PIN_LOCK_MS = 60 * 60 * 1000;
 
+  function normalizeMeta(meta) {
+    if (!meta) return {};
+    if (typeof meta === "object" && !Array.isArray(meta)) return meta;
+
+    if (typeof meta === "string") {
+      try {
+        const parsed = JSON.parse(meta);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        return { rawMeta: meta };
+      }
+    }
+
+    return {};
+  }
+
+  function mergeMeta(oldMeta, extraMeta) {
+    return {
+      ...normalizeMeta(oldMeta),
+      ...(extraMeta && typeof extraMeta === "object" ? extraMeta : {})
+    };
+  }
+
   async function verifyAndTrackPin(userId, fundPin) {
     const client = await pool.connect();
     try {
@@ -2567,6 +2590,9 @@ async function processCablePayment(req, res) {
             purchase_key: variation_id,
             name: packageName,
             price: amount,
+            meta: {
+              subscription_type,
+            },
           },
         }),
         PROVIDER_TIMEOUT_MS,
