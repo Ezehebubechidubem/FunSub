@@ -2464,7 +2464,7 @@ async function processCablePayment(req, res) {
     const userId = req.user?.id || req.user?.userId;
 
     if (!userId) return respondError(res, 401, "Unauthorized");
-
+console.log("BODY RECEIVED:", req.body);
     const fundPin = String(
       body.fundPin ??
       body.fund_pin ??
@@ -2473,6 +2473,7 @@ async function processCablePayment(req, res) {
       body.pin ??
       ""
     ).trim();
+console.log("EXTRACTED PIN:", fundPin);
 
     if (!fundPin) return respondError(res, 400, "Transaction PIN is required");
 
