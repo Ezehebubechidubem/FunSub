@@ -4,93 +4,582 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FunSub | Cable TV</title>
+
   <style>
     :root{
-      --bg:#ffffff; --card:#ffffff; --text:#111; --border:#dddddd;
-      --input-bg:#ffffff; --modal-bg:#ffffff; --muted:#666;
-      --gold:#D4AF37; --gold-soft:#FFF9E6; --gold-border:#f0d98a;
+      --bg:#ffffff;
+      --card:#ffffff;
+      --text:#111111;
+      --border:#dddddd;
+      --input-bg:#ffffff;
+      --modal-bg:#ffffff;
+      --muted:#666666;
+      --gold:#D4AF37;
+      --gold-soft:#FFF9E6;
+      --gold-border:#f0d98a;
       --shadow:0 15px 40px rgba(0,0,0,.16);
     }
+
     body.dark{
-      --bg:#0f1115; --card:#1a1d24; --text:#ffffff; --border:#2b2f38;
-      --input-bg:#232833; --modal-bg:#1a1d24; --muted:#b8c0cc;
-      --gold:#D4AF37; --gold-soft:#2c2410; --gold-border:#7b6522;
+      --bg:#0f1115;
+      --card:#1a1d24;
+      --text:#ffffff;
+      --border:#2b2f38;
+      --input-bg:#232833;
+      --modal-bg:#1a1d24;
+      --muted:#b8c0cc;
+      --gold:#D4AF37;
+      --gold-soft:#2c2410;
+      --gold-border:#7b6522;
       --shadow:0 15px 40px rgba(0,0,0,.28);
     }
-    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-    body{background:var(--bg);padding:20px;color:var(--text)}
-    .container{max-width:500px;margin:auto}
-    .topbar{display:flex;justify-content:flex-end;margin-bottom:8px}
-    .theme-btn{width:42px;height:42px;border:none;border-radius:12px;background:var(--card);color:var(--text);box-shadow:var(--shadow);cursor:pointer;font-size:18px}
-    h1{color:var(--text);text-align:center;margin:8px 0 8px;font-size:28px;font-weight:700}
-    .subtitle{text-align:center;color:var(--muted);font-size:14px;margin-bottom:22px;line-height:1.4}
-    .card{background:var(--card);padding:18px;border-radius:18px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:14px}
-    .step-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-    .step-head strong{font-size:16px;font-weight:800}
-    .step-badge{padding:6px 10px;border-radius:999px;background:var(--gold-soft);border:1px solid var(--gold-border);color:var(--gold);font-size:12px;font-weight:700}
-    .provider-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-    .provider-card{border:2px solid var(--border);border-radius:16px;padding:16px 10px;min-height:92px;background:var(--card);display:flex;flex-direction:column;justify-content:center;align-items:center;cursor:pointer;transition:.18s ease;text-align:center}
-    .provider-card:hover{transform:translateY(-1px)}
-    .provider-card.active{border-color:var(--gold);background:var(--gold-soft)}
-    .provider-card img{width:42px;height:42px;object-fit:contain;margin-bottom:8px}
-    .provider-card span{font-size:13px;font-weight:700}
-    .provider-card small{display:block;color:var(--muted);margin-top:4px;font-size:11px}
-    label{display:block;margin:14px 0 8px;font-size:14px;font-weight:700;color:var(--text)}
-    .field{width:100%;height:54px;border:1px solid var(--border);border-radius:14px;padding:0 15px;font-size:15px;outline:none;background:var(--input-bg);color:var(--text)}
-    .field::placeholder{color:var(--muted)}
-    .field:focus{border-color:var(--gold)}
-    .input-group{display:flex;gap:10px;align-items:flex-end}
-    .verify-btn,.load-btn,.buy-btn,.close-btn,.share-btn,.pick-btn{border:none;border-radius:14px;font-weight:700;cursor:pointer;white-space:nowrap}
-    .verify-btn,.load-btn,.pick-btn{height:54px;padding:0 16px;background:var(--gold);color:#fff;min-width:108px}
-    .verify-btn:disabled,.load-btn:disabled,.buy-btn:disabled,.pick-btn:disabled{opacity:.7;cursor:not-allowed}
-    .user-info{display:none;margin-top:12px;border:1px solid var(--gold-border);background:var(--gold-soft);color:var(--gold);padding:12px;border-radius:12px;font-size:14px;font-weight:700}
-    .toggle-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-    .toggle-item{border:2px solid var(--border);border-radius:14px;padding:12px;background:var(--card);cursor:pointer;text-align:center;font-size:14px;font-weight:700}
-    .toggle-item.active{border-color:var(--gold);background:var(--gold-soft)}
-    .select-wrap{margin-top:14px}
-    .select-shell{width:100%;height:54px;border:1px solid var(--border);border-radius:14px;background:var(--input-bg);display:flex;align-items:center;justify-content:space-between;padding:0 15px;cursor:pointer}
-    .select-shell span{color:var(--text);font-size:15px}
-    .select-shell em{color:var(--muted);font-style:normal}
-    .buy-btn{width:100%;height:56px;margin-top:16px;background:var(--gold);color:#fff;font-size:16px;box-shadow:0 10px 20px rgba(212,175,55,.18)}
-    .notice{margin-top:10px;font-size:13px;color:var(--muted);line-height:1.45}
-    .transaction-modal,.plan-modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;justify-content:center;align-items:center;z-index:9999;padding:16px}
-    .transaction-card,.plan-card{width:95%;max-width:430px;background:var(--modal-bg);color:var(--text);border-radius:22px;padding:22px;box-shadow:var(--shadow);border:1px solid var(--border)}
-    .transaction-icon{width:90px;height:90px;border-radius:50%;margin:auto;display:flex;justify-content:center;align-items:center;font-size:45px;background:#FFF8E1}
-    .transaction-card h2,.plan-card h2{text-align:center;margin-top:15px;font-size:22px}
-    .transaction-card p,.plan-card p{text-align:center;color:var(--muted);margin-top:10px;font-size:14px;line-height:1.5}
-    .receipt-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);font-size:14px;gap:12px}
-    .receipt-row span:last-child{text-align:right;font-weight:700}
-    .close-btn,.share-btn{width:100%;height:50px;font-size:15px}
-    .close-btn{margin-top:14px;background:var(--gold);color:#fff}
-    .share-btn{margin-top:10px;background:#111827;color:#fff}
-    .pending{background:#FFF8E1;color:#8a6d00}.success{background:#ECFDF3;color:#0f7a3b}.failed{background:#FEE4E2;color:#b42318}
-    .plan-list{margin-top:14px;display:grid;gap:10px;max-height:48vh;overflow:auto;padding-right:2px}
-    .plan-item{border:1px solid var(--border);border-radius:14px;padding:12px 14px;background:var(--card);cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center}
-    .plan-item.active{border-color:var(--gold);background:var(--gold-soft)}
-    .plan-item strong{display:block;font-size:14px}
-    .plan-item small{display:block;color:var(--muted);font-size:12px;margin-top:4px}
-    .radio-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--gold);display:inline-block;flex:0 0 16px}
-    .radio-dot.on{background:var(--gold)}
-    .hidden{display:none}
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    }
+
+    body{
+      background:var(--bg);
+      padding:20px;
+      color:var(--text);
+    }
+
+    .container{
+      max-width:500px;
+      margin:auto;
+    }
+
+    h1{
+      color:var(--text);
+      display:flex;
+      justify-content:center;
+      margin-bottom:10px;
+      font-size:28px;
+      font-weight:700;
+    }
+
+    .subtitle{
+      text-align:center;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:22px;
+      line-height:1.4;
+    }
+
+    .card{
+      background:var(--card);
+      padding:18px;
+      border-radius:18px;
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      margin-bottom:14px;
+    }
+
+    .step-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:12px;
+    }
+
+    .step-head strong{
+      font-size:16px;
+      font-weight:800;
+    }
+
+    .step-badge{
+      padding:6px 10px;
+      border-radius:999px;
+      background:var(--gold-soft);
+      border:1px solid var(--gold-border);
+      color:var(--gold);
+      font-size:12px;
+      font-weight:700;
+    }
+
+    .provider-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:12px;
+    }
+
+    .provider-card{
+      border:2px solid var(--border);
+      border-radius:16px;
+      padding:16px 10px;
+      min-height:92px;
+      background:var(--card);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      cursor:pointer;
+      transition:.18s ease;
+      text-align:center;
+    }
+
+    .provider-card:hover{
+      transform:translateY(-1px);
+    }
+
+    .provider-card.active{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+    }
+
+    .provider-card img{
+      width:42px;
+      height:42px;
+      object-fit:contain;
+      margin-bottom:8px;
+    }
+
+    .provider-card span{
+      font-size:13px;
+      font-weight:700;
+    }
+
+    .provider-card small{
+      display:block;
+      color:var(--muted);
+      margin-top:4px;
+      font-size:11px;
+    }
+
+    label{
+      display:block;
+      margin:14px 0 8px;
+      font-size:14px;
+      font-weight:700;
+      color:var(--text);
+    }
+
+    .field{
+      width:100%;
+      height:54px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:0 15px;
+      font-size:15px;
+      outline:none;
+      background:var(--input-bg);
+      color:var(--text);
+    }
+
+    .field::placeholder{
+      color:var(--muted);
+    }
+
+    .field:focus{
+      border-color:var(--gold);
+    }
+
+    .input-group{
+      display:flex;
+      gap:10px;
+      align-items:flex-end;
+    }
+
+    .verify-btn,
+    .buy-btn,
+    .close-btn,
+    .share-btn{
+      border:none;
+      border-radius:14px;
+      font-weight:700;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+
+    .verify-btn{
+      height:54px;
+      padding:0 16px;
+      background:var(--gold);
+      color:#fff;
+      min-width:108px;
+    }
+
+    .verify-btn:disabled,
+    .buy-btn:disabled{
+      opacity:.7;
+      cursor:not-allowed;
+    }
+
+    .user-info{
+      display:none;
+      margin-top:12px;
+      border:1px solid var(--gold-border);
+      background:var(--gold-soft);
+      color:var(--gold);
+      padding:12px;
+      border-radius:12px;
+      font-size:14px;
+      font-weight:700;
+    }
+
+    .select-wrap{
+      margin-top:10px;
+    }
+
+    .select-shell{
+      width:100%;
+      height:54px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:var(--input-bg);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 15px;
+      cursor:pointer;
+    }
+
+    .select-shell span{
+      color:var(--text);
+      font-size:15px;
+    }
+
+    .select-shell em{
+      color:var(--muted);
+      font-style:normal;
+    }
+
+    .buy-btn{
+      width:100%;
+      height:56px;
+      margin-top:16px;
+      background:var(--gold);
+      color:#fff;
+      font-size:16px;
+      box-shadow:0 10px 20px rgba(212,175,55,.18);
+    }
+
+    .notice{
+      margin-top:10px;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.45;
+    }
+
+    .transaction-modal,
+    .plan-modal{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      display:none;
+      justify-content:center;
+      align-items:center;
+      z-index:9999;
+      padding:16px;
+    }
+
+    .transaction-card,
+    .plan-card{
+      width:95%;
+      max-width:430px;
+      background:var(--modal-bg);
+      color:var(--text);
+      border-radius:22px;
+      padding:22px;
+      box-shadow:var(--shadow);
+      border:1px solid var(--border);
+    }
+
+    .transaction-icon{
+      width:90px;
+      height:90px;
+      border-radius:50%;
+      margin:auto;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:45px;
+      background:#FFF8E1;
+    }
+
+    .transaction-card h2,
+    .plan-card h2{
+      text-align:center;
+      margin-top:15px;
+      font-size:22px;
+    }
+
+    .transaction-card p,
+    .plan-card p{
+      text-align:center;
+      color:var(--muted);
+      margin-top:10px;
+      font-size:14px;
+      line-height:1.5;
+    }
+
+    .receipt-row{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 0;
+      border-bottom:1px solid var(--border);
+      font-size:14px;
+      color:var(--text);
+    }
+
+    .receipt-row span:last-child{
+      text-align:right;
+      word-break:break-word;
+      font-weight:600;
+    }
+
+    .close-btn,
+    .share-btn{
+      width:100%;
+      height:50px;
+      font-size:15px;
+    }
+
+    .close-btn{
+      margin-top:14px;
+      background:var(--gold);
+      color:#fff;
+    }
+
+    .share-btn{
+      margin-top:10px;
+      background:#111827;
+      color:#fff;
+    }
+
+    .pending{
+      background:#FFF8E1;
+      color:#8a6d00;
+    }
+
+    .success{
+      background:#ECFDF3;
+      color:#0f7a3b;
+    }
+
+    .failed{
+      background:#FEE4E2;
+      color:#b42318;
+    }
+
+    .choice-list{
+      margin-top:14px;
+      display:grid;
+      gap:10px;
+      max-height:48vh;
+      overflow:auto;
+      padding-right:2px;
+    }
+
+    .plan-item{
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px 14px;
+      background:var(--card);
+      cursor:pointer;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:center;
+    }
+
+    .plan-item.active{
+      border-color:var(--gold);
+      background:var(--gold-soft);
+    }
+
+    .plan-item strong{
+      display:block;
+      font-size:14px;
+    }
+
+    .plan-item small{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      margin-top:4px;
+    }
+
+    .radio-dot{
+      width:16px;
+      height:16px;
+      border-radius:50%;
+      border:2px solid var(--gold);
+      display:inline-block;
+      flex:0 0 16px;
+    }
+
+    .radio-dot.on{
+      background:var(--gold);
+    }
+
+    .hidden{
+      display:none;
+    }
+
+    .pin-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.65);
+      z-index:10000;
+      display:none;
+      justify-content:center;
+      align-items:flex-end;
+      padding:0;
+    }
+
+    .pin-sheet{
+      width:100%;
+      max-width:700px;
+      background:var(--modal-bg);
+      color:var(--text);
+      border-radius:24px 24px 0 0;
+      padding:18px 16px 24px;
+      box-shadow:0 -12px 40px rgba(0,0,0,.25);
+      animation:slideUp .18s ease;
+    }
+
+    @keyframes slideUp{
+      from{ transform:translateY(20px); opacity:.5; }
+      to{ transform:translateY(0); opacity:1; }
+    }
+
+    .pin-sheet-top{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      margin-bottom:4px;
+    }
+
+    .pin-close{
+      width:36px;
+      height:36px;
+      border:none;
+      border-radius:50%;
+      background:transparent;
+      font-size:28px;
+      color:var(--text);
+      cursor:pointer;
+      line-height:1;
+    }
+
+    .pin-title{
+      text-align:center;
+      font-size:22px;
+      font-weight:700;
+      margin:8px 0 8px;
+      color:var(--text);
+    }
+
+    .funsub-brand{
+      text-align:center;
+      font-size:14px;
+      color:var(--muted);
+      margin-bottom:18px;
+    }
+
+    .pin-boxes{
+      display:flex;
+      justify-content:center;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .pin-box{
+      width:58px;
+      height:58px;
+      border-radius:16px;
+      border:1.8px solid var(--border);
+      background:var(--input-bg);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      font-size:26px;
+      font-weight:700;
+      color:var(--text);
+    }
+
+    .pin-box.filled{
+      border-color:#9fd8c8;
+      background:rgba(159,216,200,.15);
+    }
+
+    .pin-hint{
+      text-align:center;
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:16px;
+    }
+
+    .pin-keypad{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+    }
+
+    .pin-key{
+      height:72px;
+      border:none;
+      border-radius:12px;
+      background:var(--card);
+      color:var(--text);
+      font-size:28px;
+      font-weight:500;
+      cursor:pointer;
+      box-shadow:0 0 0 1px var(--border) inset;
+    }
+
+    .pin-zero{
+      grid-column:1 / span 2;
+    }
+
+    .pin-back{
+      font-size:22px;
+    }
+
+    @media (max-width:420px){
+      .provider-card img{
+        width:40px;
+        height:40px;
+      }
+    }
+
     @media (max-width:380px){
-      body{padding:14px}
-      h1{font-size:25px}
-      .provider-grid{gap:10px}
-      .provider-card{min-height:84px}
-      .input-group{flex-direction:column;align-items:stretch}
-      .verify-btn,.load-btn,.pick-btn{width:100%}
-      .toggle-row{grid-template-columns:1fr}
+      body{
+        padding:14px;
+      }
+
+      h1{
+        font-size:25px;
+      }
+
+      .provider-grid{
+        gap:10px;
+      }
+
+      .provider-card{
+        min-height:84px;
+      }
+
+      .input-group{
+        flex-direction:column;
+        align-items:stretch;
+      }
+
+      .verify-btn{
+        width:100%;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="topbar">
-      <button class="theme-btn" id="themeBtn" type="button">☾</button>
-    </div>
-
     <h1>FunSub Cable TV</h1>
-    <div class="subtitle">Verify your smartcard or IUC, pick a package, and pay from your wallet.</div>
+    <div class="subtitle">Verify your smartcard or IUC, pick a package, choose Renew or Change, and pay securely from your wallet.</div>
 
     <div class="card">
       <div class="step-head">
@@ -99,10 +588,29 @@
       </div>
 
       <div class="provider-grid" id="providerGrid">
-        <div class="provider-card active" data-provider="dstv" data-label="DStv"><img src="https://i.postimg.cc/2S9tQkK3/dstv.png" alt=""><span>DStv</span><small>Multichoice</small></div>
-        <div class="provider-card" data-provider="gotv" data-label="GOtv"><img src="https://i.postimg.cc/rwYj7Y8Z/gotv.png" alt=""><span>GOtv</span><small>Multichoice</small></div>
-        <div class="provider-card" data-provider="startimes" data-label="Startimes"><img src="https://i.postimg.cc/0j3mHf9P/startimes.png" alt=""><span>Startimes</span><small>StarTimes</small></div>
-        <div class="provider-card" data-provider="showmax" data-label="Showmax"><img src="https://i.postimg.cc/0Q2pWv5Y/showmax.png" alt=""><span>Showmax</span><small>Streaming</small></div>
+        <div class="provider-card active" data-provider="dstv" data-label="DStv">
+          <img src="https://i.postimg.cc/2S9tQkK3/dstv.png" alt="DStv">
+          <span>DStv</span>
+          <small>Multichoice</small>
+        </div>
+
+        <div class="provider-card" data-provider="gotv" data-label="GOtv">
+          <img src="https://i.postimg.cc/rwYj7Y8Z/gotv.png" alt="GOtv">
+          <span>GOtv</span>
+          <small>Multichoice</small>
+        </div>
+
+        <div class="provider-card" data-provider="startimes" data-label="Startimes">
+          <img src="https://i.postimg.cc/0j3mHf9P/startimes.png" alt="Startimes">
+          <span>Startimes</span>
+          <small>StarTimes</small>
+        </div>
+
+        <div class="provider-card" data-provider="showmax" data-label="Showmax">
+          <img src="https://i.postimg.cc/0Q2pWv5Y/showmax.png" alt="Showmax">
+          <span>Showmax</span>
+          <small>Streaming</small>
+        </div>
       </div>
 
       <label for="customerId">Smartcard / IUC Number</label>
@@ -120,11 +628,6 @@
         <span class="step-badge">2</span>
       </div>
 
-      <div class="toggle-row">
-        <div class="toggle-item active" data-type="renew">Renew Package</div>
-        <div class="toggle-item" data-type="change">Change Package</div>
-      </div>
-
       <label>Package</label>
       <div class="select-wrap">
         <div class="select-shell" id="packageShell">
@@ -133,19 +636,30 @@
         </div>
       </div>
 
+      <label>Subscription Type</label>
+      <div class="select-wrap">
+        <div class="select-shell" id="typeShell">
+          <span id="typeText">Select subscription type</span>
+          <em>⌄</em>
+        </div>
+      </div>
+
       <button class="buy-btn" id="buyBtn" type="button">Confirm & Pay</button>
-      <div class="notice">Tap Select a plan to choose from the loaded packages.</div>
+      <div class="notice">Tap Select a plan to load packages. Then choose Renew Package or Change Package before payment.</div>
     </div>
   </div>
 
   <div id="transactionModal" class="transaction-modal">
     <div class="transaction-card">
       <div id="transactionIcon" class="transaction-icon">⏳</div>
+
       <h2 id="transactionTitle">Processing Transaction</h2>
       <p id="transactionMessage">Please wait...</p>
+
       <div id="receiptSection" style="display:none; margin-top:18px;">
-        <div class="receipt-row"><span>Provider</span><span id="receiptPlatform"></span></div>
-        <div class="receipt-row"><span>Customer</span><span id="receiptCustomerId"></span></div>
+        <div class="receipt-row"><span>Provider</span><span id="receiptProvider"></span></div>
+        <div class="receipt-row"><span>Customer ID</span><span id="receiptCustomerId"></span></div>
+        <div class="receipt-row"><span>Customer Name</span><span id="receiptCustomerName"></span></div>
         <div class="receipt-row"><span>Package</span><span id="receiptPackage"></span></div>
         <div class="receipt-row"><span>Type</span><span id="receiptType"></span></div>
         <div class="receipt-row"><span>Amount</span><span id="receiptAmount"></span></div>
@@ -153,39 +667,59 @@
         <div class="receipt-row"><span>Status</span><span id="receiptStatus"></span></div>
         <div class="receipt-row"><span>Date</span><span id="receiptDate"></span></div>
       </div>
+
       <button onclick="closeModal()" class="close-btn">Close</button>
       <button onclick="shareReceipt()" class="share-btn">Share</button>
     </div>
   </div>
 
-  <div id="planModal" class="plan-modal">
+  <div id="choiceModal" class="plan-modal">
     <div class="plan-card">
-      <h2>Select Plan</h2>
-      <p>Choose one package</p>
-      <div class="plan-list" id="planList"></div>
-      <button class="close-btn" type="button" onclick="closePlanModal()">Close</button>
+      <h2 id="choiceTitle">Select Item</h2>
+      <p id="choiceSubtitle">Choose one option</p>
+      <div class="choice-list" id="choiceList"></div>
+      <button class="close-btn" type="button" onclick="closeChoiceModal()">Close</button>
     </div>
   </div>
 
-  <div id="pinOverlay" class="plan-modal">
-    <div class="plan-card">
-      <h2>Enter Payment PIN</h2>
-      <p>Use your 4-digit fund PIN</p>
-      <div style="display:flex;justify-content:center;gap:12px;margin:16px 0;">
-        <div class="plan-item" style="justify-content:center;min-width:56px;height:56px;"><strong id="pinBox0"></strong></div>
-        <div class="plan-item" style="justify-content:center;min-width:56px;height:56px;"><strong id="pinBox1"></strong></div>
-        <div class="plan-item" style="justify-content:center;min-width:56px;height:56px;"><strong id="pinBox2"></strong></div>
-        <div class="plan-item" style="justify-content:center;min-width:56px;height:56px;"><strong id="pinBox3"></strong></div>
+  <div id="pinOverlay" class="pin-overlay">
+    <div class="pin-sheet">
+      <div class="pin-sheet-top">
+        <button type="button" class="pin-close" onclick="closePinModal()">×</button>
       </div>
-      <div class="hidden" id="pinDummy"></div>
+
+      <h2 class="pin-title">Enter Payment PIN</h2>
+      <div class="funsub-brand">FunSub Secure Keypad</div>
+
+      <div class="pin-boxes">
+        <div class="pin-box" id="pinBox0"></div>
+        <div class="pin-box" id="pinBox1"></div>
+        <div class="pin-box" id="pinBox2"></div>
+        <div class="pin-box" id="pinBox3"></div>
+      </div>
+
+      <p class="pin-hint">Secure numeric keypad</p>
+
+      <div class="pin-keypad">
+        <button type="button" class="pin-key" onclick="pressPin('1')">1</button>
+        <button type="button" class="pin-key" onclick="pressPin('2')">2</button>
+        <button type="button" class="pin-key" onclick="pressPin('3')">3</button>
+        <button type="button" class="pin-key" onclick="pressPin('4')">4</button>
+        <button type="button" class="pin-key" onclick="pressPin('5')">5</button>
+        <button type="button" class="pin-key" onclick="pressPin('6')">6</button>
+        <button type="button" class="pin-key" onclick="pressPin('7')">7</button>
+        <button type="button" class="pin-key" onclick="pressPin('8')">8</button>
+        <button type="button" class="pin-key" onclick="pressPin('9')">9</button>
+        <button type="button" class="pin-key pin-zero" onclick="pressPin('0')">0</button>
+        <button type="button" class="pin-key pin-back" onclick="backspacePin()">⌫</button>
+      </div>
     </div>
   </div>
-
-  <script src="theme.js" defer></script>
+<script src="theme.js" defer></script>
   <script>
-    const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
     const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
     const BUY_URL = "https://funsub.onrender.com/api/services/cable";
+    const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
 
     const providerGrid = document.getElementById("providerGrid");
     const customerId = document.getElementById("customerId");
@@ -193,20 +727,25 @@
     const buyBtn = document.getElementById("buyBtn");
     const userInfo = document.getElementById("userInfo");
     const accountName = document.getElementById("accountName");
+
     const packageShell = document.getElementById("packageShell");
     const packageText = document.getElementById("packageText");
-    const planModal = document.getElementById("planModal");
-    const planList = document.getElementById("planList");
-    const themeBtn = document.getElementById("themeBtn");
-    const pinOverlay = document.getElementById("pinOverlay");
+    const typeShell = document.getElementById("typeShell");
+    const typeText = document.getElementById("typeText");
+
+    const choiceModal = document.getElementById("choiceModal");
+    const choiceTitle = document.getElementById("choiceTitle");
+    const choiceSubtitle = document.getElementById("choiceSubtitle");
+    const choiceList = document.getElementById("choiceList");
 
     const transactionModal = document.getElementById("transactionModal");
     const transactionIcon = document.getElementById("transactionIcon");
     const transactionTitle = document.getElementById("transactionTitle");
     const transactionMessage = document.getElementById("transactionMessage");
     const receiptSection = document.getElementById("receiptSection");
-    const receiptPlatform = document.getElementById("receiptPlatform");
+    const receiptProvider = document.getElementById("receiptProvider");
     const receiptCustomerId = document.getElementById("receiptCustomerId");
+    const receiptCustomerName = document.getElementById("receiptCustomerName");
     const receiptPackage = document.getElementById("receiptPackage");
     const receiptType = document.getElementById("receiptType");
     const receiptAmount = document.getElementById("receiptAmount");
@@ -214,24 +753,99 @@
     const receiptStatus = document.getElementById("receiptStatus");
     const receiptDate = document.getElementById("receiptDate");
 
+    const pinOverlay = document.getElementById("pinOverlay");
+
     let currentProvider = "dstv";
     let verifiedCustomerName = "";
     let packageList = [];
     let selectedPackage = null;
-    let selectedType = "renew";
+    let selectedType = { value: "renew", label: "Renew Package" };
     let lastReceipt = null;
     let enteredPin = "";
     let pendingPayload = null;
 
-    function getToken(){ return localStorage.getItem("funsub_token") || ""; }
-    function formatNaira(v){ return "₦" + Number(v || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 }); }
+    function getToken(){
+      return localStorage.getItem("funsub_token") || "";
+    }
+
+    function formatNaira(value){
+      const num = Number(value);
+      if (!Number.isFinite(num)) return "₦0";
+      return "₦" + num.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function generateRequestId(prefix = "CABLE"){
+      const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+      return `${prefix}_${Date.now()}_${rand}`;
+    }
+
+    function getProviderMeta(provider){
+      const p = String(provider || "").trim().toLowerCase();
+      const map = {
+        dstv: { name: "DStv", logo: "https://i.postimg.cc/2S9tQkK3/dstv.png" },
+        gotv: { name: "GOtv", logo: "https://i.postimg.cc/rwYj7Y8Z/gotv.png" },
+        startimes: { name: "Startimes", logo: "https://i.postimg.cc/0j3mHf9P/startimes.png" },
+        showmax: { name: "Showmax", logo: "https://i.postimg.cc/0Q2pWv5Y/showmax.png" }
+      };
+      return map[p] || { name: p.toUpperCase(), logo: "" };
+    }
 
     function setTheme(theme){
       document.body.classList.toggle("dark", theme === "dark");
       localStorage.setItem("funsub_theme", theme);
-      themeBtn.textContent = theme === "dark" ? "☾" : "☀";
     }
+
     setTheme(localStorage.getItem("funsub_theme") || "dark");
+
+    function clearCableInputs(){
+      customerId.value = "";
+      verifiedCustomerName = "";
+      userInfo.style.display = "none";
+      accountName.innerText = "";
+
+      selectedPackage = null;
+      packageList = [];
+      packageText.innerText = "Select a plan";
+
+      selectedType = { value: "renew", label: "Renew Package" };
+      typeText.innerText = "Select subscription type";
+    }
+
+    function buildReceiptText(){
+      if (!lastReceipt) return "";
+      const r = lastReceipt;
+      return [
+        "FunSub Cable TV Receipt",
+        `Provider: ${r.provider || ""}`,
+        `Customer ID: ${r.customerId || ""}`,
+        `Customer Name: ${r.customerName || ""}`,
+        `Package: ${r.packageName || ""}`,
+        `Type: ${r.type || ""}`,
+        `Amount: ${r.amount || ""}`,
+        `Reference: ${r.reference || ""}`,
+        `Status: ${r.status || ""}`,
+        `Date: ${r.date || ""}`
+      ].join("\n");
+    }
+
+    async function shareReceipt(){
+      const text = buildReceiptText();
+      if (!text) return;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "FunSub Cable TV Receipt",
+            text
+          });
+          return;
+        } catch (e) {
+          console.log(e);
+        }
+      }
+
+      alert("Sharing is not supported on this browser.");
+    }
 
     function showProcessingModal(){
       transactionModal.style.display = "flex";
@@ -241,6 +855,7 @@
       transactionTitle.innerText = "Processing Transaction";
       transactionMessage.innerText = "Please wait...";
     }
+
     function showPendingModal(message){
       transactionModal.style.display = "flex";
       receiptSection.style.display = "none";
@@ -249,6 +864,7 @@
       transactionTitle.innerText = "Transaction Pending";
       transactionMessage.innerText = message || "Your transaction is pending.";
     }
+
     function showFailedModal(message){
       transactionModal.style.display = "flex";
       receiptSection.style.display = "none";
@@ -257,6 +873,7 @@
       transactionTitle.innerText = "Transaction Failed";
       transactionMessage.innerText = message || "Unable to complete transaction.";
     }
+
     function showSuccessModal(message){
       transactionModal.style.display = "flex";
       receiptSection.style.display = "block";
@@ -265,111 +882,242 @@
       transactionTitle.innerText = "Transaction Successful";
       transactionMessage.innerText = message || "Transaction successful";
     }
-    function closeModal(){ transactionModal.style.display = "none"; }
 
-    function setReceiptValues({ provider, customer_id, packageName, type, amount, reference, status }){
-      receiptPlatform.innerText = provider;
-      receiptCustomerId.innerText = customer_id;
-      receiptPackage.innerText = packageName;
-      receiptType.innerText = type;
+    function closeModal(){
+      transactionModal.style.display = "none";
+    }
+
+    function setReceiptValues({
+      provider,
+      customerId,
+      customerName,
+      packageName,
+      type,
+      amount,
+      reference,
+      status
+    }){
+      receiptProvider.innerText = provider || "";
+      receiptCustomerId.innerText = customerId || "";
+      receiptCustomerName.innerText = customerName || "";
+      receiptPackage.innerText = packageName || "";
+      receiptType.innerText = type || "";
       receiptAmount.innerText = formatNaira(amount);
-      receiptReference.innerText = reference;
-      receiptStatus.innerText = status;
+      receiptReference.innerText = reference || "";
+      receiptStatus.innerText = status || "";
       receiptDate.innerText = new Date().toLocaleString();
       receiptSection.style.display = "block";
-      lastReceipt = { provider, customer_id, packageName, type, amount: formatNaira(amount), reference, status, date: new Date().toLocaleString() };
+
+      lastReceipt = {
+        provider,
+        customerId,
+        customerName,
+        packageName,
+        type,
+        amount: formatNaira(amount),
+        reference,
+        status,
+        date: new Date().toLocaleString()
+      };
     }
 
-    function buildReceiptText(){
-      if (!lastReceipt) return "";
-      const r = lastReceipt;
-      return [
-        "FunSub Cable TV Receipt",
-        `Provider: ${r.provider}`,
-        `Customer: ${r.customer_id}`,
-        `Package: ${r.packageName}`,
-        `Type: ${r.type}`,
-        `Amount: ${r.amount}`,
-        `Reference: ${r.reference}`,
-        `Status: ${r.status}`,
-        `Date: ${r.date}`
-      ].join("\n");
-    }
-
-    async function shareReceipt(){
-      const text = buildReceiptText();
-      if (!text) return;
-      if (navigator.share) {
-        try { await navigator.share({ title: "FunSub Cable TV Receipt", text }); return; } catch(e){}
-      }
-      alert("Sharing is not supported");
-    }
-
-    providerGrid.querySelectorAll(".provider-card").forEach(card => {
-      card.addEventListener("click", () => {
-        providerGrid.querySelectorAll(".provider-card").forEach(c => c.classList.remove("active"));
-        card.classList.add("active");
-        currentProvider = card.dataset.provider;
-        verifiedCustomerName = "";
-        accountName.innerText = "";
-        userInfo.style.display = "none";
-        selectedPackage = null;
-        packageText.innerText = "Select a plan";
-        packageList = [];
-        planList.innerHTML = "";
-      });
-    });
-
-    document.querySelectorAll(".toggle-item").forEach(item => {
-      item.addEventListener("click", () => {
-        document.querySelectorAll(".toggle-item").forEach(x => x.classList.remove("active"));
-        item.classList.add("active");
-        selectedType = item.dataset.type || "renew";
-      });
-    });
-
-    packageShell.addEventListener("click", () => {
-      if (!packageList.length) return alert("Load packages first");
-      planModal.style.display = "flex";
-    });
-
-    function closePlanModal(){ planModal.style.display = "none"; }
-
-    function loadPinBoxes(){
+    function renderPinBoxes(){
       for (let i = 0; i < 4; i++) {
         const box = document.getElementById(`pinBox${i}`);
-        box.textContent = i < enteredPin.length ? "•" : "";
+        if (!box) continue;
+
+        const hasDigit = i < enteredPin.length;
+        box.textContent = hasDigit ? "•" : "";
+        box.classList.toggle("filled", hasDigit);
       }
     }
 
     function openPinModal(payload){
       enteredPin = "";
       pendingPayload = payload;
-      loadPinBoxes();
+      renderPinBoxes();
       pinOverlay.style.display = "flex";
     }
+
     function closePinModal(){
       pinOverlay.style.display = "none";
       enteredPin = "";
+      pendingPayload = null;
+      renderPinBoxes();
     }
+
     function pressPin(digit){
       if (enteredPin.length >= 4) return;
+
       enteredPin += digit;
-      loadPinBoxes();
+      renderPinBoxes();
+
       if (enteredPin.length === 4) {
         const payload = pendingPayload;
         closePinModal();
         sendCableRequest(payload, enteredPin);
       }
     }
+
     function backspacePin(){
       enteredPin = enteredPin.slice(0, -1);
-      loadPinBoxes();
+      renderPinBoxes();
     }
 
-        async function verifyCustomer(){
+    function closeChoiceModal(){
+      choiceModal.style.display = "none";
+    }
+
+    function renderChoiceList(items, onPick){
+      choiceList.innerHTML = "";
+
+      if (!items.length) {
+        choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No items found</div>";
+        return;
+      }
+
+      items.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "plan-item";
+        row.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="radio-dot ${item.active ? "on" : ""}"></span>
+            <div>
+              <strong>${item.title}</strong>
+              <small>${item.subtitle || ""}</small>
+            </div>
+          </div>
+          <div style="color:var(--muted);font-size:12px;">Select</div>
+        `;
+
+        row.addEventListener("click", () => {
+          onPick(item);
+        });
+
+        choiceList.appendChild(row);
+      });
+    }
+
+    async function loadPackages(provider){
       const token = getToken();
       const customer_id = customerId.value.trim();
+
+      if (!token) {
+        alert("Please login first");
+        return false;
+      }
+
+      if (!customer_id) {
+        alert("Enter smartcard / IUC number first");
+        return false;
+      }
+
+      if (!verifiedCustomerName) {
+        alert("Please verify customer first");
+        return false;
+      }
+
+      try {
+        const res = await fetch(
+          `${OPTIONS_URL}?service_id=${encodeURIComponent(provider)}&provider=${encodeURIComponent(provider)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+
+        const data = await res.json().catch(() => ({}));
+
+        let list = [];
+        if (Array.isArray(data.options)) list = data.options;
+        else if (Array.isArray(data.plans)) list = data.plans;
+        else if (Array.isArray(data.data?.options)) list = data.data.options;
+        else if (Array.isArray(data.data?.plans)) list = data.data.plans;
+
+        packageList = list.map(item => ({
+          id: item.id || item.variation_id || item.code || item.plan_id,
+          name: item.name || item.title || item.label || "Package",
+          price: Number(item.price || item.amount || item.cost || 0)
+        })).filter(x => x.id);
+
+        return true;
+      } catch (e) {
+        console.error(e);
+        alert("Unable to load packages");
+        return false;
+      }
+    }
+
+    async function openPackageModal(){
+      if (!verifiedCustomerName) {
+        alert("Please verify customer first");
+        return;
+      }
+
+      if (!packageList.length) {
+        const loaded = await loadPackages(currentProvider);
+        if (!loaded || !packageList.length) {
+          choiceTitle.innerText = "Select Package";
+          choiceSubtitle.innerText = "No packages found";
+          choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No packages found</div>";
+          choiceModal.style.display = "flex";
+          return;
+        }
+      }
+
+      choiceTitle.innerText = "Select Package";
+      choiceSubtitle.innerText = "Choose one package";
+
+      renderChoiceList(
+        packageList.map(pkg => ({
+          title: pkg.name,
+          subtitle: formatNaira(pkg.price),
+          active: selectedPackage && selectedPackage.id === pkg.id,
+          pkg
+        })),
+        (item) => {
+          selectedPackage = item.pkg;
+          packageText.innerText = item.pkg.name;
+          closeChoiceModal();
+        }
+      );
+
+      choiceModal.style.display = "flex";
+    }
+
+    function openTypeModal(){
+      choiceTitle.innerText = "Select Subscription Type";
+      choiceSubtitle.innerText = "Choose Renew Package or Change Package";
+
+      const items = [
+        {
+          title: "Renew Package",
+          subtitle: "Keep the current bouquet",
+          active: selectedType.value === "renew",
+          value: "renew",
+          label: "Renew Package"
+        },
+        {
+          title: "Change Package",
+          subtitle: "Switch to another bouquet",
+          active: selectedType.value === "change",
+          value: "change",
+          label: "Change Package"
+        }
+      ];
+
+      renderChoiceList(items, (item) => {
+        selectedType = { value: item.value, label: item.label };
+        typeText.innerText = item.label;
+        closeChoiceModal();
+      });
+
+      choiceModal.style.display = "flex";
+    }
+
+    async function verifyCustomer(){
+      const token = getToken();
+      const customer_id = customerId.value.trim();
+
       if (!token) return alert("Please login first");
       if (!customer_id) return alert("Enter smartcard / IUC number");
 
@@ -379,14 +1127,24 @@
       try{
         const res = await fetch(VERIFY_URL, {
           method:"POST",
-          headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token}` },
-          body: JSON.stringify({ customer_id, service_id: currentProvider })
+          headers:{
+            "Content-Type":"application/json",
+            Authorization:`Bearer ${token}`
+          },
+          body: JSON.stringify({
+            customer_id,
+            service_id: currentProvider
+          })
         });
+
         const data = await res.json().catch(() => ({}));
+
         if (res.ok && data.success) {
           verifiedCustomerName = data.data?.customer_name || data.customer_name || "Verified Customer";
           accountName.innerText = verifiedCustomerName;
           userInfo.style.display = "block";
+
+          await loadPackages(currentProvider);
         } else {
           alert(data.message || "Verification failed");
           verifiedCustomerName = "";
@@ -400,97 +1158,49 @@
       }
     }
 
-    async function loadPackages(){
-      const token = getToken();
-      const customer_id = customerId.value.trim();
-      if (!token) return alert("Please login first");
-      if (!customer_id) return alert("Enter smartcard / IUC number first");
-      if (!verifiedCustomerName) return alert("Please verify customer first");
-
-      try{
-        const res = await fetch(`${OPTIONS_URL}?provider=${encodeURIComponent(currentProvider)}`, {
-          headers:{ Authorization:`Bearer ${token}` }
-        });
-        const data = await res.json().catch(() => ({}));
-
-        let list = [];
-        if (Array.isArray(data.options)) list = data.options;
-        else if (Array.isArray(data.data?.options)) list = data.data.options;
-        else if (Array.isArray(data.data)) list = data.data;
-        else if (Array.isArray(data.plans)) list = data.plans;
-
-        packageList = list.map(item => ({
-          id: item.id || item.variation_id || item.code || item.plan_id,
-          name: item.name || item.title || item.label || "Package",
-          price: Number(item.price || item.amount || item.cost || 0)
-        })).filter(x => x.id);
-
-        planList.innerHTML = "";
-        if (!packageList.length) {
-          planList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No packages found</div>";
-          planModal.style.display = "flex";
-          return;
-        }
-
-        packageList.forEach((pkg, index) => {
-          const row = document.createElement("div");
-          row.className = "plan-item";
-          row.innerHTML = `
-            <div style="display:flex;align-items:center;gap:12px;">
-              <span class="radio-dot"></span>
-              <div>
-                <strong>${pkg.name}</strong>
-                <small>${formatNaira(pkg.price)}</small>
-              </div>
-            </div>
-            <div style="color:var(--muted);font-size:12px;">Select</div>
-          `;
-          row.addEventListener("click", () => {
-            selectedPackage = pkg;
-            packageText.innerText = pkg.name;
-            planList.querySelectorAll(".plan-item").forEach(x => {
-              x.classList.remove("active");
-              x.querySelector(".radio-dot").classList.remove("on");
-            });
-            row.classList.add("active");
-            row.querySelector(".radio-dot").classList.add("on");
-            closePlanModal();
-          });
-          planList.appendChild(row);
-        });
-
-        planModal.style.display = "flex";
-      } catch(e){
-        planList.innerHTML = "<div style='color:var(--danger);font-size:13px;'>Unable to load packages</div>";
-        planModal.style.display = "flex";
-      }
-    }
-
     async function buyCable(){
       const token = getToken();
       const customer_id = customerId.value.trim();
+      const customer_name = verifiedCustomerName;
+
       if (!token) return alert("Please login first");
       if (!customer_id) return alert("Enter smartcard / IUC number");
-      if (!verifiedCustomerName) return alert("Please verify customer first");
+      if (!customer_name) return alert("Please verify customer first");
       if (!selectedPackage) return alert("Select a plan");
+      if (!selectedType?.value) return alert("Select subscription type");
 
       openPinModal({
         token,
+        request_id: generateRequestId("CABLE"),
         customer_id,
+        customer_name,
         service_id: currentProvider,
+        providerLabel: getProviderMeta(currentProvider).name,
         variation_id: selectedPackage.id,
         packageName: selectedPackage.name,
         amount: selectedPackage.price,
-        providerLabel: document.querySelector(".provider-card.active")?.dataset.label || currentProvider,
-        type: selectedType === "renew" ? "Renew Package" : "Change Package"
+        subscription_type: selectedType.value,
+        subscription_type_label: selectedType.label
       });
     }
 
     async function sendCableRequest(payload, fundPin){
-      const { token, customer_id, service_id, variation_id, packageName, amount, providerLabel, type } = payload;
-      const request_id = `CABLE_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      const {
+        token,
+        request_id,
+        customer_id,
+        customer_name,
+        service_id,
+        providerLabel,
+        variation_id,
+        packageName,
+        amount,
+        subscription_type,
+        subscription_type_label
+      } = payload;
 
       showProcessingModal();
+
       buyBtn.disabled = true;
       buyBtn.innerText = "Processing...";
 
@@ -504,65 +1214,191 @@
           body: JSON.stringify({
             request_id,
             customer_id,
+            customer_name,
             service_id,
+            serviceId: service_id,
+            provider: providerLabel,
             variation_id,
-            fundPin,
-            subscription_type: selectedType
+            package_name: packageName,
+            amount,
+            subscription_type,
+            subscription_type_label,
+            fundPin
           })
         });
 
         const data = await response.json().catch(() => ({}));
-        const tx = data.transaction || data.data?.transaction || {};
-        const status = String(tx.status || data.status || "").toLowerCase();
-        const reference = tx.reference || data.reference || request_id;
+        const tx = data.transaction || data.data?.transaction || data.result || {};
+        const statusText = String(tx.status || data.status || "").toLowerCase();
+        const reference = tx.reference || tx.tx_ref || data.reference || request_id;
 
-        if (response.ok && (data.success || status === "success" || status === "completed")) {
+        clearCableInputs();
+
+        if (
+          response.ok &&
+          (
+            data.transaction ||
+            data.success === true ||
+            statusText === "success" ||
+            statusText === "successful" ||
+            statusText === "completed"
+          )
+        ) {
           showSuccessModal(data.message || "Subscription successful");
+
           setReceiptValues({
             provider: providerLabel,
-            customer_id,
+            customerId: customer_id,
+            customerName: customer_name,
             packageName,
-            type,
+            type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
-            status: "success"
+            status: tx.status || data.status || "success"
           });
-        } else if (status === "pending") {
+
+          lastReceipt = {
+            provider: providerLabel,
+            customerId: customer_id,
+            customerName: customer_name,
+            packageName,
+            type: subscription_type_label,
+            amount: formatNaira(tx.amount || amount),
+            reference,
+            status: tx.status || data.status || "success",
+            date: new Date().toLocaleString()
+          };
+
+          return;
+        }
+
+        if (
+          statusText === "pending" ||
+          data.status === "pending" ||
+          data.transaction?.status === "pending"
+        ) {
           showPendingModal(data.message || "Transaction pending");
+
           setReceiptValues({
             provider: providerLabel,
-            customer_id,
+            customerId: customer_id,
+            customerName: customer_name,
             packageName,
-            type,
+            type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
             status: "pending"
           });
-        } else {
-          showFailedModal(data.message || "Transaction failed");
+
+          lastReceipt = {
+            provider: providerLabel,
+            customerId: customer_id,
+            customerName: customer_name,
+            packageName,
+            type: subscription_type_label,
+            amount: formatNaira(tx.amount || amount),
+            reference,
+            status: "pending",
+            date: new Date().toLocaleString()
+          };
+
+          return;
         }
+
+        showFailedModal(data.message || "Transaction failed");
+
+        setReceiptValues({
+          provider: providerLabel,
+          customerId: customer_id,
+          customerName: customer_name,
+          packageName,
+          type: subscription_type_label,
+          amount: tx.amount || amount,
+          reference,
+          status: "failed"
+        });
+
+        lastReceipt = {
+          provider: providerLabel,
+          customerId: customer_id,
+          customerName: customer_name,
+          packageName,
+          type: subscription_type_label,
+          amount: formatNaira(tx.amount || amount),
+          reference,
+          status: "failed",
+          date: new Date().toLocaleString()
+        };
       } catch (error){
+        console.error(error);
+
+        clearCableInputs();
+
         showFailedModal("Unable to complete transaction");
+
+        setReceiptValues({
+          provider: providerLabel,
+          customerId: customer_id,
+          customerName: customer_name,
+          packageName,
+          type: subscription_type_label,
+          amount,
+          reference: request_id,
+          status: "failed"
+        });
+
+        lastReceipt = {
+          provider: providerLabel,
+          customerId: customer_id,
+          customerName: customer_name,
+          packageName,
+          type: subscription_type_label,
+          amount: formatNaira(amount),
+          reference: request_id,
+          status: "failed",
+          date: new Date().toLocaleString()
+        };
       } finally {
         buyBtn.disabled = false;
         buyBtn.innerText = "Confirm & Pay";
       }
     }
 
-    themeBtn.addEventListener("click", () => {
-      setTheme(document.body.classList.contains("dark") ? "light" : "dark");
+    providerGrid.querySelectorAll(".provider-card").forEach(card => {
+      card.addEventListener("click", () => {
+        providerGrid.querySelectorAll(".provider-card").forEach(c => c.classList.remove("active"));
+        card.classList.add("active");
+        currentProvider = card.dataset.provider;
+
+        verifiedCustomerName = "";
+        accountName.innerText = "";
+        userInfo.style.display = "none";
+
+        selectedPackage = null;
+        packageList = [];
+        packageText.innerText = "Select a plan";
+
+        selectedType = { value: "renew", label: "Renew Package" };
+        typeText.innerText = "Select subscription type";
+      });
     });
 
+    packageShell.addEventListener("click", openPackageModal);
+    typeShell.addEventListener("click", openTypeModal);
+
     verifyBtn.addEventListener("click", verifyCustomer);
-    document.getElementById("loadPackagesBtn").remove();
-    document.getElementById("buyBtn").addEventListener("click", buyCable);
+    buyBtn.addEventListener("click", buyCable);
+
     document.addEventListener("keydown", (e) => {
       if (pinOverlay.style.display === "flex") {
         if (/^\d$/.test(e.key)) pressPin(e.key);
         if (e.key === "Backspace") backspacePin();
         if (e.key === "Escape") closePinModal();
       }
-      if (planModal.style.display === "flex" && e.key === "Escape") closePlanModal();
+
+      if (choiceModal.style.display === "flex" && e.key === "Escape") {
+        closeChoiceModal();
+      }
     });
   </script>
 </body>
