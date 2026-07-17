@@ -713,7 +713,7 @@
   </div>
 
   <script src="theme.js" defer></script>
-<script>
+  <script>
 const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
     const BUY_URL = "https://funsub.onrender.com/api/services/cable";
     const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
@@ -761,22 +761,22 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
     let enteredPin = "";
     let pendingPayload = null;
 
-    function getToken(){
+    function getToken() {
       return localStorage.getItem("funsub_token") || "";
     }
 
-    function formatNaira(value){
+    function formatNaira(value) {
       const num = Number(value);
       if (!Number.isFinite(num)) return "₦0";
       return "₦" + num.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
 
-    function generateRequestId(prefix = "CABLE"){
+    function generateRequestId(prefix = "CABLE") {
       const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
       return `${prefix}_${Date.now()}_${rand}`;
     }
 
-    function getProviderMeta(provider){
+    function getProviderMeta(provider) {
       const p = String(provider || "").trim().toLowerCase();
       const map = {
         dstv: { name: "DStv", logo: "https://i.postimg.cc/2S9tQkK3/dstv.png" },
@@ -787,7 +787,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       return map[p] || { name: p.toUpperCase(), logo: "" };
     }
 
-    function getPlanDurationLabel(plan){
+    function getPlanDurationLabel(plan) {
       const raw =
         plan.durationLabel ??
         plan.duration_text ??
@@ -818,14 +818,14 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       return "1 Month";
     }
 
-    function setTheme(theme){
+    function setTheme(theme) {
       document.body.classList.toggle("dark", theme === "dark");
       localStorage.setItem("funsub_theme", theme);
     }
 
     setTheme(localStorage.getItem("funsub_theme") || "dark");
 
-    function clearCableInputs(){
+    function clearCableInputs() {
       customerId.value = "";
       verifiedCustomerName = "";
       userInfo.style.display = "none";
@@ -839,7 +839,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       typeText.innerText = "Select subscription type";
     }
 
-    function buildReceiptText(){
+    function buildReceiptText() {
       if (!lastReceipt) return "";
       const r = lastReceipt;
       return [
@@ -856,7 +856,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       ].join("\n");
     }
 
-    async function shareReceipt(){
+    async function shareReceipt() {
       const text = buildReceiptText();
       if (!text) return;
 
@@ -875,7 +875,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       alert("Sharing is not supported on this browser.");
     }
 
-    function showProcessingModal(){
+    function showProcessingModal() {
       transactionModal.style.display = "flex";
       receiptSection.style.display = "none";
       transactionIcon.className = "transaction-icon";
@@ -884,7 +884,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       transactionMessage.innerText = "Please wait...";
     }
 
-    function showPendingModal(message){
+    function showPendingModal(message) {
       transactionModal.style.display = "flex";
       receiptSection.style.display = "none";
       transactionIcon.className = "transaction-icon pending";
@@ -893,7 +893,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       transactionMessage.innerText = message || "Your transaction is pending.";
     }
 
-    function showFailedModal(message){
+    function showFailedModal(message) {
       transactionModal.style.display = "flex";
       receiptSection.style.display = "none";
       transactionIcon.className = "transaction-icon failed";
@@ -902,7 +902,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       transactionMessage.innerText = message || "Unable to complete transaction.";
     }
 
-    function showSuccessModal(message){
+    function showSuccessModal(message) {
       transactionModal.style.display = "flex";
       receiptSection.style.display = "block";
       transactionIcon.className = "transaction-icon success";
@@ -911,7 +911,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       transactionMessage.innerText = message || "Transaction successful";
     }
 
-    function closeModal(){
+    function closeModal() {
       transactionModal.style.display = "none";
     }
 
@@ -924,7 +924,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       amount,
       reference,
       status
-    }){
+    }) {
       receiptProvider.innerText = provider || "";
       receiptCustomerId.innerText = customerId || "";
       receiptCustomerName.innerText = customerName || "";
@@ -949,7 +949,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       };
     }
 
-    function renderPinBoxes(){
+    function renderPinBoxes() {
       for (let i = 0; i < 4; i++) {
         const box = document.getElementById(`pinBox${i}`);
         if (!box) continue;
@@ -960,23 +960,22 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       }
     }
 
-    function openPinModal(payload){
+    function openPinModal(payload) {
       enteredPin = "";
       pendingPayload = payload;
       renderPinBoxes();
       pinOverlay.style.display = "flex";
     }
 
-    function closePinModal(){
+    function closePinModal() {
       pinOverlay.style.display = "none";
       enteredPin = "";
       pendingPayload = null;
       renderPinBoxes();
     }
 
-    function pressPin(digit){
+    function pressPin(digit) {
       if (enteredPin.length >= 4) return;
-
       enteredPin += digit;
       renderPinBoxes();
 
@@ -987,16 +986,16 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       }
     }
 
-    function backspacePin(){
+    function backspacePin() {
       enteredPin = enteredPin.slice(0, -1);
       renderPinBoxes();
     }
 
-    function closeChoiceModal(){
+    function closeChoiceModal() {
       choiceModal.style.display = "none";
     }
 
-    function renderChoiceList(items, onPick){
+    function renderChoiceList(items, onPick) {
       choiceList.innerHTML = "";
 
       if (!items.length) {
@@ -1026,7 +1025,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       });
     }
 
-    async function loadPackages(provider){
+    async function loadPackages(provider) {
       const token = getToken();
       const customer_id = customerId.value.trim();
 
@@ -1079,7 +1078,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       }
     }
 
-    async function openPackageModal(){
+    async function openPackageModal() {
       if (!verifiedCustomerName) {
         alert("Please verify customer first");
         return;
@@ -1116,7 +1115,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
       choiceModal.style.display = "flex";
     }
 
-    function openTypeModal(){
+    function openTypeModal() {
       choiceTitle.innerText = "Select Subscription Type";
       choiceSubtitle.innerText = "Choose Renew Package or Change Package";
 
@@ -1145,7 +1144,7 @@ const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
 
       choiceModal.style.display = "flex";
     }
-async function verifyCustomer(){
+async function verifyCustomer() {
       const token = getToken();
       const customer_id = customerId.value.trim();
 
@@ -1155,12 +1154,12 @@ async function verifyCustomer(){
       verifyBtn.disabled = true;
       verifyBtn.innerText = "Verifying...";
 
-      try{
+      try {
         const res = await fetch(VERIFY_URL, {
-          method:"POST",
-          headers:{
-            "Content-Type":"application/json",
-            Authorization:`Bearer ${token}`
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
             customer_id,
@@ -1181,7 +1180,7 @@ async function verifyCustomer(){
           verifiedCustomerName = "";
           userInfo.style.display = "none";
         }
-      } catch(e){
+      } catch (e) {
         alert("Unable to verify customer");
       } finally {
         verifyBtn.disabled = false;
@@ -1189,7 +1188,7 @@ async function verifyCustomer(){
       }
     }
 
-    async function buyCable(){
+    async function buyCable() {
       const token = getToken();
       const customer_id = customerId.value.trim();
       const customer_name = verifiedCustomerName;
@@ -1217,7 +1216,7 @@ async function verifyCustomer(){
       });
     }
 
-    async function sendCableRequest(payload, fundPin){
+    async function sendCableRequest(payload, fundPin) {
       const {
         token,
         request_id,
@@ -1245,12 +1244,12 @@ async function verifyCustomer(){
       buyBtn.disabled = true;
       buyBtn.innerText = "Processing...";
 
-      try{
+      try {
         const response = await fetch(BUY_URL, {
-          method:"POST",
-          headers:{
-            "Content-Type":"application/json",
-            Authorization:`Bearer ${token}`
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
             request_id,
@@ -1379,7 +1378,7 @@ async function verifyCustomer(){
         };
 
         clearCableInputs();
-      } catch(error){
+      } catch (error) {
         console.error(error);
 
         showFailedModal("Unable to complete transaction");
