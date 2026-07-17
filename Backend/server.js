@@ -2442,7 +2442,15 @@ async function processCablePayment(req, res) {
 
     if (!userId) return respondError(res, 401, "Unauthorized");
 
-    const fundPin = String(body.fundPin || body.fund_pin || "").trim();
+    const fundPin = String(
+      body.fundPin ??
+      body.fund_pin ??
+      body.transaction_pin ??
+      body.transactionPin ??
+      body.pin ??
+      ""
+    ).trim();
+
     if (!fundPin) return respondError(res, 400, "Transaction PIN is required");
 
     const pinCheck = await verifyAndTrackPin(userId, fundPin);
@@ -2454,6 +2462,8 @@ async function processCablePayment(req, res) {
     const service_id = String(body.service_id || "").trim();
     const variation_id = String(body.variation_id || body.plan_id || body.planId || "").trim();
     const packageName = String(body.packageName || body.plan_name || body.planName || "Cable TV").trim();
+    const packageDisplay = String(body.package_display || body.packageDisplay || "").trim();
+    const packageDuration = String(body.package_duration || body.packageDuration || "").trim();
     const amount = toNumber(body.amount || body.plan_amount || body.finalPrice || body.final_price, 0);
     const request_id = String(body.request_id || body.requestId || body.reference || buildTxnRef("CABLE")).trim();
     const subscription_type = String(body.subscription_type || "renew").trim().toLowerCase();
@@ -2519,6 +2529,8 @@ async function processCablePayment(req, res) {
             service_id,
             variation_id,
             packageName,
+            packageDisplay,
+            packageDuration,
             subscription_type,
             amount,
             request_id,
@@ -2603,6 +2615,8 @@ async function processCablePayment(req, res) {
             service_id,
             variation_id,
             packageName,
+            packageDisplay,
+            packageDuration,
             subscription_type,
             amount,
             request_id,
@@ -2646,6 +2660,8 @@ async function processCablePayment(req, res) {
             service_id,
             variation_id,
             packageName,
+            packageDisplay,
+            packageDuration,
             subscription_type,
             amount,
             request_id,
@@ -2703,6 +2719,8 @@ async function processCablePayment(req, res) {
           service_id,
           variation_id,
           packageName,
+          packageDisplay,
+          packageDuration,
           subscription_type,
           amount,
           request_id,
