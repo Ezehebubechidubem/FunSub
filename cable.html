@@ -350,7 +350,8 @@
       background:#111827;
       color:#fff;
     }
-.pending{
+
+    .pending{
       background:#FFF8E1;
       color:#8a6d00;
     }
@@ -414,10 +415,6 @@
 
     .radio-dot.on{
       background:var(--gold);
-    }
-
-    .hidden{
-      display:none;
     }
 
     .pin-overlay{
@@ -575,7 +572,6 @@
     }
   </style>
 </head>
-
 <body>
   <div class="container">
     <h1>FunSub Cable TV</h1>
@@ -715,9 +711,10 @@
       </div>
     </div>
   </div>
-<script src="theme.js" defer></script>
+
+  <script src="theme.js" defer></script>
   <script>
-    const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
+const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
     const BUY_URL = "https://funsub.onrender.com/api/services/cable";
     const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
 
@@ -994,7 +991,8 @@
       enteredPin = enteredPin.slice(0, -1);
       renderPinBoxes();
     }
-function closeChoiceModal(){
+
+    function closeChoiceModal(){
       choiceModal.style.display = "none";
     }
 
@@ -1097,23 +1095,18 @@ function closeChoiceModal(){
       }
 
       choiceTitle.innerText = "Select Package";
-      choiceSubtitle.innerText = "Choose one package";
+      choiceSubtitle.innerText = "Pick the amount and duration you want";
 
       renderChoiceList(
         packageList.map(pkg => ({
-          title: pkg.name,
-          subtitle: [
-            formatNaira(pkg.price),
-            pkg.duration ? pkg.duration : "1 Month"
-          ].filter(Boolean).join(" • "),
+          title: formatNaira(pkg.price),
+          subtitle: pkg.duration || "1 Month",
           active: selectedPackage && selectedPackage.id === pkg.id,
           pkg
         })),
         (item) => {
           selectedPackage = item.pkg;
-          packageText.innerText = item.pkg.duration
-            ? `${item.pkg.name} (${item.pkg.duration})`
-            : `${item.pkg.name} (1 Month)`;
+          packageText.innerText = `${formatNaira(item.pkg.price)} • ${item.pkg.duration || "1 Month"}`;
           closeChoiceModal();
         }
       );
@@ -1150,8 +1143,7 @@ function closeChoiceModal(){
 
       choiceModal.style.display = "flex";
     }
-
-    async function verifyCustomer(){
+async function verifyCustomer(){
       const token = getToken();
       const customer_id = customerId.value.trim();
 
@@ -1215,6 +1207,7 @@ function closeChoiceModal(){
         providerLabel: getProviderMeta(currentProvider).name,
         variation_id: selectedPackage.id,
         packageName: selectedPackage.name,
+        packageDisplay: `${formatNaira(selectedPackage.price)} • ${selectedPackage.duration || "1 Month"}`,
         packageDuration: selectedPackage.duration || "1 Month",
         amount: selectedPackage.price,
         subscription_type: selectedType.value,
@@ -1232,6 +1225,7 @@ function closeChoiceModal(){
         providerLabel,
         variation_id,
         packageName,
+        packageDisplay,
         packageDuration,
         amount,
         subscription_type,
@@ -1259,12 +1253,14 @@ function closeChoiceModal(){
             provider: providerLabel,
             variation_id,
             package_name: packageName,
+            package_display: packageDisplay,
             package_duration: packageDuration,
             amount,
             subscription_type,
             subscription_type_label,
 
             fundPin,
+            fund_pin: fundPin,
             pin: fundPin,
             transaction_pin: fundPin,
             transactionPin: fundPin
@@ -1275,8 +1271,6 @@ function closeChoiceModal(){
         const tx = data.transaction || data.data?.transaction || data.result || {};
         const statusText = String(tx.status || data.status || "").toLowerCase();
         const reference = tx.reference || tx.tx_ref || data.reference || request_id;
-
-        clearCableInputs();
 
         if (
           response.ok &&
@@ -1294,7 +1288,7 @@ function closeChoiceModal(){
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+            packageName: packageDisplay,
             type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
@@ -1305,7 +1299,7 @@ function closeChoiceModal(){
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+            packageName: packageDisplay,
             type: subscription_type_label,
             amount: formatNaira(tx.amount || amount),
             reference,
@@ -1313,6 +1307,7 @@ function closeChoiceModal(){
             date: new Date().toLocaleString()
           };
 
+          clearCableInputs();
           return;
         }
 
@@ -1327,7 +1322,7 @@ function closeChoiceModal(){
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+            packageName: packageDisplay,
             type: subscription_type_label,
             amount: tx.amount || amount,
             reference,
@@ -1338,7 +1333,7 @@ function closeChoiceModal(){
             provider: providerLabel,
             customerId: customer_id,
             customerName: customer_name,
-            packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+            packageName: packageDisplay,
             type: subscription_type_label,
             amount: formatNaira(tx.amount || amount),
             reference,
@@ -1346,6 +1341,7 @@ function closeChoiceModal(){
             date: new Date().toLocaleString()
           };
 
+          clearCableInputs();
           return;
         }
 
@@ -1355,7 +1351,7 @@ function closeChoiceModal(){
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+          packageName: packageDisplay,
           type: subscription_type_label,
           amount: tx.amount || amount,
           reference,
@@ -1366,17 +1362,17 @@ function closeChoiceModal(){
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+          packageName: packageDisplay,
           type: subscription_type_label,
           amount: formatNaira(tx.amount || amount),
           reference,
           status: "failed",
           date: new Date().toLocaleString()
         };
-      } catch (error){
-        console.error(error);
 
         clearCableInputs();
+      } catch (error){
+        console.error(error);
 
         showFailedModal("Unable to complete transaction");
 
@@ -1384,7 +1380,7 @@ function closeChoiceModal(){
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+          packageName: packageDisplay,
           type: subscription_type_label,
           amount,
           reference: request_id,
@@ -1395,13 +1391,15 @@ function closeChoiceModal(){
           provider: providerLabel,
           customerId: customer_id,
           customerName: customer_name,
-          packageName: packageDuration ? `${packageName} (${packageDuration})` : `${packageName} (1 Month)`,
+          packageName: packageDisplay,
           type: subscription_type_label,
           amount: formatNaira(amount),
           reference: request_id,
           status: "failed",
           date: new Date().toLocaleString()
         };
+
+        clearCableInputs();
       } finally {
         buyBtn.disabled = false;
         buyBtn.innerText = "Confirm & Pay";
