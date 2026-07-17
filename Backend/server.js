@@ -2272,6 +2272,475 @@ async function processBettingPayment(req, res) {
     return respondError(res, 500, err?.message || "Unable to process betting purchase");
   }
 }
+
+async function processCablePayment(req, res) {
+  const PROVIDER_TIMEOUT_MS = 60_000;
+  const PIN_MAX_ATTEMPTS = 4;
+  const PIN_LOCK_MS = 60 * 60 * 1000;
+
+  async function verifyAndTrackPin(userId, fundPin) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const stateResult = await client.query(
+        `SELECT
+           COALESCE(fund_pin_failed_attempts, 0) AS failed_attempts,
+           fund_pin_locked_until
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [userId]
+      );
+
+      const row = stateResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return { ok: false, status: 404, message: "User not found" };
+      }
+
+      let failedAttempts = Number(row.failed_attempts || 0);
+      const lockedUntil = row.fund_pin_locked_until ? new Date(row.fund_pin_locked_until) : null;
+      const now = Date.now();
+
+      if (lockedUntil && lockedUntil.getTime() <= now) {
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = 0,
+               fund_pin_locked_until = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId]
+        );
+        failedAttempts = 0;
+      }
+
+      if (lockedUntil && lockedUntil.getTime() > now) {
+        const minutesLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - now) / 60000));
+        await client.query("ROLLBACK");
+        return {
+          ok: false,
+          status: 423,
+          message: `Too many invalid PIN attempts. Try again in ${minutesLeft} minute(s).`,
+          locked: true,
+        };
+      }
+
+      const pinOk = await verifyFundPin(userId, fundPin);
+
+      if (!pinOk) {
+        const nextAttempts = failedAttempts + 1;
+        const shouldLock = nextAttempts >= PIN_MAX_ATTEMPTS;
+        const lockUntil = shouldLock ? new Date(Date.now() + PIN_LOCK_MS) : null;
+
+        await client.query(
+          `UPDATE users
+           SET fund_pin_failed_attempts = $2,
+               fund_pin_locked_until = $3,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [userId, shouldLock ? PIN_MAX_ATTEMPTS : nextAttempts, lockUntil]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+          ok: false,
+          status: shouldLock ? 423 : 401,
+          message: shouldLock
+            ? "Invalid PIN. Locked for 1 hour."
+            : `Invalid fund PIN. ${PIN_MAX_ATTEMPTS - nextAttempts} attempt(s) left`,
+          locked: shouldLock,
+        };
+      }
+
+      await client.query(
+        `UPDATE users
+         SET fund_pin_failed_attempts = 0,
+             fund_pin_locked_until = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [userId]
+      );
+
+      await client.query("COMMIT");
+      return { ok: true };
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function reverseAndRefund(txRow, userId, amount, reason, extraMeta = {}) {
+    if (!txRow?.id) return;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const txCheck = await client.query(
+        `SELECT status, meta
+         FROM transactions
+         WHERE id = $1
+         FOR UPDATE`,
+        [txRow.id]
+      );
+
+      if (!txCheck.rows.length) {
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const currentStatus = String(txCheck.rows[0].status || "").toLowerCase();
+      if (currentStatus !== "pending") {
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const currentMeta = normalizeMeta(txCheck.rows[0].meta);
+      const mergedMeta = mergeMeta(currentMeta, {
+        reverseReason: reason,
+        ...extraMeta,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, amount]
+      );
+
+      await client.query(
+        `UPDATE transactions
+         SET status = 'reversed',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [txRow.id, reason, JSON.stringify(mergedMeta)]
+      );
+
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  try {
+    const body = req.body || {};
+    const userId = req.user?.id || req.user?.userId;
+
+    if (!userId) return respondError(res, 401, "Unauthorized");
+
+    const fundPin = String(body.fundPin || body.fund_pin || "").trim();
+    if (!fundPin) return respondError(res, 400, "Transaction PIN is required");
+
+    const pinCheck = await verifyAndTrackPin(userId, fundPin);
+    if (!pinCheck.ok) {
+      return respondError(res, pinCheck.status || 401, pinCheck.message || "Invalid fund PIN");
+    }
+
+    const customer_id = String(body.customer_id || "").trim();
+    const service_id = String(body.service_id || "").trim();
+    const variation_id = String(body.variation_id || body.plan_id || body.planId || "").trim();
+    const packageName = String(body.packageName || body.plan_name || body.planName || "Cable TV").trim();
+    const amount = toNumber(body.amount || body.plan_amount || body.finalPrice || body.final_price, 0);
+    const request_id = String(body.request_id || body.requestId || body.reference || buildTxnRef("CABLE")).trim();
+    const subscription_type = String(body.subscription_type || "renew").trim().toLowerCase();
+
+    if (!customer_id || !service_id) {
+      return respondError(res, 400, "customer_id and service_id are required");
+    }
+
+    if (!variation_id) {
+      return respondError(res, 400, "variation_id is required");
+    }
+
+    if (amount <= 0) {
+      return respondError(res, 400, "amount is required");
+    }
+
+    const description = `Cable TV - ${packageName}`;
+
+    const client = await pool.connect();
+    let txRow = null;
+
+    try {
+      await client.query("BEGIN");
+
+      const walletResult = await client.query(
+        "SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE",
+        [userId]
+      );
+
+      const wallet = walletResult.rows[0];
+      if (!wallet) {
+        await client.query("ROLLBACK");
+        return respondError(res, 404, "Wallet not found");
+      }
+
+      const currentBalance = Number(wallet.balance || 0);
+      if (currentBalance < amount) {
+        await client.query("ROLLBACK");
+        return respondError(res, 400, "Insufficient wallet balance");
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance - $2,
+             updated_at = NOW()
+         WHERE user_id = $1`,
+        [userId, amount]
+      );
+
+      const inserted = await client.query(
+        `INSERT INTO transactions
+         (id, user_id, type, category, amount, currency, status, reference, description, meta, created_at)
+         VALUES ($1, $2, 'purchase', 'cable_tv', $3, 'NGN', 'pending', $4, $5, $6, NOW())
+         RETURNING *`,
+        [
+          uid("tx_"),
+          userId,
+          amount,
+          request_id,
+          description,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            variation_id,
+            packageName,
+            subscription_type,
+            amount,
+            request_id,
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      txRow = inserted.rows[0];
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    let providerResponse;
+
+    try {
+      providerResponse = await withTimeout(
+        iacafe.buyCable({
+          request_id,
+          customer_id,
+          service_id,
+          variation_id,
+          subscription_type,
+          plan: {
+            id: variation_id,
+            purchase_key: variation_id,
+            name: packageName,
+            price: amount,
+          },
+        }),
+        PROVIDER_TIMEOUT_MS,
+        "Provider timeout"
+      );
+    } catch (err) {
+      console.error("CABLE PROVIDER CALL ERROR:", err?.message);
+      console.error("CABLE PROVIDER ERROR DATA:", err?.response?.data);
+
+      const status = Number(err?.response?.status || 0);
+      const providerMessage =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Provider error";
+
+      if (status && status >= 400 && status < 500 && ![408, 425, 429].includes(status)) {
+        await reverseAndRefund(
+          txRow,
+          userId,
+          amount,
+          `${description} failed`,
+          {
+            customer_id,
+            service_id,
+            variation_id,
+            request_id,
+            providerResponse: err?.response?.data || err?.message,
+          }
+        );
+
+        return respondError(res, status, providerMessage);
+      }
+
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          `${description} pending`,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            variation_id,
+            packageName,
+            subscription_type,
+            amount,
+            request_id,
+            providerError: err?.response?.data || err?.message || "Provider timeout",
+            provider: "iacafe",
+            status: "pending",
+            expiresAt: new Date(Date.now() + PROVIDER_TIMEOUT_MS).toISOString(),
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(request_id, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerMessage,
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        request_id,
+      });
+    }
+
+    const providerState = classifyProviderResponse(providerResponse);
+    const providerText = extractProviderText(providerResponse);
+
+    if (providerState === "pending" || providerState === "unknown") {
+      await pool.query(
+        `UPDATE transactions
+         SET status = 'pending',
+             description = $2,
+             meta = $3
+         WHERE id = $1`,
+        [
+          txRow.id,
+          description,
+          JSON.stringify({
+            customer_id,
+            service_id,
+            variation_id,
+            packageName,
+            subscription_type,
+            amount,
+            request_id,
+            providerResponse,
+            provider: "iacafe",
+            status: "pending",
+          }),
+        ]
+      );
+
+      scheduleIacafeRequery(request_id, { delayMs: ICAFE_REQUERY_DELAY_MS, attempt: 1 });
+
+      return res.status(202).json({
+        success: true,
+        pending: true,
+        message: providerText || "Cable subscription pending",
+        transaction: {
+          ...txRow,
+          status: "pending",
+        },
+        providerResponse,
+        request_id,
+      });
+    }
+
+    if (providerState === "failed") {
+      await reverseAndRefund(
+        txRow,
+        userId,
+        amount,
+        `${description} failed`,
+        {
+          customer_id,
+          service_id,
+          variation_id,
+          request_id,
+          providerResponse,
+        }
+      );
+
+      return respondError(res, 400, providerText || providerResponse?.message || "Cable subscription failed");
+    }
+
+    await pool.query(
+      `UPDATE transactions
+       SET status = 'success',
+           description = $2,
+           meta = $3
+       WHERE id = $1`,
+      [
+        txRow.id,
+        description,
+        JSON.stringify({
+          customer_id,
+          service_id,
+          variation_id,
+          packageName,
+          subscription_type,
+          amount,
+          request_id,
+          providerResponse,
+          provider: "iacafe",
+          status: "success",
+        }),
+      ]
+    );
+
+    clearPendingRequery(request_id);
+
+    await addNotification(
+      userId,
+      "Cable TV Subscribed",
+      `${description} of ₦${amount.toLocaleString("en-NG")} was successful`,
+      { transactionId: txRow.id, request_id, providerResponse },
+      true
+    );
+
+    return respondOk(
+      res,
+      {
+        transaction: {
+          ...txRow,
+          status: "success",
+        },
+        providerResponse,
+        request_id,
+      },
+      "Cable subscription successful"
+    );
+  } catch (err) {
+    console.error("PROCESS CABLE PAYMENT ERROR:", err);
+    return respondError(res, 500, err?.message || "Unable to process cable subscription");
+  }
+}
+
 function requireDebugAccess(req, res, next) {
   const got = req.headers['x-debug-key'] || req.query.debug_key;
   const expected = process.env.DEBUG_KEY;
@@ -3229,6 +3698,127 @@ app.get('/api/wallet/fund/verify/:transactionId', requireAuth, async (req, res) 
     console.error('FLW VERIFY ERROR:', err?.response?.data || err?.message || err);
     return respondError(res, 500, err?.message || 'Unable to verify payment');
   }
+});
+/* CABLE TV */
+app.get("/api/services/cable/options", requireAuth, async (req, res) => {
+  try {
+    const service_id = String(req.query.service_id || req.query.provider || "").trim();
+
+    if (!service_id) {
+      return respondError(res, 400, "service_id is required");
+    }
+
+    const result = await iacafe.getCablePlans({ service_id });
+    const plans = Array.isArray(result?.plans) ? result.plans : [];
+
+    return respondOk(
+      res,
+      {
+        serviceType: "cable_tv",
+        service_id,
+        options: plans,
+        plans,
+        raw: result,
+      },
+      "Cable packages loaded"
+    );
+  } catch (err) {
+    console.error("CABLE OPTIONS ERROR:", err?.response?.data || err?.message);
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || "Unable to load cable packages"
+    );
+  }
+});
+
+app.get("/api/services/cable/plans", requireAuth, async (req, res) => {
+  try {
+    const service_id = String(req.query.service_id || req.query.provider || "").trim();
+
+    if (!service_id) {
+      return respondError(res, 400, "service_id is required");
+    }
+
+    const result = await iacafe.getCablePlans({ service_id });
+    const plans = Array.isArray(result?.plans) ? result.plans : [];
+
+    return respondOk(
+      res,
+      {
+        serviceType: "cable_tv",
+        service_id,
+        options: plans,
+        plans,
+        raw: result,
+      },
+      "Cable packages loaded"
+    );
+  } catch (err) {
+    console.error("CABLE PLANS ERROR:", err?.response?.data || err?.message);
+    return respondError(
+      res,
+      err?.response?.status || 500,
+      err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || "Unable to load cable packages"
+    );
+  }
+});
+
+app.post("/api/services/cable/verify", requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const customer_id = String(
+      body.customer_id || body.customerId || body.smartcard_number || body.iuc_number || ""
+    ).trim();
+
+    const service_id = String(
+      body.service_id || body.serviceId || body.provider || body.platform || ""
+    ).trim();
+
+    if (!customer_id || !service_id) {
+      return respondError(res, 400, "customer_id and service_id are required");
+    }
+
+    const result = await iacafe.verifyCableCustomer({ customer_id, service_id });
+
+    const customerName =
+      result?.data?.customer_name ||
+      result?.customer_name ||
+      result?.data?.name ||
+      result?.name ||
+      null;
+
+    return respondOk(
+      res,
+      {
+        verified: true,
+        customer_name: customerName,
+        customer_id,
+        service_id,
+        raw: result,
+      },
+      "Customer verified"
+    );
+  } catch (err) {
+    const code = String(
+      err?.code ||
+      err?.response?.data?.error?.code ||
+      err?.response?.data?.code ||
+      ""
+    ).trim().toLowerCase();
+
+    const message =
+      err?.response?.data?.error?.message ||
+      err?.response?.data?.message ||
+      err?.message ||
+      "Unable to verify customer";
+
+    return respondError(res, code === "customer_not_found" ? 404 : 400, message);
+  }
+});
+
+app.post("/api/services/cable", requireAuth, async (req, res) => {
+  return processCablePayment(req, res);
 });
 /* TRANSACTIONS */
 
