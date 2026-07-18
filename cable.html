@@ -768,7 +768,10 @@
   function formatNaira(value) {
     const num = Number(value);
     if (!Number.isFinite(num)) return "₦0";
-    return "₦" + num.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return "₦" + num.toLocaleString("en-NG", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
   }
 
   function generateRequestId(prefix = "CABLE") {
@@ -838,7 +841,8 @@
     selectedType = { value: "renew", label: "Renew Package" };
     typeText.innerText = "Select subscription type";
   }
-function buildReceiptText() {
+
+  function buildReceiptText() {
     if (!lastReceipt) return "";
     const r = lastReceipt;
     return [
@@ -873,8 +877,7 @@ function buildReceiptText() {
 
     alert("Sharing is not supported on this browser.");
   }
-
-  function showProcessingModal() {
+function showProcessingModal() {
     transactionModal.style.display = "flex";
     receiptSection.style.display = "none";
     transactionIcon.className = "transaction-icon";
@@ -975,10 +978,15 @@ function buildReceiptText() {
 
   function pressPin(digit) {
     if (enteredPin.length >= 4) return;
+
     enteredPin += digit;
+    console.log("PIN TYPED SO FAR:", enteredPin);
     renderPinBoxes();
 
     if (enteredPin.length === 4) {
+      console.log("FULL PIN ENTERED:", enteredPin);
+      console.log("PENDING PAYLOAD AT PIN COMPLETE:", pendingPayload);
+
       const payload = pendingPayload;
       closePinModal();
       sendCableRequest(payload, enteredPin);
@@ -1016,10 +1024,7 @@ function buildReceiptText() {
         <div style="color:var(--muted);font-size:12px;">Select</div>
       `;
 
-      row.addEventListener("click", () => {
-        onPick(item);
-      });
-
+      row.addEventListener("click", () => onPick(item));
       choiceList.appendChild(row);
     });
   }
@@ -1142,7 +1147,8 @@ async function loadPackages(provider) {
 
     choiceModal.style.display = "flex";
   }
-async function verifyCustomer() {
+
+  async function verifyCustomer() {
     const token = getToken();
     const customer_id = customerId.value.trim();
 
@@ -1166,6 +1172,7 @@ async function verifyCustomer() {
       });
 
       const data = await res.json().catch(() => ({}));
+      console.log("VERIFY RESPONSE:", data);
 
       if (res.ok && data.success) {
         verifiedCustomerName = data.data?.customer_name || data.customer_name || "Verified Customer";
@@ -1185,8 +1192,7 @@ async function verifyCustomer() {
       verifyBtn.innerText = "Verify";
     }
   }
-
-  async function buyCable() {
+async function buyCable() {
     const token = getToken();
     const customer_id = customerId.value.trim();
     const customer_name = verifiedCustomerName;
@@ -1215,6 +1221,10 @@ async function verifyCustomer() {
   }
 
   async function sendCableRequest(payload, fundPin) {
+    console.log("SEND CABLE REQUEST CALLED");
+    console.log("PAYLOAD RECEIVED:", payload);
+    console.log("FUND PIN RECEIVED:", fundPin);
+
     const {
       token,
       request_id,
@@ -1232,6 +1242,8 @@ async function verifyCustomer() {
     } = payload;
 
     const pinValue = String(fundPin || "").trim();
+    console.log("PIN VALUE AFTER TRIM:", pinValue);
+
     if (!pinValue) {
       showFailedModal("Transaction PIN is required");
       return;
@@ -1242,6 +1254,29 @@ async function verifyCustomer() {
     buyBtn.disabled = true;
     buyBtn.innerText = "Processing...";
 
+    const requestBody = {
+      request_id,
+      customer_id,
+      customer_name,
+      service_id,
+      serviceId: service_id,
+      provider: providerLabel,
+      variation_id,
+      package_name: packageName,
+      package_display: packageDisplay,
+      package_duration: packageDuration,
+      amount,
+      subscription_type,
+      subscription_type_label,
+      fundPin: pinValue,
+      fund_pin: pinValue,
+      transaction_pin: pinValue,
+      transactionPin: pinValue,
+      pin: pinValue
+    };
+
+    console.log("CABLE REQUEST BODY TO BE SENT:", requestBody);
+
     try {
       const response = await fetch(BUY_URL, {
         method: "POST",
@@ -1249,29 +1284,13 @@ async function verifyCustomer() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          request_id,
-          customer_id,
-          customer_name,
-          service_id,
-          serviceId: service_id,
-          provider: providerLabel,
-          variation_id,
-          package_name: packageName,
-          package_display: packageDisplay,
-          package_duration: packageDuration,
-          amount,
-          subscription_type,
-          subscription_type_label,
-          fundPin: pinValue,
-          fund_pin: pinValue,
-          transaction_pin: pinValue,
-          transactionPin: pinValue,
-          pin: pinValue
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json().catch(() => ({}));
+      console.log("CABLE RESPONSE STATUS:", response.status);
+      console.log("CABLE RESPONSE DATA:", data);
+
       const tx = data.transaction || data.data?.transaction || data.result || {};
       const statusText = String(tx.status || data.status || "").toLowerCase();
       const reference = tx.reference || tx.tx_ref || data.reference || request_id;
@@ -1376,7 +1395,7 @@ async function verifyCustomer() {
 
       clearCableInputs();
     } catch (error) {
-      console.error(error);
+      console.error("CABLE REQUEST ERROR:", error);
 
       showFailedModal("Unable to complete transaction");
 
