@@ -585,25 +585,25 @@
 
       <div class="provider-grid" id="providerGrid">
         <div class="provider-card active" data-provider="dstv" data-label="DStv">
-          <img src="https://i.postimg.cc/2S9tQkK3/dstv.png" alt="DStv">
+          <img src=" https://i.postimg.cc/zfSYq2py/dstv-logo-transparent.png " alt="DStv">
           <span>DStv</span>
           <small>Multichoice</small>
         </div>
 
         <div class="provider-card" data-provider="gotv" data-label="GOtv">
-          <img src="https://i.postimg.cc/rwYj7Y8Z/gotv.png" alt="GOtv">
+          <img src="https://i.postimg.cc/B6YyvrFN/gotv-logo-transparent.png" alt="GOtv">
           <span>GOtv</span>
           <small>Multichoice</small>
         </div>
 
         <div class="provider-card" data-provider="startimes" data-label="Startimes">
-          <img src="https://i.postimg.cc/0j3mHf9P/startimes.png" alt="Startimes">
+          <img src="https://i.postimg.cc/RC39Hd0M/startimes-logo-transparent.png" alt="Startimes">
           <span>Startimes</span>
           <small>StarTimes</small>
         </div>
 
         <div class="provider-card" data-provider="showmax" data-label="Showmax">
-          <img src="https://i.postimg.cc/0Q2pWv5Y/showmax.png" alt="Showmax">
+          <img src="https://i.postimg.cc/x1nWt393/showmax-logo-transparent.png" alt="Showmax">
           <span>Showmax</span>
           <small>Streaming</small>
         </div>
@@ -780,10 +780,10 @@
   function getProviderMeta(provider) {
     const p = String(provider || "").trim().toLowerCase();
     const map = {
-      dstv: { name: "DStv", logo: "https://i.postimg.cc/2S9tQkK3/dstv.png" },
-      gotv: { name: "GOtv", logo: "https://i.postimg.cc/rwYj7Y8Z/gotv.png" },
-      startimes: { name: "Startimes", logo: "https://i.postimg.cc/0j3mHf9P/startimes.png" },
-      showmax: { name: "Showmax", logo: "https://i.postimg.cc/0Q2pWv5Y/showmax.png" }
+      dstv: { name: "DStv", logo: "https://i.postimg.cc/zfSYq2py/dstv-logo-transparent.png" },
+      gotv: { name: "GOtv", logo: "https://i.postimg.cc/B6YyvrFN/gotv-logo-transparent.png" },
+      startimes: { name: "Startimes", logo: "https://i.postimg.cc/RC39Hd0M/startimes-logo-transparent.png" },
+      showmax: { name: "Showmax", logo: "https://i.postimg.cc/x1nWt393/showmax-logo-transparent.png" }
     };
     return map[p] || { name: p.toUpperCase(), logo: "" };
   }
