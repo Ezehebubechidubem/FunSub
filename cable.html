@@ -842,6 +842,12 @@
     typeText.innerText = "Select subscription type";
   }
 
+  function clearPinState() {
+    enteredPin = "";
+    pendingPayload = null;
+    renderPinBoxes();
+  }
+
   function buildReceiptText() {
     if (!lastReceipt) return "";
     const r = lastReceipt;
@@ -870,14 +876,13 @@
           text
         });
         return;
-      } catch (e) {
-        console.log(e);
-      }
+      } catch (e) {}
     }
 
     alert("Sharing is not supported on this browser.");
   }
-function showProcessingModal() {
+
+  function showProcessingModal() {
     transactionModal.style.display = "flex";
     receiptSection.style.display = "none";
     transactionIcon.className = "transaction-icon";
@@ -971,8 +976,6 @@ function showProcessingModal() {
 
   function closePinModal() {
     pinOverlay.style.display = "none";
-    enteredPin = "";
-    pendingPayload = null;
     renderPinBoxes();
   }
 
@@ -980,16 +983,14 @@ function showProcessingModal() {
     if (enteredPin.length >= 4) return;
 
     enteredPin += digit;
-    console.log("PIN TYPED SO FAR:", enteredPin);
     renderPinBoxes();
 
     if (enteredPin.length === 4) {
-      console.log("FULL PIN ENTERED:", enteredPin);
-      console.log("PENDING PAYLOAD AT PIN COMPLETE:", pendingPayload);
-
       const payload = pendingPayload;
+      const pinToSend = enteredPin;
+
       closePinModal();
-      sendCableRequest(payload, enteredPin);
+      sendCableRequest(payload, pinToSend);
     }
   }
 
@@ -1075,7 +1076,6 @@ async function loadPackages(provider) {
 
       return true;
     } catch (e) {
-      console.error(e);
       alert("Unable to load packages");
       return false;
     }
@@ -1172,7 +1172,6 @@ async function loadPackages(provider) {
       });
 
       const data = await res.json().catch(() => ({}));
-      console.log("VERIFY RESPONSE:", data);
 
       if (res.ok && data.success) {
         verifiedCustomerName = data.data?.customer_name || data.customer_name || "Verified Customer";
@@ -1192,7 +1191,8 @@ async function loadPackages(provider) {
       verifyBtn.innerText = "Verify";
     }
   }
-async function buyCable() {
+
+  async function buyCable() {
     const token = getToken();
     const customer_id = customerId.value.trim();
     const customer_name = verifiedCustomerName;
@@ -1221,10 +1221,6 @@ async function buyCable() {
   }
 
   async function sendCableRequest(payload, fundPin) {
-    console.log("SEND CABLE REQUEST CALLED");
-    console.log("PAYLOAD RECEIVED:", payload);
-    console.log("FUND PIN RECEIVED:", fundPin);
-
     const {
       token,
       request_id,
@@ -1242,7 +1238,6 @@ async function buyCable() {
     } = payload;
 
     const pinValue = String(fundPin || "").trim();
-    console.log("PIN VALUE AFTER TRIM:", pinValue);
 
     if (!pinValue) {
       showFailedModal("Transaction PIN is required");
@@ -1275,7 +1270,7 @@ async function buyCable() {
       pin: pinValue
     };
 
-    console.log("CABLE REQUEST BODY TO BE SENT:", requestBody);
+    let gotResponse = false;
 
     try {
       const response = await fetch(BUY_URL, {
@@ -1287,9 +1282,9 @@ async function buyCable() {
         body: JSON.stringify(requestBody)
       });
 
+      gotResponse = true;
+
       const data = await response.json().catch(() => ({}));
-      console.log("CABLE RESPONSE STATUS:", response.status);
-      console.log("CABLE RESPONSE DATA:", data);
 
       const tx = data.transaction || data.data?.transaction || data.result || {};
       const statusText = String(tx.status || data.status || "").toLowerCase();
@@ -1331,6 +1326,7 @@ async function buyCable() {
         };
 
         clearCableInputs();
+        clearPinState();
         return;
       }
 
@@ -1365,6 +1361,7 @@ async function buyCable() {
         };
 
         clearCableInputs();
+        clearPinState();
         return;
       }
 
@@ -1394,42 +1391,19 @@ async function buyCable() {
       };
 
       clearCableInputs();
+      clearPinState();
     } catch (error) {
-      console.error("CABLE REQUEST ERROR:", error);
-
       showFailedModal("Unable to complete transaction");
-
-      setReceiptValues({
-        provider: providerLabel,
-        customerId: customer_id,
-        customerName: customer_name,
-        packageName: packageDisplay,
-        type: subscription_type_label,
-        amount,
-        reference: request_id,
-        status: "failed"
-      });
-
-      lastReceipt = {
-        provider: providerLabel,
-        customerId: customer_id,
-        customerName: customer_name,
-        packageName: packageDisplay,
-        type: subscription_type_label,
-        amount: formatNaira(amount),
-        reference: request_id,
-        status: "failed",
-        date: new Date().toLocaleString()
-      };
-
-      clearCableInputs();
+      if (gotResponse) {
+        clearCableInputs();
+        clearPinState();
+      }
     } finally {
       buyBtn.disabled = false;
       buyBtn.innerText = "Confirm & Pay";
     }
   }
-
-  providerGrid.querySelectorAll(".provider-card").forEach(card => {
+providerGrid.querySelectorAll(".provider-card").forEach(card => {
     card.addEventListener("click", () => {
       providerGrid.querySelectorAll(".provider-card").forEach(c => c.classList.remove("active"));
       card.classList.add("active");
