@@ -713,646 +713,580 @@
   </div>
 
   <script src="theme.js" defer></script>
-  <script>
-const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
-    const BUY_URL = "https://funsub.onrender.com/api/services/cable";
-    const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
+ <script>
+  const OPTIONS_URL = "https://funsub.onrender.com/api/services/cable/options";
+  const BUY_URL = "https://funsub.onrender.com/api/services/cable";
+  const VERIFY_URL = "https://funsub.onrender.com/api/services/cable/verify";
 
-    const providerGrid = document.getElementById("providerGrid");
-    const customerId = document.getElementById("customerId");
-    const verifyBtn = document.getElementById("verifyBtn");
-    const buyBtn = document.getElementById("buyBtn");
-    const userInfo = document.getElementById("userInfo");
-    const accountName = document.getElementById("accountName");
+  const providerGrid = document.getElementById("providerGrid");
+  const customerId = document.getElementById("customerId");
+  const verifyBtn = document.getElementById("verifyBtn");
+  const buyBtn = document.getElementById("buyBtn");
+  const userInfo = document.getElementById("userInfo");
+  const accountName = document.getElementById("accountName");
 
-    const packageShell = document.getElementById("packageShell");
-    const packageText = document.getElementById("packageText");
-    const typeShell = document.getElementById("typeShell");
-    const typeText = document.getElementById("typeText");
+  const packageShell = document.getElementById("packageShell");
+  const packageText = document.getElementById("packageText");
+  const typeShell = document.getElementById("typeShell");
+  const typeText = document.getElementById("typeText");
 
-    const choiceModal = document.getElementById("choiceModal");
-    const choiceTitle = document.getElementById("choiceTitle");
-    const choiceSubtitle = document.getElementById("choiceSubtitle");
-    const choiceList = document.getElementById("choiceList");
+  const choiceModal = document.getElementById("choiceModal");
+  const choiceTitle = document.getElementById("choiceTitle");
+  const choiceSubtitle = document.getElementById("choiceSubtitle");
+  const choiceList = document.getElementById("choiceList");
 
-    const transactionModal = document.getElementById("transactionModal");
-    const transactionIcon = document.getElementById("transactionIcon");
-    const transactionTitle = document.getElementById("transactionTitle");
-    const transactionMessage = document.getElementById("transactionMessage");
-    const receiptSection = document.getElementById("receiptSection");
-    const receiptProvider = document.getElementById("receiptProvider");
-    const receiptCustomerId = document.getElementById("receiptCustomerId");
-    const receiptCustomerName = document.getElementById("receiptCustomerName");
-    const receiptPackage = document.getElementById("receiptPackage");
-    const receiptType = document.getElementById("receiptType");
-    const receiptAmount = document.getElementById("receiptAmount");
-    const receiptReference = document.getElementById("receiptReference");
-    const receiptStatus = document.getElementById("receiptStatus");
-    const receiptDate = document.getElementById("receiptDate");
+  const transactionModal = document.getElementById("transactionModal");
+  const transactionIcon = document.getElementById("transactionIcon");
+  const transactionTitle = document.getElementById("transactionTitle");
+  const transactionMessage = document.getElementById("transactionMessage");
+  const receiptSection = document.getElementById("receiptSection");
+  const receiptProvider = document.getElementById("receiptProvider");
+  const receiptCustomerId = document.getElementById("receiptCustomerId");
+  const receiptCustomerName = document.getElementById("receiptCustomerName");
+  const receiptPackage = document.getElementById("receiptPackage");
+  const receiptType = document.getElementById("receiptType");
+  const receiptAmount = document.getElementById("receiptAmount");
+  const receiptReference = document.getElementById("receiptReference");
+  const receiptStatus = document.getElementById("receiptStatus");
+  const receiptDate = document.getElementById("receiptDate");
 
-    const pinOverlay = document.getElementById("pinOverlay");
+  const pinOverlay = document.getElementById("pinOverlay");
 
-    let currentProvider = "dstv";
-    let verifiedCustomerName = "";
-    let packageList = [];
-    let selectedPackage = null;
-    let selectedType = { value: "renew", label: "Renew Package" };
-    let lastReceipt = null;
-    let enteredPin = "";
-    let pendingPayload = null;
+  let currentProvider = "dstv";
+  let verifiedCustomerName = "";
+  let packageList = [];
+  let selectedPackage = null;
+  let selectedType = { value: "renew", label: "Renew Package" };
+  let lastReceipt = null;
+  let enteredPin = "";
+  let pendingPayload = null;
 
-    function getToken() {
-      return localStorage.getItem("funsub_token") || "";
+  function getToken() {
+    return localStorage.getItem("funsub_token") || "";
+  }
+
+  function formatNaira(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "₦0";
+    return "₦" + num.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function generateRequestId(prefix = "CABLE") {
+    const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+    return `${prefix}_${Date.now()}_${rand}`;
+  }
+
+  function getProviderMeta(provider) {
+    const p = String(provider || "").trim().toLowerCase();
+    const map = {
+      dstv: { name: "DStv", logo: "https://i.postimg.cc/2S9tQkK3/dstv.png" },
+      gotv: { name: "GOtv", logo: "https://i.postimg.cc/rwYj7Y8Z/gotv.png" },
+      startimes: { name: "Startimes", logo: "https://i.postimg.cc/0j3mHf9P/startimes.png" },
+      showmax: { name: "Showmax", logo: "https://i.postimg.cc/0Q2pWv5Y/showmax.png" }
+    };
+    return map[p] || { name: p.toUpperCase(), logo: "" };
+  }
+
+  function getPlanDurationLabel(plan) {
+    const raw =
+      plan.durationLabel ??
+      plan.duration_text ??
+      plan.durationText ??
+      plan.billing_cycle ??
+      plan.billingCycle ??
+      plan.cycle ??
+      plan.period ??
+      plan.validity ??
+      plan.validity_text ??
+      plan.validityText ??
+      "";
+
+    if (raw) return String(raw).trim();
+
+    const durationValue = plan.duration ?? plan.validity_value ?? plan.period_value ?? "";
+    const durationUnit =
+      plan.duration_unit ??
+      plan.validity_unit ??
+      plan.period_unit ??
+      plan.unit ??
+      "";
+
+    if (durationValue && durationUnit) {
+      return `${durationValue} ${String(durationUnit).replace(/s?$/, "s")}`;
     }
 
-    function formatNaira(value) {
-      const num = Number(value);
-      if (!Number.isFinite(num)) return "₦0";
-      return "₦" + num.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    }
+    return "1 Month";
+  }
 
-    function generateRequestId(prefix = "CABLE") {
-      const rand = Math.random().toString(36).slice(2, 10).toUpperCase();
-      return `${prefix}_${Date.now()}_${rand}`;
-    }
+  function setTheme(theme) {
+    document.body.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("funsub_theme", theme);
+  }
 
-    function getProviderMeta(provider) {
-      const p = String(provider || "").trim().toLowerCase();
-      const map = {
-        dstv: { name: "DStv", logo: "https://i.postimg.cc/2S9tQkK3/dstv.png" },
-        gotv: { name: "GOtv", logo: "https://i.postimg.cc/rwYj7Y8Z/gotv.png" },
-        startimes: { name: "Startimes", logo: "https://i.postimg.cc/0j3mHf9P/startimes.png" },
-        showmax: { name: "Showmax", logo: "https://i.postimg.cc/0Q2pWv5Y/showmax.png" }
-      };
-      return map[p] || { name: p.toUpperCase(), logo: "" };
-    }
+  setTheme(localStorage.getItem("funsub_theme") || "dark");
 
-    function getPlanDurationLabel(plan) {
-      const raw =
-        plan.durationLabel ??
-        plan.duration_text ??
-        plan.durationText ??
-        plan.billing_cycle ??
-        plan.billingCycle ??
-        plan.cycle ??
-        plan.period ??
-        plan.validity ??
-        plan.validity_text ??
-        plan.validityText ??
-        "";
+  function clearCableInputs() {
+    customerId.value = "";
+    verifiedCustomerName = "";
+    userInfo.style.display = "none";
+    accountName.innerText = "";
 
-      if (raw) return String(raw).trim();
+    selectedPackage = null;
+    packageList = [];
+    packageText.innerText = "Select a plan";
 
-      const durationValue = plan.duration ?? plan.validity_value ?? plan.period_value ?? "";
-      const durationUnit =
-        plan.duration_unit ??
-        plan.validity_unit ??
-        plan.period_unit ??
-        plan.unit ??
-        "";
+    selectedType = { value: "renew", label: "Renew Package" };
+    typeText.innerText = "Select subscription type";
+  }
+function buildReceiptText() {
+    if (!lastReceipt) return "";
+    const r = lastReceipt;
+    return [
+      "FunSub Cable TV Receipt",
+      `Provider: ${r.provider || ""}`,
+      `Customer ID: ${r.customerId || ""}`,
+      `Customer Name: ${r.customerName || ""}`,
+      `Package: ${r.packageName || ""}`,
+      `Type: ${r.type || ""}`,
+      `Amount: ${r.amount || ""}`,
+      `Reference: ${r.reference || ""}`,
+      `Status: ${r.status || ""}`,
+      `Date: ${r.date || ""}`
+    ].join("\n");
+  }
 
-      if (durationValue && durationUnit) {
-        return `${durationValue} ${String(durationUnit).replace(/s?$/, "s")}`;
+  async function shareReceipt() {
+    const text = buildReceiptText();
+    if (!text) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "FunSub Cable TV Receipt",
+          text
+        });
+        return;
+      } catch (e) {
+        console.log(e);
       }
-
-      return "1 Month";
     }
 
-    function setTheme(theme) {
-      document.body.classList.toggle("dark", theme === "dark");
-      localStorage.setItem("funsub_theme", theme);
-    }
+    alert("Sharing is not supported on this browser.");
+  }
 
-    setTheme(localStorage.getItem("funsub_theme") || "dark");
+  function showProcessingModal() {
+    transactionModal.style.display = "flex";
+    receiptSection.style.display = "none";
+    transactionIcon.className = "transaction-icon";
+    transactionIcon.innerHTML = "⏳";
+    transactionTitle.innerText = "Processing Transaction";
+    transactionMessage.innerText = "Please wait...";
+  }
 
-    function clearCableInputs() {
-      customerId.value = "";
-      verifiedCustomerName = "";
-      userInfo.style.display = "none";
-      accountName.innerText = "";
+  function showPendingModal(message) {
+    transactionModal.style.display = "flex";
+    receiptSection.style.display = "none";
+    transactionIcon.className = "transaction-icon pending";
+    transactionIcon.innerHTML = "🟡";
+    transactionTitle.innerText = "Transaction Pending";
+    transactionMessage.innerText = message || "Your transaction is pending.";
+  }
 
-      selectedPackage = null;
-      packageList = [];
-      packageText.innerText = "Select a plan";
+  function showFailedModal(message) {
+    transactionModal.style.display = "flex";
+    receiptSection.style.display = "none";
+    transactionIcon.className = "transaction-icon failed";
+    transactionIcon.innerHTML = "❌";
+    transactionTitle.innerText = "Transaction Failed";
+    transactionMessage.innerText = message || "Unable to complete transaction.";
+  }
 
-      selectedType = { value: "renew", label: "Renew Package" };
-      typeText.innerText = "Select subscription type";
-    }
+  function showSuccessModal(message) {
+    transactionModal.style.display = "flex";
+    receiptSection.style.display = "block";
+    transactionIcon.className = "transaction-icon success";
+    transactionIcon.innerHTML = "✅";
+    transactionTitle.innerText = "Transaction Successful";
+    transactionMessage.innerText = message || "Transaction successful";
+  }
 
-    function buildReceiptText() {
-      if (!lastReceipt) return "";
-      const r = lastReceipt;
-      return [
-        "FunSub Cable TV Receipt",
-        `Provider: ${r.provider || ""}`,
-        `Customer ID: ${r.customerId || ""}`,
-        `Customer Name: ${r.customerName || ""}`,
-        `Package: ${r.packageName || ""}`,
-        `Type: ${r.type || ""}`,
-        `Amount: ${r.amount || ""}`,
-        `Reference: ${r.reference || ""}`,
-        `Status: ${r.status || ""}`,
-        `Date: ${r.date || ""}`
-      ].join("\n");
-    }
+  function closeModal() {
+    transactionModal.style.display = "none";
+  }
 
-    async function shareReceipt() {
-      const text = buildReceiptText();
-      if (!text) return;
+  function setReceiptValues({
+    provider,
+    customerId,
+    customerName,
+    packageName,
+    type,
+    amount,
+    reference,
+    status
+  }) {
+    receiptProvider.innerText = provider || "";
+    receiptCustomerId.innerText = customerId || "";
+    receiptCustomerName.innerText = customerName || "";
+    receiptPackage.innerText = packageName || "";
+    receiptType.innerText = type || "";
+    receiptAmount.innerText = formatNaira(amount);
+    receiptReference.innerText = reference || "";
+    receiptStatus.innerText = status || "";
+    receiptDate.innerText = new Date().toLocaleString();
+    receiptSection.style.display = "block";
 
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: "FunSub Cable TV Receipt",
-            text
-          });
-          return;
-        } catch (e) {
-          console.log(e);
-        }
-      }
-
-      alert("Sharing is not supported on this browser.");
-    }
-
-    function showProcessingModal() {
-      transactionModal.style.display = "flex";
-      receiptSection.style.display = "none";
-      transactionIcon.className = "transaction-icon";
-      transactionIcon.innerHTML = "⏳";
-      transactionTitle.innerText = "Processing Transaction";
-      transactionMessage.innerText = "Please wait...";
-    }
-
-    function showPendingModal(message) {
-      transactionModal.style.display = "flex";
-      receiptSection.style.display = "none";
-      transactionIcon.className = "transaction-icon pending";
-      transactionIcon.innerHTML = "🟡";
-      transactionTitle.innerText = "Transaction Pending";
-      transactionMessage.innerText = message || "Your transaction is pending.";
-    }
-
-    function showFailedModal(message) {
-      transactionModal.style.display = "flex";
-      receiptSection.style.display = "none";
-      transactionIcon.className = "transaction-icon failed";
-      transactionIcon.innerHTML = "❌";
-      transactionTitle.innerText = "Transaction Failed";
-      transactionMessage.innerText = message || "Unable to complete transaction.";
-    }
-
-    function showSuccessModal(message) {
-      transactionModal.style.display = "flex";
-      receiptSection.style.display = "block";
-      transactionIcon.className = "transaction-icon success";
-      transactionIcon.innerHTML = "✅";
-      transactionTitle.innerText = "Transaction Successful";
-      transactionMessage.innerText = message || "Transaction successful";
-    }
-
-    function closeModal() {
-      transactionModal.style.display = "none";
-    }
-
-    function setReceiptValues({
+    lastReceipt = {
       provider,
       customerId,
       customerName,
       packageName,
       type,
-      amount,
+      amount: formatNaira(amount),
       reference,
-      status
-    }) {
-      receiptProvider.innerText = provider || "";
-      receiptCustomerId.innerText = customerId || "";
-      receiptCustomerName.innerText = customerName || "";
-      receiptPackage.innerText = packageName || "";
-      receiptType.innerText = type || "";
-      receiptAmount.innerText = formatNaira(amount);
-      receiptReference.innerText = reference || "";
-      receiptStatus.innerText = status || "";
-      receiptDate.innerText = new Date().toLocaleString();
-      receiptSection.style.display = "block";
+      status,
+      date: new Date().toLocaleString()
+    };
+  }
 
-      lastReceipt = {
-        provider,
-        customerId,
-        customerName,
-        packageName,
-        type,
-        amount: formatNaira(amount),
-        reference,
-        status,
-        date: new Date().toLocaleString()
-      };
+  function renderPinBoxes() {
+    for (let i = 0; i < 4; i++) {
+      const box = document.getElementById(`pinBox${i}`);
+      if (!box) continue;
+
+      const hasDigit = i < enteredPin.length;
+      box.textContent = hasDigit ? "•" : "";
+      box.classList.toggle("filled", hasDigit);
+    }
+  }
+
+  function openPinModal(payload) {
+    enteredPin = "";
+    pendingPayload = payload;
+    renderPinBoxes();
+    pinOverlay.style.display = "flex";
+  }
+
+  function closePinModal() {
+    pinOverlay.style.display = "none";
+    enteredPin = "";
+    pendingPayload = null;
+    renderPinBoxes();
+  }
+
+  function pressPin(digit) {
+    if (enteredPin.length >= 4) return;
+    enteredPin += digit;
+    renderPinBoxes();
+
+    if (enteredPin.length === 4) {
+      const payload = pendingPayload;
+      closePinModal();
+      sendCableRequest(payload, enteredPin);
+    }
+  }
+
+  function backspacePin() {
+    enteredPin = enteredPin.slice(0, -1);
+    renderPinBoxes();
+  }
+
+  function closeChoiceModal() {
+    choiceModal.style.display = "none";
+  }
+
+  function renderChoiceList(items, onPick) {
+    choiceList.innerHTML = "";
+
+    if (!items.length) {
+      choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No items found</div>";
+      return;
     }
 
-    function renderPinBoxes() {
-      for (let i = 0; i < 4; i++) {
-        const box = document.getElementById(`pinBox${i}`);
-        if (!box) continue;
-
-        const hasDigit = i < enteredPin.length;
-        box.textContent = hasDigit ? "•" : "";
-        box.classList.toggle("filled", hasDigit);
-      }
-    }
-
-    function openPinModal(payload) {
-      enteredPin = "";
-      pendingPayload = payload;
-      renderPinBoxes();
-      pinOverlay.style.display = "flex";
-    }
-
-    function closePinModal() {
-      pinOverlay.style.display = "none";
-      enteredPin = "";
-      pendingPayload = null;
-      renderPinBoxes();
-    }
-
-    function pressPin(digit) {
-      if (enteredPin.length >= 4) return;
-      enteredPin += digit;
-      renderPinBoxes();
-
-      if (enteredPin.length === 4) {
-        const payload = pendingPayload;
-        closePinModal();
-        sendCableRequest(payload, enteredPin);
-      }
-    }
-
-    function backspacePin() {
-      enteredPin = enteredPin.slice(0, -1);
-      renderPinBoxes();
-    }
-
-    function closeChoiceModal() {
-      choiceModal.style.display = "none";
-    }
-
-    function renderChoiceList(items, onPick) {
-      choiceList.innerHTML = "";
-
-      if (!items.length) {
-        choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No items found</div>";
-        return;
-      }
-
-      items.forEach(item => {
-        const row = document.createElement("div");
-        row.className = "plan-item";
-        row.innerHTML = `
-          <div style="display:flex;align-items:center;gap:12px;">
-            <span class="radio-dot ${item.active ? "on" : ""}"></span>
-            <div>
-              <strong>${item.title}</strong>
-              <small>${item.subtitle || ""}</small>
-            </div>
+    items.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "plan-item";
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="radio-dot ${item.active ? "on" : ""}"></span>
+          <div>
+            <strong>${item.title}</strong>
+            <small>${item.subtitle || ""}</small>
           </div>
-          <div style="color:var(--muted);font-size:12px;">Select</div>
-        `;
+        </div>
+        <div style="color:var(--muted);font-size:12px;">Select</div>
+      `;
 
-        row.addEventListener("click", () => {
-          onPick(item);
-        });
-
-        choiceList.appendChild(row);
+      row.addEventListener("click", () => {
+        onPick(item);
       });
+
+      choiceList.appendChild(row);
+    });
+  }
+async function loadPackages(provider) {
+    const token = getToken();
+    const customer_id = customerId.value.trim();
+
+    if (!token) {
+      alert("Please login first");
+      return false;
     }
 
-    async function loadPackages(provider) {
-      const token = getToken();
-      const customer_id = customerId.value.trim();
-
-      if (!token) {
-        alert("Please login first");
-        return false;
-      }
-
-      if (!customer_id) {
-        alert("Enter smartcard / IUC number first");
-        return false;
-      }
-
-      if (!verifiedCustomerName) {
-        alert("Please verify customer first");
-        return false;
-      }
-
-      try {
-        const res = await fetch(
-          `${OPTIONS_URL}?service_id=${encodeURIComponent(provider)}&provider=${encodeURIComponent(provider)}`,
-          {
-            headers: { Authorization: `Bearer ${token}` }
-          }
-        );
-
-        const data = await res.json().catch(() => ({}));
-
-        let list = [];
-        if (Array.isArray(data.options)) list = data.options;
-        else if (Array.isArray(data.plans)) list = data.plans;
-        else if (Array.isArray(data.data?.options)) list = data.data.options;
-        else if (Array.isArray(data.data?.plans)) list = data.data.plans;
-
-        packageList = list
-          .map(item => ({
-            id: item.id || item.variation_id || item.code || item.plan_id,
-            name: item.name || item.title || item.label || "Package",
-            price: Number(item.price || item.amount || item.cost || 0),
-            duration: getPlanDurationLabel(item),
-            raw: item
-          }))
-          .filter(x => x.id);
-
-        return true;
-      } catch (e) {
-        console.error(e);
-        alert("Unable to load packages");
-        return false;
-      }
+    if (!customer_id) {
+      alert("Enter smartcard / IUC number first");
+      return false;
     }
 
-    async function openPackageModal() {
-      if (!verifiedCustomerName) {
-        alert("Please verify customer first");
-        return;
-      }
+    if (!verifiedCustomerName) {
+      alert("Please verify customer first");
+      return false;
+    }
 
-      if (!packageList.length) {
-        const loaded = await loadPackages(currentProvider);
-        if (!loaded || !packageList.length) {
-          choiceTitle.innerText = "Select Package";
-          choiceSubtitle.innerText = "No packages found";
-          choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No packages found</div>";
-          choiceModal.style.display = "flex";
-          return;
-        }
-      }
-
-      choiceTitle.innerText = "Select Package";
-      choiceSubtitle.innerText = "Pick the amount and duration you want";
-
-      renderChoiceList(
-        packageList.map(pkg => ({
-          title: formatNaira(pkg.price),
-          subtitle: pkg.duration || "1 Month",
-          active: selectedPackage && selectedPackage.id === pkg.id,
-          pkg
-        })),
-        (item) => {
-          selectedPackage = item.pkg;
-          packageText.innerText = `${formatNaira(item.pkg.price)} • ${item.pkg.duration || "1 Month"}`;
-          closeChoiceModal();
+    try {
+      const res = await fetch(
+        `${OPTIONS_URL}?service_id=${encodeURIComponent(provider)}&provider=${encodeURIComponent(provider)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
         }
       );
 
-      choiceModal.style.display = "flex";
+      const data = await res.json().catch(() => ({}));
+
+      let list = [];
+      if (Array.isArray(data.options)) list = data.options;
+      else if (Array.isArray(data.plans)) list = data.plans;
+      else if (Array.isArray(data.data?.options)) list = data.data.options;
+      else if (Array.isArray(data.data?.plans)) list = data.data.plans;
+
+      packageList = list
+        .map(item => ({
+          id: item.id || item.variation_id || item.code || item.plan_id,
+          name: item.name || item.title || item.label || "Package",
+          price: Number(item.price || item.amount || item.cost || 0),
+          duration: getPlanDurationLabel(item),
+          raw: item
+        }))
+        .filter(x => x.id);
+
+      return true;
+    } catch (e) {
+      console.error(e);
+      alert("Unable to load packages");
+      return false;
+    }
+  }
+
+  async function openPackageModal() {
+    if (!verifiedCustomerName) {
+      alert("Please verify customer first");
+      return;
     }
 
-    function openTypeModal() {
-      choiceTitle.innerText = "Select Subscription Type";
-      choiceSubtitle.innerText = "Choose Renew Package or Change Package";
-
-      const items = [
-        {
-          title: "Renew Package",
-          subtitle: "Keep the current bouquet",
-          active: selectedType.value === "renew",
-          value: "renew",
-          label: "Renew Package"
-        },
-        {
-          title: "Change Package",
-          subtitle: "Switch to another bouquet",
-          active: selectedType.value === "change",
-          value: "change",
-          label: "Change Package"
-        }
-      ];
-
-      renderChoiceList(items, (item) => {
-        selectedType = { value: item.value, label: item.label };
-        typeText.innerText = item.label;
-        closeChoiceModal();
-      });
-
-      choiceModal.style.display = "flex";
-    }
-async function verifyCustomer() {
-      const token = getToken();
-      const customer_id = customerId.value.trim();
-
-      if (!token) return alert("Please login first");
-      if (!customer_id) return alert("Enter smartcard / IUC number");
-
-      verifyBtn.disabled = true;
-      verifyBtn.innerText = "Verifying...";
-
-      try {
-        const res = await fetch(VERIFY_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            customer_id,
-            service_id: currentProvider
-          })
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (res.ok && data.success) {
-          verifiedCustomerName = data.data?.customer_name || data.customer_name || "Verified Customer";
-          accountName.innerText = verifiedCustomerName;
-          userInfo.style.display = "block";
-
-          await loadPackages(currentProvider);
-        } else {
-          alert(data.message || "Verification failed");
-          verifiedCustomerName = "";
-          userInfo.style.display = "none";
-        }
-      } catch (e) {
-        alert("Unable to verify customer");
-      } finally {
-        verifyBtn.disabled = false;
-        verifyBtn.innerText = "Verify";
-      }
-    }
-
-    async function buyCable() {
-      const token = getToken();
-      const customer_id = customerId.value.trim();
-      const customer_name = verifiedCustomerName;
-
-      if (!token) return alert("Please login first");
-      if (!customer_id) return alert("Enter smartcard / IUC number");
-      if (!customer_name) return alert("Please verify customer first");
-      if (!selectedPackage) return alert("Select a plan");
-      if (!selectedType?.value) return alert("Select subscription type");
-
-      openPinModal({
-        token,
-        request_id: generateRequestId("CABLE"),
-        customer_id,
-        customer_name,
-        service_id: currentProvider,
-        providerLabel: getProviderMeta(currentProvider).name,
-        variation_id: selectedPackage.id,
-        packageName: selectedPackage.name,
-        packageDisplay: `${formatNaira(selectedPackage.price)} • ${selectedPackage.duration || "1 Month"}`,
-        packageDuration: selectedPackage.duration || "1 Month",
-        amount: selectedPackage.price,
-        subscription_type: selectedType.value,
-        subscription_type_label: selectedType.label
-      });
-    }
-
-    async function sendCableRequest(payload, fundPin) {
-      const {
-        token,
-        request_id,
-        customer_id,
-        customer_name,
-        service_id,
-        providerLabel,
-        variation_id,
-        packageName,
-        packageDisplay,
-        packageDuration,
-        amount,
-        subscription_type,
-        subscription_type_label
-      } = payload;
-
-      const pinValue = String(fundPin || "").trim();
-      if (!pinValue) {
-        showFailedModal("Transaction PIN is required");
+    if (!packageList.length) {
+      const loaded = await loadPackages(currentProvider);
+      if (!loaded || !packageList.length) {
+        choiceTitle.innerText = "Select Package";
+        choiceSubtitle.innerText = "No packages found";
+        choiceList.innerHTML = "<div style='color:var(--muted);font-size:13px;'>No packages found</div>";
+        choiceModal.style.display = "flex";
         return;
       }
+    }
 
-      showProcessingModal();
+    choiceTitle.innerText = "Select Package";
+    choiceSubtitle.innerText = "Pick the amount and duration you want";
 
-      buyBtn.disabled = true;
-      buyBtn.innerText = "Processing...";
+    renderChoiceList(
+      packageList.map(pkg => ({
+        title: formatNaira(pkg.price),
+        subtitle: pkg.duration || "1 Month",
+        active: selectedPackage && selectedPackage.id === pkg.id,
+        pkg
+      })),
+      (item) => {
+        selectedPackage = item.pkg;
+        packageText.innerText = `${formatNaira(item.pkg.price)} • ${item.pkg.duration || "1 Month"}`;
+        closeChoiceModal();
+      }
+    );
 
-      try {
-        const response = await fetch(BUY_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            request_id,
-            customer_id,
-            customer_name,
-            service_id,
-            serviceId: service_id,
-            provider: providerLabel,
-            variation_id,
-            package_name: packageName,
-            package_display: packageDisplay,
-            package_duration: packageDuration,
-            amount,
-            subscription_type,
-            subscription_type_label,
+    choiceModal.style.display = "flex";
+  }
 
-            fundPin: pinValue,
-            fund_pin: pinValue,
-            transaction_pin: pinValue,
-            transactionPin: pinValue,
-            pin: pinValue
-          })
-        });
+  function openTypeModal() {
+    choiceTitle.innerText = "Select Subscription Type";
+    choiceSubtitle.innerText = "Choose Renew Package or Change Package";
 
-        const data = await response.json().catch(() => ({}));
-        const tx = data.transaction || data.data?.transaction || data.result || {};
-        const statusText = String(tx.status || data.status || "").toLowerCase();
-        const reference = tx.reference || tx.tx_ref || data.reference || request_id;
+    const items = [
+      {
+        title: "Renew Package",
+        subtitle: "Keep the current bouquet",
+        active: selectedType.value === "renew",
+        value: "renew",
+        label: "Renew Package"
+      },
+      {
+        title: "Change Package",
+        subtitle: "Switch to another bouquet",
+        active: selectedType.value === "change",
+        value: "change",
+        label: "Change Package"
+      }
+    ];
 
-        if (
-          response.ok &&
-          (
-            data.transaction ||
-            data.success === true ||
-            statusText === "success" ||
-            statusText === "successful" ||
-            statusText === "completed"
-          )
-        ) {
-          showSuccessModal(data.message || "Subscription successful");
+    renderChoiceList(items, (item) => {
+      selectedType = { value: item.value, label: item.label };
+      typeText.innerText = item.label;
+      closeChoiceModal();
+    });
 
-          setReceiptValues({
-            provider: providerLabel,
-            customerId: customer_id,
-            customerName: customer_name,
-            packageName: packageDisplay,
-            type: subscription_type_label,
-            amount: tx.amount || amount,
-            reference,
-            status: tx.status || data.status || "success"
-          });
+    choiceModal.style.display = "flex";
+  }
+async function verifyCustomer() {
+    const token = getToken();
+    const customer_id = customerId.value.trim();
 
-          lastReceipt = {
-            provider: providerLabel,
-            customerId: customer_id,
-            customerName: customer_name,
-            packageName: packageDisplay,
-            type: subscription_type_label,
-            amount: formatNaira(tx.amount || amount),
-            reference,
-            status: tx.status || data.status || "success",
-            date: new Date().toLocaleString()
-          };
+    if (!token) return alert("Please login first");
+    if (!customer_id) return alert("Enter smartcard / IUC number");
 
-          clearCableInputs();
-          return;
-        }
+    verifyBtn.disabled = true;
+    verifyBtn.innerText = "Verifying...";
 
-        if (
-          statusText === "pending" ||
-          data.status === "pending" ||
-          data.transaction?.status === "pending"
-        ) {
-          showPendingModal(data.message || "Transaction pending");
+    try {
+      const res = await fetch(VERIFY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customer_id,
+          service_id: currentProvider
+        })
+      });
 
-          setReceiptValues({
-            provider: providerLabel,
-            customerId: customer_id,
-            customerName: customer_name,
-            packageName: packageDisplay,
-            type: subscription_type_label,
-            amount: tx.amount || amount,
-            reference,
-            status: "pending"
-          });
+      const data = await res.json().catch(() => ({}));
 
-          lastReceipt = {
-            provider: providerLabel,
-            customerId: customer_id,
-            customerName: customer_name,
-            packageName: packageDisplay,
-            type: subscription_type_label,
-            amount: formatNaira(tx.amount || amount),
-            reference,
-            status: "pending",
-            date: new Date().toLocaleString()
-          };
+      if (res.ok && data.success) {
+        verifiedCustomerName = data.data?.customer_name || data.customer_name || "Verified Customer";
+        accountName.innerText = verifiedCustomerName;
+        userInfo.style.display = "block";
 
-          clearCableInputs();
-          return;
-        }
+        loadPackages(currentProvider);
+      } else {
+        alert(data.message || "Verification failed");
+        verifiedCustomerName = "";
+        userInfo.style.display = "none";
+      }
+    } catch (e) {
+      alert("Unable to verify customer");
+    } finally {
+      verifyBtn.disabled = false;
+      verifyBtn.innerText = "Verify";
+    }
+  }
 
-        showFailedModal(data.message || "Transaction failed");
+  async function buyCable() {
+    const token = getToken();
+    const customer_id = customerId.value.trim();
+    const customer_name = verifiedCustomerName;
+
+    if (!token) return alert("Please login first");
+    if (!customer_id) return alert("Enter smartcard / IUC number");
+    if (!customer_name) return alert("Please verify customer first");
+    if (!selectedPackage) return alert("Select a plan");
+    if (!selectedType?.value) return alert("Select subscription type");
+
+    openPinModal({
+      token,
+      request_id: generateRequestId("CABLE"),
+      customer_id,
+      customer_name,
+      service_id: currentProvider,
+      providerLabel: getProviderMeta(currentProvider).name,
+      variation_id: selectedPackage.id,
+      packageName: selectedPackage.name,
+      packageDisplay: `${formatNaira(selectedPackage.price)} • ${selectedPackage.duration || "1 Month"}`,
+      packageDuration: selectedPackage.duration || "1 Month",
+      amount: selectedPackage.price,
+      subscription_type: selectedType.value,
+      subscription_type_label: selectedType.label
+    });
+  }
+
+  async function sendCableRequest(payload, fundPin) {
+    const {
+      token,
+      request_id,
+      customer_id,
+      customer_name,
+      service_id,
+      providerLabel,
+      variation_id,
+      packageName,
+      packageDisplay,
+      packageDuration,
+      amount,
+      subscription_type,
+      subscription_type_label
+    } = payload;
+
+    const pinValue = String(fundPin || "").trim();
+    if (!pinValue) {
+      showFailedModal("Transaction PIN is required");
+      return;
+    }
+
+    showProcessingModal();
+
+    buyBtn.disabled = true;
+    buyBtn.innerText = "Processing...";
+
+    try {
+      const response = await fetch(BUY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          request_id,
+          customer_id,
+          customer_name,
+          service_id,
+          serviceId: service_id,
+          provider: providerLabel,
+          variation_id,
+          package_name: packageName,
+          package_display: packageDisplay,
+          package_duration: packageDuration,
+          amount,
+          subscription_type,
+          subscription_type_label,
+          fundPin: pinValue,
+          fund_pin: pinValue,
+          transaction_pin: pinValue,
+          transactionPin: pinValue,
+          pin: pinValue
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const tx = data.transaction || data.data?.transaction || data.result || {};
+      const statusText = String(tx.status || data.status || "").toLowerCase();
+      const reference = tx.reference || tx.tx_ref || data.reference || request_id;
+
+      if (
+        response.ok &&
+        (
+          data.transaction ||
+          data.success === true ||
+          statusText === "success" ||
+          statusText === "successful" ||
+          statusText === "completed"
+        )
+      ) {
+        showSuccessModal(data.message || "Subscription successful");
 
         setReceiptValues({
           provider: providerLabel,
@@ -1362,7 +1296,7 @@ async function verifyCustomer() {
           type: subscription_type_label,
           amount: tx.amount || amount,
           reference,
-          status: "failed"
+          status: tx.status || data.status || "success"
         });
 
         lastReceipt = {
@@ -1373,15 +1307,20 @@ async function verifyCustomer() {
           type: subscription_type_label,
           amount: formatNaira(tx.amount || amount),
           reference,
-          status: "failed",
+          status: tx.status || data.status || "success",
           date: new Date().toLocaleString()
         };
 
         clearCableInputs();
-      } catch (error) {
-        console.error(error);
+        return;
+      }
 
-        showFailedModal("Unable to complete transaction");
+      if (
+        statusText === "pending" ||
+        data.status === "pending" ||
+        data.transaction?.status === "pending"
+      ) {
+        showPendingModal(data.message || "Transaction pending");
 
         setReceiptValues({
           provider: providerLabel,
@@ -1389,9 +1328,9 @@ async function verifyCustomer() {
           customerName: customer_name,
           packageName: packageDisplay,
           type: subscription_type_label,
-          amount,
-          reference: request_id,
-          status: "failed"
+          amount: tx.amount || amount,
+          reference,
+          status: "pending"
         });
 
         lastReceipt = {
@@ -1400,55 +1339,113 @@ async function verifyCustomer() {
           customerName: customer_name,
           packageName: packageDisplay,
           type: subscription_type_label,
-          amount: formatNaira(amount),
-          reference: request_id,
-          status: "failed",
+          amount: formatNaira(tx.amount || amount),
+          reference,
+          status: "pending",
           date: new Date().toLocaleString()
         };
 
         clearCableInputs();
-      } finally {
-        buyBtn.disabled = false;
-        buyBtn.innerText = "Confirm & Pay";
+        return;
       }
+
+      showFailedModal(data.message || "Transaction failed");
+
+      setReceiptValues({
+        provider: providerLabel,
+        customerId: customer_id,
+        customerName: customer_name,
+        packageName: packageDisplay,
+        type: subscription_type_label,
+        amount: tx.amount || amount,
+        reference,
+        status: "failed"
+      });
+
+      lastReceipt = {
+        provider: providerLabel,
+        customerId: customer_id,
+        customerName: customer_name,
+        packageName: packageDisplay,
+        type: subscription_type_label,
+        amount: formatNaira(tx.amount || amount),
+        reference,
+        status: "failed",
+        date: new Date().toLocaleString()
+      };
+
+      clearCableInputs();
+    } catch (error) {
+      console.error(error);
+
+      showFailedModal("Unable to complete transaction");
+
+      setReceiptValues({
+        provider: providerLabel,
+        customerId: customer_id,
+        customerName: customer_name,
+        packageName: packageDisplay,
+        type: subscription_type_label,
+        amount,
+        reference: request_id,
+        status: "failed"
+      });
+
+      lastReceipt = {
+        provider: providerLabel,
+        customerId: customer_id,
+        customerName: customer_name,
+        packageName: packageDisplay,
+        type: subscription_type_label,
+        amount: formatNaira(amount),
+        reference: request_id,
+        status: "failed",
+        date: new Date().toLocaleString()
+      };
+
+      clearCableInputs();
+    } finally {
+      buyBtn.disabled = false;
+      buyBtn.innerText = "Confirm & Pay";
+    }
+  }
+
+  providerGrid.querySelectorAll(".provider-card").forEach(card => {
+    card.addEventListener("click", () => {
+      providerGrid.querySelectorAll(".provider-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      currentProvider = card.dataset.provider;
+
+      verifiedCustomerName = "";
+      accountName.innerText = "";
+      userInfo.style.display = "none";
+
+      selectedPackage = null;
+      packageList = [];
+      packageText.innerText = "Select a plan";
+
+      selectedType = { value: "renew", label: "Renew Package" };
+      typeText.innerText = "Select subscription type";
+    });
+  });
+
+  packageShell.addEventListener("click", openPackageModal);
+  typeShell.addEventListener("click", openTypeModal);
+
+  verifyBtn.addEventListener("click", verifyCustomer);
+  buyBtn.addEventListener("click", buyCable);
+
+  document.addEventListener("keydown", (e) => {
+    if (pinOverlay.style.display === "flex") {
+      if (/^\d$/.test(e.key)) pressPin(e.key);
+      if (e.key === "Backspace") backspacePin();
+      if (e.key === "Escape") closePinModal();
     }
 
-    providerGrid.querySelectorAll(".provider-card").forEach(card => {
-      card.addEventListener("click", () => {
-        providerGrid.querySelectorAll(".provider-card").forEach(c => c.classList.remove("active"));
-        card.classList.add("active");
-        currentProvider = card.dataset.provider;
-
-        verifiedCustomerName = "";
-        accountName.innerText = "";
-        userInfo.style.display = "none";
-
-        selectedPackage = null;
-        packageList = [];
-        packageText.innerText = "Select a plan";
-
-        selectedType = { value: "renew", label: "Renew Package" };
-        typeText.innerText = "Select subscription type";
-      });
-    });
-
-    packageShell.addEventListener("click", openPackageModal);
-    typeShell.addEventListener("click", openTypeModal);
-
-    verifyBtn.addEventListener("click", verifyCustomer);
-    buyBtn.addEventListener("click", buyCable);
-
-    document.addEventListener("keydown", (e) => {
-      if (pinOverlay.style.display === "flex") {
-        if (/^\d$/.test(e.key)) pressPin(e.key);
-        if (e.key === "Backspace") backspacePin();
-        if (e.key === "Escape") closePinModal();
-      }
-
-      if (choiceModal.style.display === "flex" && e.key === "Escape") {
-        closeChoiceModal();
-      }
-    });
-  </script>
+    if (choiceModal.style.display === "flex" && e.key === "Escape") {
+      closeChoiceModal();
+    }
+  });
+</script>
 </body>
 </html>
