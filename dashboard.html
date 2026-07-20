@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wallet App UI</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#d4b35f">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
   :root{
     --bg:#f7f7f7;
@@ -1067,6 +1070,11 @@
       </div>
     </div>
   </div>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js");
+  }
+</script>
 <script src="theme.js" defer></script>
   <script>
     const API_ROOT = "https://funsub.onrender.com";
