@@ -1,6 +1,6 @@
 const CACHE_NAME = "funsub-v1";
 const ASSETS = [
-  "/FunSub/dashboard.html",
+  "/FunSub/index.html",
   "/FunSub/manifest.webmanifest",
   "/FunSub/icons/icon-192.png",
   "/FunSub/icons/icon-512.png"
