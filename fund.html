@@ -674,7 +674,7 @@
     const charge = calculateFundingCharge(requestedAmount);
 
     feePreview.textContent = `To fund ${money(charge.requestedAmount)}, pay ${money(charge.payableAmount)} (fee ${money(charge.feeAmount)})`;
-    feeNote.textContent = `The amount sent to the backend will match the total payable amount: ${money(charge.payableAmount)}.`;
+    feeNote.textContent = `The amount sent will match the total payable amount: ${money(charge.payableAmount)}.`;
   }
 
   async function copyText(text, label = 'Copied') {
