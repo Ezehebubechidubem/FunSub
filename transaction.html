@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FunSub | Transactions</title>
+
   <style>
     :root{
       --gold:#d4af37;
@@ -246,9 +247,18 @@
       transition:transform .15s ease, border-color .15s ease, background .15s ease;
     }
 
-    .tx-card:hover{transform:translateY(-1px);border-color:rgba(212,175,55,.35)}
+    .tx-card:hover{
+      transform:translateY(-1px);
+      border-color:rgba(212,175,55,.35);
+    }
 
-    .tx-left{display:flex;align-items:center;gap:12px;min-width:0}
+    .tx-left{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
+    }
+
     .tx-logo{
       width:48px;
       height:48px;
@@ -260,12 +270,45 @@
       flex:0 0 48px;
       border:1px solid rgba(0,0,0,.06);
     }
-    .tx-logo img{width:100%;height:100%;object-fit:cover;display:block}
+
+    .tx-logo img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+
     .tx-meta{min-width:0}
-    .tx-title{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0 0 4px}
-    .tx-sub{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
-    .tx-amount{font-size:16px;font-weight:800;text-align:right}
-    .tx-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+    .tx-title{
+      font-size:15px;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      margin:0 0 4px;
+    }
+
+    .tx-sub{
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .tx-amount{
+      font-size:16px;
+      font-weight:800;
+      text-align:right;
+    }
+
+    .tx-right{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      gap:6px;
+      flex:0 0 auto;
+    }
 
     .status-chip{
       padding:7px 11px;
@@ -276,6 +319,7 @@
       text-transform:capitalize;
       white-space:nowrap;
     }
+
     .status-success{background:rgba(34,197,94,.12);color:var(--success);border-color:rgba(34,197,94,.25)}
     .status-pending{background:rgba(245,158,11,.12);color:var(--pending);border-color:rgba(245,158,11,.25)}
     .status-failed{background:rgba(239,68,68,.12);color:var(--danger);border-color:rgba(239,68,68,.25)}
@@ -306,8 +350,8 @@
     }
 
     .receipt-shell{
-      width:min(94vw, 420px);
-      max-height:86vh;
+      width:min(92vw, 390px);
+      max-height:82vh;
       overflow:auto;
       border-radius:28px;
       background:transparent;
@@ -325,7 +369,7 @@
     .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
-      padding:20px 18px 38px;
+      padding:18px 18px 34px;
       text-align:center;
       position:relative;
     }
@@ -358,8 +402,8 @@
     }
 
     .receipt-logo-wrap{
-      width:72px;
-      height:72px;
+      width:64px;
+      height:64px;
       border-radius:50%;
       margin:0 auto 10px;
       background:rgba(255,255,255,.06);
@@ -378,7 +422,7 @@
 
     .receipt-brand{
       margin:0;
-      font-size:24px;
+      font-size:22px;
       font-weight:900;
       letter-spacing:-.03em;
     }
@@ -392,14 +436,14 @@
     }
 
     .receipt-body{
-      padding:18px 18px 18px;
-      margin-top:10px;
+      padding:16px 16px 18px;
+      margin-top:8px;
     }
 
     .status-badge{
       width:max-content;
-      margin:4px auto 16px;
-      padding:11px 16px;
+      margin:4px auto 14px;
+      padding:10px 15px;
       border-radius:999px;
       font-weight:800;
       letter-spacing:.04em;
@@ -410,12 +454,14 @@
       border:1px solid transparent;
       font-size:13px;
     }
+
     .status-badge .dot{
       width:12px;
       height:12px;
       border-radius:50%;
       display:inline-block;
     }
+
     .status-badge.success{background:rgba(34,197,94,.12);color:#1f8f4b;border-color:rgba(34,197,94,.22)}
     .status-badge.success .dot{background:var(--success)}
     .status-badge.pending{background:rgba(245,158,11,.12);color:#b7791f;border-color:rgba(245,158,11,.22)}
@@ -429,12 +475,24 @@
       background:linear-gradient(180deg, #fffaf0, #fffdf8);
       border:1px solid rgba(212,175,55,.28);
       border-radius:22px;
-      padding:18px 14px;
+      padding:16px 14px;
       text-align:center;
-      margin-bottom:16px;
+      margin-bottom:14px;
     }
-    .amount-card .label{font-size:14px;color:#6b7280;margin-bottom:6px}
-    .amount-card .amount{font-size:34px;line-height:1;font-weight:900;letter-spacing:-.05em;color:#111827}
+
+    .amount-card .label{
+      font-size:14px;
+      color:#6b7280;
+      margin-bottom:6px;
+    }
+
+    .amount-card .amount{
+      font-size:32px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.05em;
+      color:#111827;
+    }
 
     .detail-card{
       background:#fff;
@@ -453,9 +511,19 @@
       border-bottom:1px dashed #e5e7eb;
       font-size:14px;
     }
+
     .detail-row:last-child{border-bottom:0}
-    .detail-label{color:#4b5563;min-width:110px}
-    .detail-value{font-weight:700;color:#111827;text-align:right;word-break:break-word}
+    .detail-label{
+      color:#4b5563;
+      min-width:110px;
+    }
+
+    .detail-value{
+      font-weight:700;
+      color:#111827;
+      text-align:right;
+      word-break:break-word;
+    }
 
     .provider-mini{
       display:inline-flex;
@@ -486,25 +554,27 @@
     .receipt-footer{
       text-align:center;
       color:#6b7280;
-      padding:18px 8px 0;
+      padding:16px 8px 0;
       font-size:13px;
     }
+
     .receipt-footer strong{
       display:block;
       color:#0f172a;
       margin-top:5px;
     }
+
     .receipt-footer .gold{color:#c89511;font-weight:700}
 
     .button-grid{
       display:grid;
       grid-template-columns:repeat(2,1fr);
       gap:12px;
-      margin-top:16px;
+      margin-top:14px;
     }
 
     .receipt-btn{
-      height:54px;
+      height:52px;
       border:0;
       border-radius:16px;
       cursor:pointer;
@@ -515,6 +585,7 @@
       justify-content:center;
       gap:10px;
     }
+
     .receipt-btn.dark{background:#0b0b0d;color:#fff}
     .receipt-btn.gold{background:var(--gold);color:#111}
     .receipt-btn.light{background:#f3f4f6;color:#111827;border:1px solid #e5e7eb}
@@ -538,7 +609,12 @@
       max-width:min(92vw, 480px);
       text-align:center;
     }
-    .toast.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+
+    .toast.show{
+      opacity:1;
+      visibility:visible;
+      transform:translateX(-50%) translateY(0);
+    }
 
     @media print{
       body{background:#fff !important}
@@ -563,9 +639,9 @@
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
       .receipt-shell{max-height:88vh}
-      .receipt-header{padding:18px 14px 38px}
-      .receipt-brand{font-size:22px}
-      .amount-card .amount{font-size:32px}
+      .receipt-header{padding:18px 14px 34px}
+      .receipt-brand{font-size:21px}
+      .amount-card .amount{font-size:30px}
       .detail-label{min-width:92px}
       .provider-mini span{max-width:120px}
     }
@@ -644,10 +720,10 @@
       </div>
 
       <div class="pill-row" id="quickPills">
-        <button class="pill active" data-preset="all">All</button>
-        <button class="pill" data-preset="today">Today</button>
-        <button class="pill" data-preset="week">7 Days</button>
-        <button class="pill" data-preset="month">30 Days</button>
+        <button class="pill active" data-preset="all" type="button">All</button>
+        <button class="pill" data-preset="today" type="button">Today</button>
+        <button class="pill" data-preset="week" type="button">7 Days</button>
+        <button class="pill" data-preset="month" type="button">30 Days</button>
       </div>
 
       <div id="loadingState" class="loading">Loading transactions...</div>
@@ -660,7 +736,7 @@
     <div class="receipt-shell">
       <div class="receipt-card" id="receiptCard">
         <div class="receipt-header">
-          <button class="receipt-close" id="closeReceiptBtn" aria-label="Close receipt">×</button>
+          <button class="receipt-close" id="closeReceiptBtn" type="button" aria-label="Close receipt">×</button>
           <div class="receipt-logo-wrap">
             <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
           </div>
@@ -669,7 +745,10 @@
         </div>
 
         <div class="receipt-body">
-          <div id="statusBadge" class="status-badge success"><span class="dot"></span><span id="statusBadgeText">SUCCESSFUL</span></div>
+          <div id="statusBadge" class="status-badge success">
+            <span class="dot"></span>
+            <span id="statusBadgeText">SUCCESSFUL</span>
+          </div>
 
           <div class="amount-card">
             <div class="label">Amount</div>
@@ -684,16 +763,16 @@
           </div>
 
           <div class="button-grid">
-            <button class="receipt-btn dark" id="copyBtn">
+            <button class="receipt-btn dark" id="copyBtn" type="button">
               <span>⧉</span> Copy ID
             </button>
-            <button class="receipt-btn gold" id="shareBtn">
+            <button class="receipt-btn gold" id="shareBtn" type="button">
               <span>↗</span> Share Image
             </button>
-            <button class="receipt-btn dark" id="downloadBtn">
+            <button class="receipt-btn dark" id="downloadBtn" type="button">
               <span>⌘</span> Download Image
             </button>
-            <button class="receipt-btn dark" id="saveBtn">
+            <button class="receipt-btn dark" id="saveBtn" type="button">
               <span>▣</span> Save Image
             </button>
           </div>
@@ -705,11 +784,13 @@
   <div class="toast" id="toast">Copied</div>
 
   <script src="theme.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
-
-    const API_ROOT = 'https://funsub.onrender.com';
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js");
+    }
+const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
-    const themeKey = 'funsub_theme';
 
     const transactionsList = document.getElementById('transactionsList');
     const loadingState = document.getElementById('loadingState');
@@ -765,7 +846,8 @@
       selected: null,
       preset: 'all'
     };
-function getToken() {
+
+    function getToken() {
       return localStorage.getItem(tokenKey) || '';
     }
 
@@ -792,6 +874,14 @@ function getToken() {
         return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
       } catch {
         return { rawMeta: meta };
+      }
+    }
+
+    function getNested(obj, path, fallback = '') {
+      try {
+        return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? fallback;
+      } catch {
+        return fallback;
       }
     }
 
@@ -854,18 +944,45 @@ function getToken() {
       const networkMode = ['airtime', 'data', 'recharge_pin', 'data_pin'].includes(category);
 
       let raw = '';
-      if (networkMode) {
-        raw = meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || tx?.provider || '';
+
+      if (category === 'airtime') {
+        raw =
+          getNested(meta, 'providerResponse.data.service_name') ||
+          getNested(meta, 'providerResponse.data.network') ||
+          meta.network ||
+          meta.networkName ||
+          getNested(meta, 'selectedPlan.meta.network') ||
+          meta.service_id ||
+          meta.providerLabel ||
+          '';
+      } else if (category === 'data') {
+        raw =
+          getNested(meta, 'providerResponse.data.network') ||
+          meta.network ||
+          meta.networkName ||
+          getNested(meta, 'selectedPlan.meta.network') ||
+          meta.service_id ||
+          meta.providerLabel ||
+          '';
       } else if (category === 'wallet') {
-        raw = meta.provider || meta.gateway || 'Flutterwave';
+        raw = meta.gateway || meta.provider || 'Flutterwave';
       } else {
-        raw = meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || tx?.network || '';
+        raw = meta.providerLabel || meta.service_id || meta.provider || tx?.provider || '';
       }
 
       if (normalizeStatus(raw) === 'iacafe') {
         raw = networkMode
-          ? (meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || '')
-          : (meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || '');
+          ? (
+              getNested(meta, 'providerResponse.data.service_name') ||
+              getNested(meta, 'providerResponse.data.network') ||
+              meta.network ||
+              meta.networkName ||
+              getNested(meta, 'selectedPlan.meta.network') ||
+              meta.service_id ||
+              meta.providerLabel ||
+              ''
+            )
+          : (meta.providerLabel || meta.service_id || tx?.provider || '');
       }
 
       const label = prettyName(raw || (networkMode ? 'Network' : 'Provider'));
@@ -876,7 +993,24 @@ function getToken() {
 
     function getServiceLabel(tx) {
       const meta = getMeta(tx);
-      return prettyName(meta.serviceName || meta.serviceType || tx?.category || tx?.type || 'Transaction');
+      const category = getCategory(tx);
+
+      if (meta.serviceName) return prettyName(meta.serviceName);
+
+      const map = {
+        airtime: 'Airtime',
+        data: 'Data',
+        cable_tv: 'Cable TV',
+        cable: 'Cable TV',
+        betting: 'Betting',
+        electricity: 'Electricity',
+        wallet: 'Wallet',
+        recharge_pin: 'Recharge PIN',
+        data_pin: 'Data PIN',
+        exam_pin: 'Exam PIN'
+      };
+
+      return map[category] || prettyName(tx?.description || 'Transaction');
     }
 
     function getTitle(tx) {
@@ -890,17 +1024,18 @@ function getToken() {
       if (category === 'recharge_pin') return 'Recharge PIN';
       if (category === 'data_pin') return 'Data PIN';
       if (category === 'exam_pin') return 'Exam PIN';
-      return tx?.description || getMeta(tx)?.description || getMeta(tx)?.request_id || 'Transaction';
+      return tx?.description || getMeta(tx)?.description || getMeta(tx)?.request_id || getMeta(tx)?.requestId || 'Transaction';
     }
 
     function getStatusLabel(tx) {
       const s = normalizeStatus(tx?.status || tx?.meta?.status || '');
+
       if (
         s === 'success' ||
         s === 'successful' ||
         s === 'completed' ||
         s === 'completed-api' ||
-        s === 'completed-apI'.toLowerCase() ||
+        s === 'completed-api'.replace(/[\s/]+/g, '-') ||
         s === 'complete' ||
         s === 'paid' ||
         s === 'ok'
@@ -918,7 +1053,8 @@ function getToken() {
         s === 'reversed' ||
         s === 'refund' ||
         s === 'refunded' ||
-        s === 'reversed-api'
+        s === 'reversed-api' ||
+        s.includes('timeout')
       ) return 'reversed';
 
       return 'failed';
@@ -983,6 +1119,7 @@ function getToken() {
         meta.serviceId,
         meta.provider,
         meta.providerLabel,
+        meta.gateway,
         meta.network,
         meta.network_name,
         meta.networkName,
@@ -990,7 +1127,13 @@ function getToken() {
         meta.packageName,
         meta.package_name,
         meta.customer_name,
-        meta.customerName
+        meta.customerName,
+        getNested(meta, 'providerResponse.data.phone'),
+        getNested(meta, 'providerResponse.data.network'),
+        getNested(meta, 'providerResponse.data.service_name'),
+        getNested(meta, 'flutterwaveData.customer.phone_number'),
+        getNested(meta, 'flutterwaveData.customer.name'),
+        getNested(meta, 'virtualAccount.account_number')
       ].filter(Boolean).join(' ').toLowerCase();
 
       return haystack.includes(q);
@@ -1012,7 +1155,7 @@ function getToken() {
           ${text ? `<span>${escapeHtml(text)}</span>` : ''}
         </span>` : '';
 
-      const valueHtml = logoHtml || value;
+      const valueHtml = logoHtml || escapeHtml(value);
       return `
         <div class="detail-row">
           <div class="detail-label">${escapeHtml(label)}</div>
@@ -1020,7 +1163,8 @@ function getToken() {
         </div>
       `;
     }
-function renderTransactions() {
+
+    function renderTransactions() {
       const filtered = state.all.filter(matchesFilters);
       state.filtered = filtered;
       transactionsList.innerHTML = '';
@@ -1059,7 +1203,7 @@ function renderTransactions() {
               <div class="tx-sub">
                 <span>${escapeHtml(serviceLabel)}</span>
                 <span>•</span>
-                <span>${escapeHtml(tx.reference || meta.request_id || tx.id || '—')}</span>
+                <span>${escapeHtml(tx.reference || meta.request_id || meta.requestId || tx.id || '—')}</span>
                 <span>•</span>
                 <span>${escapeHtml(date)} ${escapeHtml(time)}</span>
               </div>
@@ -1075,8 +1219,7 @@ function renderTransactions() {
         transactionsList.appendChild(card);
       }
     }
-
-    function buildReceiptDetails(tx) {
+function buildReceiptDetails(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
       const actor = getActorInfo(tx);
@@ -1091,52 +1234,64 @@ function renderTransactions() {
       const after = meta.balance_after ?? meta.balanceAfter;
       const txId = tx.id || meta.transactionId || '—';
 
-      rows.push(detailItem('Transaction ID', escapeHtml(txId)));
-      rows.push(detailItem('Request ID', escapeHtml(requestId)));
+      rows.push(detailItem('Transaction ID', txId));
+      rows.push(detailItem('Request ID', requestId));
       rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', {
         logo: actor.logo,
         text: actor.label
       }));
 
       if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
-        const phone = meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || tx?.phone || '—';
-        rows.push(detailItem('Phone Number', escapeHtml(phone)));
+        const phone =
+          getNested(meta, 'providerResponse.data.phone') ||
+          getNested(meta, 'flutterwaveData.customer.phone_number') ||
+          meta.phone ||
+          meta.phone_number ||
+          meta.customer_number ||
+          meta.customer_id ||
+          meta.customerId ||
+          '—';
+
+        rows.push(detailItem('Phone Number', phone));
       }
 
       if (category === 'cable_tv' || category === 'cable') {
-        rows.push(detailItem('Customer Name', escapeHtml(meta.customer_name || meta.customerName || '—')));
-        rows.push(detailItem('Smartcard / IUC', escapeHtml(meta.customer_id || meta.smartcard_number || meta.account_number || '—')));
-        rows.push(detailItem('Package', escapeHtml(meta.packageDisplay || meta.packageName || meta.plan_name || '—')));
-        rows.push(detailItem('Subscription', escapeHtml((meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' '))));
+        rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
+        rows.push(detailItem('Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—'));
+        rows.push(detailItem('Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—'));
+        rows.push(detailItem('Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
       }
 
       if (category === 'betting') {
-        rows.push(detailItem('Betting ID', escapeHtml(meta.customer_id || meta.customerId || '—')));
+        rows.push(detailItem('Provider', meta.providerLabel || meta.service_id || '—'));
+        rows.push(detailItem('Betting ID', meta.customer_id || meta.customerId || '—'));
       }
 
       if (category === 'electricity') {
-        rows.push(detailItem('Customer Name', escapeHtml(meta.customer_name || meta.customerName || '—')));
-        rows.push(detailItem('Meter Number', escapeHtml(meta.meter_number || meta.meterNumber || meta.customer_id || '—')));
-        if (meta.token) rows.push(detailItem('Token', escapeHtml(meta.token)));
+        rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
+        rows.push(detailItem('Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—'));
+        if (meta.token) rows.push(detailItem('Token', meta.token));
       }
 
       if (category === 'wallet') {
-        rows.push(detailItem('Payment Method', escapeHtml(prettyName(meta.provider || meta.gateway || 'Flutterwave'))));
+        rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
+        const phone = getNested(meta, 'flutterwaveData.customer.phone_number') || '—';
+        rows.push(detailItem('Phone Number', phone));
       }
 
       if (before !== undefined && after !== undefined) {
-        rows.push(detailItem('Balance Before', escapeHtml(formatMoney(before))));
-        rows.push(detailItem('Balance After', escapeHtml(formatMoney(after))));
+        rows.push(detailItem('Balance Before', formatMoney(before)));
+        rows.push(detailItem('Balance After', formatMoney(after)));
       }
 
-      rows.push(detailItem('Amount', escapeHtml(formatMoney(tx.amount))));
-      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', escapeHtml(formatMoney(fee))));
-      rows.push(detailItem('Status', escapeHtml(status)));
-      rows.push(detailItem('Date', escapeHtml(date)));
-      rows.push(detailItem('Time', escapeHtml(time)));
-      rows.push(detailItem('Reference', escapeHtml(ref)));
+      rows.push(detailItem('Amount', formatMoney(tx.amount)));
+      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
+      rows.push(detailItem('Status', status));
+      rows.push(detailItem('Date', date));
+      rows.push(detailItem('Time', time));
+      rows.push(detailItem('Reference', ref));
 
-      if (tx.description) rows.push(detailItem('Description', escapeHtml(tx.description)));
+      if (tx.description) rows.push(detailItem('Description', tx.description));
 
       return rows.join('');
     }
@@ -1164,8 +1319,9 @@ function renderTransactions() {
     async function copySelectedId() {
       const tx = state.selected;
       if (!tx) return;
+
       const meta = getMeta(tx);
-      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || '';
+      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
       try {
         await navigator.clipboard.writeText(String(value));
         showToast('Transaction ID copied');
