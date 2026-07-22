@@ -6,47 +6,48 @@
   <title>FunSub | Transactions</title>
   <style>
     :root{
-      --bg:#07090d;
-      --bg-soft:#0d1016;
-      --card:#121722;
-      --card-2:#161c28;
-      --card-3:#1b2230;
-      --text:#f4f7fb;
-      --muted:#9aa3b2;
-      --line:rgba(255,255,255,.08);
       --gold:#d4af37;
       --gold-soft:rgba(212,175,55,.14);
-      --success:#22c55e;
-      --pending:#f59e0b;
-      --failed:#ef4444;
-      --reversed:#3b82f6;
-      --shadow:0 18px 50px rgba(0,0,0,.35);
-      --receipt-bg:#f6f7fb;
-      --receipt-text:#1f2937;
-      --receipt-muted:#6b7280;
-      --receipt-line:#e5e7eb;
-      --receipt-card:#ffffff;
-    }
-
-    body.light{
-      --bg:#f3f5f9;
-      --bg-soft:#ffffff;
-      --card:#ffffff;
-      --card-2:#ffffff;
-      --card-3:#f8fafc;
       --text:#111827;
       --muted:#6b7280;
-      --line:rgba(17,24,39,.09);
+      --border:#e5e7eb;
+      --bg:#ffffff;
+      --card:#ffffff;
+      --surface:#ffffff;
+      --input-bg:#ffffff;
+      --modal-bg:#ffffff;
+      --key-bg:#f9fafb;
+      --shadow:0 18px 45px rgba(0,0,0,.08);
+      --success:#0f7a3b;
+      --danger:#b42318;
+      --info:#1d4ed8;
+      --pending:#8a6d00;
+    }
+
+    body.dark{
       --gold:#d4af37;
-      --gold-soft:rgba(212,175,55,.12);
-      --shadow:0 16px 40px rgba(17,24,39,.12);
+      --gold-soft:#2a2310;
+      --text:#f3f4f6;
+      --muted:#b8c0cc;
+      --border:#2b2f38;
+      --bg:#0f1115;
+      --card:#1a1d24;
+      --surface:#1a1d24;
+      --input-bg:#232833;
+      --modal-bg:#1a1d24;
+      --key-bg:#232833;
+      --shadow:0 18px 45px rgba(0,0,0,.28);
+      --success:#34d399;
+      --danger:#f87171;
+      --info:#60a5fa;
+      --pending:#fbbf24;
     }
 
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
       margin:0;
-      background:radial-gradient(circle at top, rgba(212,175,55,.08), transparent 35%), var(--bg);
+      background:var(--bg);
       color:var(--text);
       font-family: Arial, Helvetica, sans-serif;
     }
@@ -111,7 +112,7 @@
     }
 
     .icon-btn{
-      border:1px solid var(--line);
+      border:1px solid var(--border);
       background:var(--card);
       color:var(--text);
       width:42px;
@@ -124,8 +125,8 @@
     }
 
     .panel{
-      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
-      border:1px solid var(--line);
+      background:var(--surface);
+      border:1px solid var(--border);
       border-radius:24px;
       box-shadow:var(--shadow);
       overflow:hidden;
@@ -140,7 +141,7 @@
 
     .summary-card{
       background:var(--card);
-      border:1px solid var(--line);
+      border:1px solid var(--border);
       border-radius:18px;
       padding:14px;
       min-height:92px;
@@ -154,8 +155,8 @@
     .summary-card .small{font-size:12px;color:var(--muted)}
     .summary-card.success .big{color:var(--success)}
     .summary-card.pending .big{color:var(--pending)}
-    .summary-card.failed .big{color:var(--failed)}
-    .summary-card.reversed .big{color:var(--reversed)}
+    .summary-card.failed .big{color:var(--danger)}
+    .summary-card.reversed .big{color:var(--info)}
 
     .controls{
       display:grid;
@@ -167,7 +168,7 @@
     .search-wrap,
     .select-wrap{
       background:var(--card);
-      border:1px solid var(--line);
+      border:1px solid var(--border);
       border-radius:16px;
       display:flex;
       align-items:center;
@@ -210,7 +211,7 @@
     }
 
     .pill{
-      border:1px solid var(--line);
+      border:1px solid var(--border);
       background:var(--card);
       color:var(--text);
       padding:10px 14px;
@@ -234,7 +235,7 @@
 
     .tx-card{
       background:var(--card);
-      border:1px solid var(--line);
+      border:1px solid var(--border);
       border-radius:20px;
       padding:14px;
       cursor:pointer;
@@ -277,8 +278,8 @@
     }
     .status-success{background:rgba(34,197,94,.12);color:var(--success);border-color:rgba(34,197,94,.25)}
     .status-pending{background:rgba(245,158,11,.12);color:var(--pending);border-color:rgba(245,158,11,.25)}
-    .status-failed{background:rgba(239,68,68,.12);color:var(--failed);border-color:rgba(239,68,68,.25)}
-    .status-reversed{background:rgba(59,130,246,.12);color:var(--reversed);border-color:rgba(59,130,246,.25)}
+    .status-failed{background:rgba(239,68,68,.12);color:var(--danger);border-color:rgba(239,68,68,.25)}
+    .status-reversed{background:rgba(59,130,246,.12);color:var(--info);border-color:rgba(59,130,246,.25)}
 
     .empty,
     .error-state,
@@ -287,7 +288,7 @@
       text-align:center;
       color:var(--muted);
       background:var(--card);
-      border:1px dashed var(--line);
+      border:1px dashed var(--border);
       border-radius:20px;
       margin:0 14px 14px;
     }
@@ -305,8 +306,8 @@
     }
 
     .receipt-shell{
-      width:min(100%, 760px);
-      max-height:92vh;
+      width:min(94vw, 420px);
+      max-height:86vh;
       overflow:auto;
       border-radius:28px;
       background:transparent;
@@ -314,8 +315,8 @@
     }
 
     .receipt-card{
-      background:var(--receipt-bg);
-      color:var(--receipt-text);
+      background:var(--bg);
+      color:var(--text);
       border-radius:28px;
       overflow:hidden;
       position:relative;
@@ -324,7 +325,7 @@
     .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
-      padding:24px 20px 42px;
+      padding:20px 18px 38px;
       text-align:center;
       position:relative;
     }
@@ -336,15 +337,15 @@
       right:-4%;
       bottom:-20px;
       height:44px;
-      background:var(--receipt-bg);
+      background:var(--bg);
       border-top-left-radius:50% 100%;
       border-top-right-radius:50% 100%;
     }
 
     .receipt-close{
       position:absolute;
-      top:16px;
-      right:16px;
+      top:14px;
+      right:14px;
       width:34px;
       height:34px;
       border-radius:50%;
@@ -357,11 +358,10 @@
     }
 
     .receipt-logo-wrap{
-      width:74px;
-      height:74px;
+      width:72px;
+      height:72px;
       border-radius:50%;
       margin:0 auto 10px;
-      padding:0;
       background:rgba(255,255,255,.06);
       display:grid;
       place-items:center;
@@ -369,11 +369,16 @@
       border:1px solid rgba(212,175,55,.35);
     }
 
-    .receipt-logo-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .receipt-logo-wrap img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
 
     .receipt-brand{
       margin:0;
-      font-size:26px;
+      font-size:24px;
       font-weight:900;
       letter-spacing:-.03em;
     }
@@ -393,8 +398,8 @@
 
     .status-badge{
       width:max-content;
-      margin:4px auto 18px;
-      padding:12px 18px;
+      margin:4px auto 16px;
+      padding:11px 16px;
       border-radius:999px;
       font-weight:800;
       letter-spacing:.04em;
@@ -403,33 +408,37 @@
       gap:10px;
       text-transform:uppercase;
       border:1px solid transparent;
+      font-size:13px;
     }
     .status-badge .dot{
-      width:14px;height:14px;border-radius:50%;display:inline-block
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      display:inline-block;
     }
     .status-badge.success{background:rgba(34,197,94,.12);color:#1f8f4b;border-color:rgba(34,197,94,.22)}
     .status-badge.success .dot{background:var(--success)}
     .status-badge.pending{background:rgba(245,158,11,.12);color:#b7791f;border-color:rgba(245,158,11,.22)}
     .status-badge.pending .dot{background:var(--pending)}
     .status-badge.failed{background:rgba(239,68,68,.12);color:#bb3d3d;border-color:rgba(239,68,68,.22)}
-    .status-badge.failed .dot{background:var(--failed)}
+    .status-badge.failed .dot{background:var(--danger)}
     .status-badge.reversed{background:rgba(59,130,246,.12);color:#2d6ddf;border-color:rgba(59,130,246,.22)}
-    .status-badge.reversed .dot{background:var(--reversed)}
+    .status-badge.reversed .dot{background:var(--info)}
 
     .amount-card{
       background:linear-gradient(180deg, #fffaf0, #fffdf8);
       border:1px solid rgba(212,175,55,.28);
       border-radius:22px;
-      padding:20px 14px;
+      padding:18px 14px;
       text-align:center;
       margin-bottom:16px;
     }
-    .amount-card .label{font-size:15px;color:#6b7280;margin-bottom:6px}
-    .amount-card .amount{font-size:50px;line-height:1;font-weight:900;letter-spacing:-.05em;color:#111827}
+    .amount-card .label{font-size:14px;color:#6b7280;margin-bottom:6px}
+    .amount-card .amount{font-size:34px;line-height:1;font-weight:900;letter-spacing:-.05em;color:#111827}
 
     .detail-card{
       background:#fff;
-      border:1px solid var(--receipt-line);
+      border:1px solid #e5e7eb;
       border-radius:20px;
       padding:12px 14px;
       box-shadow:0 10px 28px rgba(17,24,39,.04);
@@ -441,7 +450,7 @@
       justify-content:space-between;
       gap:14px;
       padding:13px 0;
-      border-bottom:1px dashed var(--receipt-line);
+      border-bottom:1px dashed #e5e7eb;
       font-size:14px;
     }
     .detail-row:last-child{border-bottom:0}
@@ -457,16 +466,22 @@
     }
 
     .provider-mini img{
-      width:36px;
-      height:36px;
+      width:34px;
+      height:34px;
       object-fit:cover;
       border-radius:8px;
       border:1px solid rgba(0,0,0,.05);
       background:#fff;
-      flex:0 0 36px;
+      flex:0 0 34px;
     }
 
-    .provider-mini span{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .provider-mini span{
+      display:inline-block;
+      max-width:190px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
 
     .receipt-footer{
       text-align:center;
@@ -474,7 +489,11 @@
       padding:18px 8px 0;
       font-size:13px;
     }
-    .receipt-footer strong{display:block;color:#0f172a;margin-top:5px}
+    .receipt-footer strong{
+      display:block;
+      color:#0f172a;
+      margin-top:5px;
+    }
     .receipt-footer .gold{color:#c89511;font-weight:700}
 
     .button-grid{
@@ -499,8 +518,6 @@
     .receipt-btn.dark{background:#0b0b0d;color:#fff}
     .receipt-btn.gold{background:var(--gold);color:#111}
     .receipt-btn.light{background:#f3f4f6;color:#111827;border:1px solid #e5e7eb}
-
-    .receipt-btn svg{width:18px;height:18px;flex:0 0 18px}
 
     .toast{
       position:fixed;
@@ -536,7 +553,6 @@
     @media (max-width: 900px){
       .summary-grid{grid-template-columns:repeat(2,1fr)}
       .controls{grid-template-columns:1fr}
-      .amount-card .amount{font-size:42px}
     }
 
     @media (max-width: 520px){
@@ -546,10 +562,10 @@
       .summary-card{min-height:84px}
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
-      .receipt-shell{max-height:94vh}
-      .receipt-header{padding:20px 14px 42px}
-      .receipt-brand{font-size:24px}
-      .amount-card .amount{font-size:38px}
+      .receipt-shell{max-height:88vh}
+      .receipt-header{padding:18px 14px 38px}
+      .receipt-brand{font-size:22px}
+      .amount-card .amount{font-size:32px}
       .detail-label{min-width:92px}
       .provider-mini span{max-width:120px}
     }
@@ -560,7 +576,7 @@
     <div class="topbar">
       <div class="brand">
         <div class="brand-badge" title="FunSub logo">
-          <img id="appLogo" src="./icons/funsub_logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
+          <img id="appLogo" src="./icons/PhoneSub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
         </div>
         <div class="brand-text">
           <h1>Transactions</h1>
@@ -569,7 +585,6 @@
       </div>
       <div class="top-actions">
         <button class="icon-btn" id="refreshBtn" title="Refresh">⟳</button>
-        <button class="icon-btn" id="themeBtn" title="Toggle theme">☾</button>
       </div>
     </div>
 
@@ -641,14 +656,13 @@
       <div id="transactionsList" class="transactions"></div>
     </div>
   </div>
-
-  <div class="modal-overlay" id="receiptModal" aria-hidden="true">
+<div class="modal-overlay" id="receiptModal" aria-hidden="true">
     <div class="receipt-shell">
       <div class="receipt-card" id="receiptCard">
         <div class="receipt-header">
           <button class="receipt-close" id="closeReceiptBtn" aria-label="Close receipt">×</button>
           <div class="receipt-logo-wrap">
-            <img id="receiptLogo" src="./icons/funsub_logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
+            <img id="receiptLogo" src="./icons/PhoneSub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
           </div>
           <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
           <div class="receipt-subtitle">Transaction Receipt</div>
@@ -674,12 +688,12 @@
               <span>⧉</span> Copy ID
             </button>
             <button class="receipt-btn gold" id="shareBtn">
-              <span>↗</span> Share Receipt
+              <span>↗</span> Share Image
             </button>
-            <button class="receipt-btn dark" id="pdfBtn">
-              <span>⌘</span> Download PDF
+            <button class="receipt-btn dark" id="downloadBtn">
+              <span>⌘</span> Download Image
             </button>
-            <button class="receipt-btn dark" id="imageBtn">
+            <button class="receipt-btn dark" id="saveBtn">
               <span>▣</span> Save Image
             </button>
           </div>
@@ -689,7 +703,10 @@
   </div>
 
   <div class="toast" id="toast">Copied</div>
-<script>
+
+  <script src="theme.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
     const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
     const themeKey = 'funsub_theme';
@@ -703,7 +720,6 @@
     const statusFilter = document.getElementById('statusFilter');
     const serviceFilter = document.getElementById('serviceFilter');
     const refreshBtn = document.getElementById('refreshBtn');
-    const themeBtn = document.getElementById('themeBtn');
     const quickPills = document.getElementById('quickPills');
 
     const receiptModal = document.getElementById('receiptModal');
@@ -714,8 +730,8 @@
     const statusBadgeText = document.getElementById('statusBadgeText');
     const copyBtn = document.getElementById('copyBtn');
     const shareBtn = document.getElementById('shareBtn');
-    const pdfBtn = document.getElementById('pdfBtn');
-    const imageBtn = document.getElementById('imageBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const saveBtn = document.getElementById('saveBtn');
     const toast = document.getElementById('toast');
 
     const providerLogos = {
@@ -739,7 +755,8 @@
       merrybet: 'https://i.postimg.cc/xyz/merrybet.png',
       naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
       nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
-      supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg'
+      supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg',
+      flutterwave: 'https://i.postimg.cc/XYZ/placeholder.png'
     };
 
     const state = {
@@ -748,15 +765,8 @@
       selected: null,
       preset: 'all'
     };
-
-    function getToken() {
+function getToken() {
       return localStorage.getItem(tokenKey) || '';
-    }
-
-    function setTheme(theme) {
-      document.body.classList.toggle('light', theme === 'light');
-      localStorage.setItem(themeKey, theme);
-      themeBtn.textContent = theme === 'light' ? '☀' : '☾';
     }
 
     function showToast(message) {
@@ -795,47 +805,92 @@
       return { date, time };
     }
 
+    function prettyName(value) {
+      const v = String(value || '').trim();
+      if (!v) return '';
+      const key = v.toLowerCase();
+      const map = {
+        mtn: 'MTN',
+        airtel: 'Airtel',
+        glo: 'GLO',
+        '9mobile': '9mobile',
+        dstv: 'DStv',
+        gotv: 'GOtv',
+        startimes: 'Startimes',
+        showmax: 'Showmax',
+        bet9ja: 'Bet9ja',
+        '1xbet': '1xBet',
+        bangbet: 'BangBet',
+        betking: 'BetKing',
+        betland: 'BetLand',
+        betlion: 'BetLion',
+        betway: 'BetWay',
+        cloudbet: 'CloudBet',
+        livescorebet: 'LiveScoreBet',
+        merrybet: 'MerryBet',
+        naijabet: 'NaijaBet',
+        nairabet: 'NairaBet',
+        supabet: 'SupaBet',
+        flutterwave: 'Flutterwave'
+      };
+      return map[key] || v;
+    }
+
     function getCategory(tx) {
-      return normalizeStatus(tx?.category || tx?.type || tx?.meta?.serviceType || tx?.meta?.category);
+      const meta = getMeta(tx);
+      return normalizeStatus(tx?.category || tx?.type || meta?.serviceType || meta?.category);
     }
 
     function getMeta(tx) {
       return safeJsonParse(tx?.meta);
     }
 
-    function getVisual(tx) {
+    function getActorInfo(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
-      let key = normalizeStatus(meta.provider || meta.network || meta.service_id || meta.serviceId || category || '');
-      if (!key) key = 'generic';
+      const networkMode = ['airtime', 'data', 'recharge_pin', 'data_pin'].includes(category);
 
-      const logo = providerLogos[key] || providerLogos[normalizeStatus(meta.service_id)] || providerLogos[normalizeStatus(meta.network)] || '';
-      const text = meta.providerLabel || meta.provider || meta.network || tx?.description || category || 'Transaction';
-      return { logo, text };
+      let raw = '';
+      if (networkMode) {
+        raw = meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || '';
+      } else if (category === 'wallet') {
+        raw = meta.provider || meta.gateway || 'Flutterwave';
+      } else {
+        raw = meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || '';
+      }
+
+      if (normalizeStatus(raw) === 'iacafe') {
+        raw = networkMode
+          ? (meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || '')
+          : (meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || '');
+      }
+
+      const label = prettyName(raw || (networkMode ? 'Network' : 'Provider'));
+      const key = normalizeStatus(raw || label);
+      const logo = providerLogos[key] || providerLogos[normalizeStatus(label)] || '';
+      return { label, logo, isNetwork: networkMode };
+    }
+
+    function getServiceLabel(tx) {
+      const meta = getMeta(tx);
+      return prettyName(meta.serviceName || meta.serviceType || tx?.category || tx?.type || 'Transaction');
     }
 
     function getTitle(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
-      const provider = meta.providerLabel || meta.provider || meta.network || '';
-      const requestId = meta.request_id || meta.requestId || tx?.reference || '';
-      const desc = tx?.description || meta.description || '';
+      const actor = getActorInfo(tx);
 
-      if (category === 'airtime') return `${provider || 'Airtime'} Airtime`;
-      if (category === 'data') return `${provider || 'Data'} Data`;
-      if (category === 'cable_tv' || category === 'cable') return `${provider || 'Cable'} Subscription`;
-      if (category === 'betting') return `${provider || 'Betting'} Funding`;
-      if (category === 'electricity') return `${provider || 'Electricity'} Payment`;
+      if (category === 'airtime') return `${actor.label} Airtime`;
+      if (category === 'data') return `${actor.label} Data`;
+      if (category === 'cable_tv' || category === 'cable') return `${actor.label} Subscription`;
+      if (category === 'betting') return `${actor.label} Funding`;
+      if (category === 'electricity') return `${actor.label} Payment`;
       if (category === 'wallet') return 'Wallet Funding';
-      if (category === 'recharge_pin') return `${provider || 'Network'} Recharge PIN`;
-      if (category === 'data_pin') return `${provider || 'Network'} Data PIN`;
-      if (category === 'exam_pin') return `${provider || 'Exam'} Exam PIN`;
-      return desc || requestId || 'Transaction';
-    }
-
-    function getServiceLabel(tx) {
-      const meta = getMeta(tx);
-      return meta.serviceName || meta.serviceType || tx?.category || tx?.type || 'Transaction';
+      if (category === 'recharge_pin') return `${actor.label} Recharge PIN`;
+      if (category === 'data_pin') return `${actor.label} Data PIN`;
+      if (category === 'exam_pin') return `${actor.label} Exam PIN`;
+      return tx?.description || meta.description || meta.request_id || 'Transaction';
     }
 
     function getStatusLabel(tx) {
@@ -895,13 +950,18 @@
         meta.customer_id,
         meta.customerId,
         meta.phone,
+        meta.phone_number,
+        meta.customer_number,
         meta.smartcard_number,
         meta.meter_number,
         meta.account_number,
         meta.service_id,
         meta.serviceId,
         meta.provider,
+        meta.providerLabel,
         meta.network,
+        meta.network_name,
+        meta.networkName,
         meta.plan_name,
         meta.packageName,
         meta.package_name,
@@ -910,7 +970,8 @@
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(q);
     }
-function escapeHtml(str) {
+
+    function escapeHtml(str) {
       return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -956,18 +1017,18 @@ function escapeHtml(str) {
 
       for (const tx of filtered) {
         const meta = getMeta(tx);
-        const visual = getVisual(tx);
+        const actor = getActorInfo(tx);
         const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
         const amount = formatMoney(tx.amount);
         const title = getTitle(tx);
         const serviceLabel = getServiceLabel(tx);
-
         const card = document.createElement('div');
+
         card.className = 'tx-card';
         card.innerHTML = `
           <div class="tx-left">
             <div class="tx-logo">
-              ${visual.logo ? `<img src="${visual.logo}" alt="${escapeHtml(visual.text)}">` : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((visual.text || 'TX').slice(0,2).toUpperCase())}</span>`}
+              ${actor.logo ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">` : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
             </div>
             <div class="tx-meta">
               <div class="tx-title">${escapeHtml(title)}</div>
@@ -985,15 +1046,15 @@ function escapeHtml(str) {
             <div class="tx-amount">${amount}</div>
           </div>
         `;
+
         card.addEventListener('click', () => openReceipt(tx));
         transactionsList.appendChild(card);
       }
     }
-
-    function buildReceiptDetails(tx) {
+function buildReceiptDetails(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
-      const visual = getVisual(tx);
+      const actor = getActorInfo(tx);
       const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
       const status = statusText(tx);
       const rows = [];
@@ -1007,13 +1068,13 @@ function escapeHtml(str) {
 
       rows.push(detailItem('Transaction ID', escapeHtml(txId)));
       rows.push(detailItem('Request ID', escapeHtml(requestId)));
-      rows.push(detailItem(category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin' ? 'Network' : 'Provider', '', {
-        logo: visual.logo,
-        text: visual.text
+      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', {
+        logo: actor.logo,
+        text: actor.label
       }));
 
       if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
-        const phone = meta.phone || meta.customer_id || meta.customerId || '—';
+        const phone = meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || tx?.phone || '—';
         rows.push(detailItem('Phone Number', escapeHtml(phone)));
       }
 
@@ -1035,7 +1096,7 @@ function escapeHtml(str) {
       }
 
       if (category === 'wallet') {
-        rows.push(detailItem('Payment Method', escapeHtml(meta.provider || meta.gateway || 'Flutterwave')));
+        rows.push(detailItem('Payment Method', escapeHtml(prettyName(meta.provider || meta.gateway || 'Flutterwave'))));
       }
 
       if (before !== undefined && after !== undefined) {
@@ -1089,224 +1150,85 @@ function escapeHtml(str) {
       }
     }
 
-    async function shareReceipt() {
+    async function captureReceiptCanvas() {
+      const node = document.getElementById('receiptCard');
+      if (!node || typeof html2canvas !== 'function') {
+        throw new Error('Image capture is not available');
+      }
+
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        backgroundColor: null,
+        useCORS: true,
+        allowTaint: true
+      });
+
+      return canvas;
+    }
+
+    function canvasToBlob(canvas) {
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), 'image/png', 1);
+      });
+    }
+
+    async function shareReceiptImage() {
       const tx = state.selected;
       if (!tx) return;
-      const meta = getMeta(tx);
-      const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
-      const text = [
-        'FunSub Transaction Receipt',
-        `Status: ${statusText(tx)}`,
-        `Service: ${getTitle(tx)}`,
-        `Amount: ${formatMoney(tx.amount)}`,
-        `Reference: ${tx.reference || meta.request_id || tx.id || ''}`,
-        `Date: ${date}`,
-        `Time: ${time}`
-      ].join('\n');
 
-      if (navigator.share) {
-        try {
-          await navigator.share({ title: 'FunSub Receipt', text });
+      try {
+        const canvas = await captureReceiptCanvas();
+        const blob = await canvasToBlob(canvas);
+        if (!blob) throw new Error('Unable to create image');
+
+        const fileName = `funsub-receipt-${String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: 'FunSub Receipt',
+            text: 'FunSub Transaction Receipt',
+            files: [file]
+          });
           return;
-        } catch {}
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1200);
+      } catch (err) {
+        console.error(err);
+        showToast('Unable to share image');
       }
-      await navigator.clipboard.writeText(text);
-      showToast('Receipt text copied');
-    }
-function printReceipt() {
-      window.print();
     }
 
-    function downloadReceiptImage() {
+    async function downloadReceiptImage() {
       const tx = state.selected;
       if (!tx) return;
 
-      const canvas = document.createElement('canvas');
-      const width = 1440;
-      const height = 2200;
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
+      try {
+        const canvas = await captureReceiptCanvas();
+        const blob = await canvasToBlob(canvas);
+        if (!blob) throw new Error('Unable to create image');
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.fillStyle = '#0b0b0d';
-      ctx.fillRect(0, 0, width, 360);
-
-      ctx.strokeStyle = '#d4af37';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(width / 2, 200, 130, 0, Math.PI * 2);
-      ctx.stroke();
-
-      const logoImg = new Image();
-      logoImg.crossOrigin = 'anonymous';
-      const logoSrc = './icons/funsub_logo.png';
-
-      const drawRest = () => {
-        ctx.fillStyle = '#d4af37';
-        ctx.font = 'bold 64px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('FunSub', width / 2, 300);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '28px Arial';
-        ctx.fillText('Transaction Receipt', width / 2, 340);
-
-        const status = statusText(tx);
-        const statusColors = {
-          successful: '#16a34a',
-          pending: '#d97706',
-          failed: '#dc2626',
-          reversed: '#2563eb'
-        };
-        const badgeColor = statusColors[normalizeStatus(status).toLowerCase()] || '#16a34a';
-        roundRect(ctx, 420, 390, 600, 70, 35, '#f2fff6', badgeColor, 3);
-        ctx.fillStyle = badgeColor;
-        ctx.font = 'bold 30px Arial';
-        ctx.fillText(status.toUpperCase(), width / 2, 437);
-
-        roundRect(ctx, 170, 500, 1100, 220, 24, '#fff8e6', '#f0d98a', 2);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '28px Arial';
-        ctx.fillText('Amount', width / 2, 565);
-        ctx.fillStyle = '#111827';
-        ctx.font = 'bold 78px Arial';
-        ctx.fillText(formatMoney(tx.amount), width / 2, 650);
-
-        roundRect(ctx, 140, 770, 1160, 1120, 26, '#ffffff', '#e5e7eb', 2);
-        ctx.fillStyle = '#1f2937';
-        ctx.font = '28px Arial';
-
-        const meta = getMeta(tx);
-        const category = getCategory(tx);
-        const visual = getVisual(tx);
-        const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
-        const requestId = meta.request_id || meta.requestId || tx.reference || tx.id || '—';
-        const ref = tx.reference || meta.reference || requestId;
-        const fee = meta.fee_amount ?? meta.fee ?? 0;
-        const before = meta.balance_before ?? meta.balanceBefore;
-        const after = meta.balance_after ?? meta.balanceAfter;
-
-        const lines = [
-          ['Transaction ID', tx.id || '—'],
-          ['Request ID', requestId],
-          [category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin' ? 'Network' : 'Provider', visual.text],
-        ];
-        if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
-          lines.push(['Phone Number', meta.phone || meta.customer_id || meta.customerId || '—']);
-        }
-        if (category === 'cable_tv' || category === 'cable') {
-          lines.push(['Customer Name', meta.customer_name || meta.customerName || '—']);
-          lines.push(['Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—']);
-          lines.push(['Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—']);
-          lines.push(['Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')]);
-        }
-        if (category === 'betting') lines.push(['Customer ID', meta.customer_id || meta.customerId || '—']);
-        if (category === 'electricity') {
-          lines.push(['Customer Name', meta.customer_name || meta.customerName || '—']);
-          lines.push(['Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—']);
-          if (meta.token) lines.push(['Token', meta.token]);
-        }
-        if (category === 'wallet') lines.push(['Payment Method', meta.provider || meta.gateway || 'Flutterwave']);
-        if (before !== undefined && after !== undefined) {
-          lines.push(['Balance Before', formatMoney(before)]);
-          lines.push(['Balance After', formatMoney(after)]);
-        }
-        lines.push(['Amount', formatMoney(tx.amount)]);
-        if (fee !== undefined && Number(fee) > 0) lines.push(['Fee', formatMoney(fee)]);
-        lines.push(['Status', statusText(tx)]);
-        lines.push(['Date', date]);
-        lines.push(['Time', time]);
-        lines.push(['Reference', ref]);
-
-        let y = 840;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.setLineDash([8, 8]);
-
-        for (const [label, value] of lines) {
-          ctx.beginPath();
-          ctx.moveTo(170, y + 22);
-          ctx.lineTo(1270, y + 22);
-          ctx.stroke();
-
-          ctx.setLineDash([]);
-          ctx.fillStyle = '#4b5563';
-          ctx.font = '24px Arial';
-          ctx.fillText(label, 190, y);
-          ctx.fillStyle = '#111827';
-          ctx.font = 'bold 26px Arial';
-          drawRightText(ctx, value, 1250, y, 460, 28);
-          y += 72;
-          ctx.setLineDash([8, 8]);
-        }
-
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '24px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Thank you for using our service!', width / 2, 1960);
-        ctx.fillStyle = '#d4af37';
-        ctx.font = 'bold 26px Arial';
-        ctx.fillText('Powered by FunSub', width / 2, 2005);
-
-        const downloadLink = document.createElement('a');
-        downloadLink.download = `funsub-receipt-${(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
-        downloadLink.href = canvas.toDataURL('image/png');
-        downloadLink.click();
-      };
-
-      logoImg.onload = () => {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(width / 2, 150, 64, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(logoImg, width / 2 - 64, 86, 128, 128);
-        ctx.restore();
-        drawRest();
-      };
-      logoImg.onerror = () => drawRest();
-      logoImg.src = logoSrc;
-    }
-
-    function roundRect(ctx, x, y, w, h, r, fill, stroke = null, lineWidth = 1) {
-      const radius = Math.min(r, w / 2, h / 2);
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.arcTo(x + w, y, x + w, y + h, radius);
-      ctx.arcTo(x + w, y + h, x, y + h, radius);
-      ctx.arcTo(x, y + h, x, y, radius);
-      ctx.arcTo(x, y, x + w, y, radius);
-      ctx.closePath();
-      ctx.fillStyle = fill;
-      ctx.fill();
-      if (stroke) {
-        ctx.lineWidth = lineWidth;
-        ctx.strokeStyle = stroke;
-        ctx.stroke();
+        const fileName = `funsub-receipt-${String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1200);
+      } catch (err) {
+        console.error(err);
+        showToast('Unable to download image');
       }
     }
 
-    function drawRightText(ctx, text, rightX, y, maxWidth, lineHeight) {
-      const str = String(text);
-      const words = str.split(/\s+/);
-      let line = '';
-      const lines = [];
-      for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-          lines.push(line.trim());
-          line = words[n] + ' ';
-        } else {
-          line = testLine;
-        }
-      }
-      lines.push(line.trim());
-      ctx.textAlign = 'right';
-      lines.forEach((ln, idx) => ctx.fillText(ln, rightX, y + idx * lineHeight));
-      ctx.textAlign = 'center';
+    function saveReceiptImage() {
+      downloadReceiptImage();
     }
 
     async function loadDashboardData() {
@@ -1340,7 +1262,12 @@ function printReceipt() {
           throw new Error(data.message || 'Unable to load transactions');
         }
 
-        state.all = Array.isArray(data.transactions) ? data.transactions : Array.isArray(data?.data?.transactions) ? data.data.transactions : [];
+        state.all = Array.isArray(data.transactions)
+          ? data.transactions
+          : Array.isArray(data?.data?.transactions)
+            ? data.data.transactions
+            : [];
+
         renderTransactions();
       } catch (err) {
         console.error('Transactions load error:', err);
@@ -1365,20 +1292,21 @@ function printReceipt() {
     statusFilter.addEventListener('change', renderTransactions);
     serviceFilter.addEventListener('change', renderTransactions);
     refreshBtn.addEventListener('click', loadDashboardData);
-    themeBtn.addEventListener('click', () => setTheme(document.body.classList.contains('light') ? 'dark' : 'light'));
+
     closeReceiptBtn.addEventListener('click', closeReceipt);
     receiptModal.addEventListener('click', (e) => {
       if (e.target === receiptModal) closeReceipt();
     });
+
     copyBtn.addEventListener('click', copySelectedId);
-    shareBtn.addEventListener('click', shareReceipt);
-    pdfBtn.addEventListener('click', printReceipt);
-    imageBtn.addEventListener('click', downloadReceiptImage);
+    shareBtn.addEventListener('click', shareReceiptImage);
+    downloadBtn.addEventListener('click', downloadReceiptImage);
+    saveBtn.addEventListener('click', saveReceiptImage);
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && receiptModal.style.display === 'flex') closeReceipt();
     });
 
-    setTheme(localStorage.getItem(themeKey) || 'dark');
     loadDashboardData();
   </script>
 </body>
