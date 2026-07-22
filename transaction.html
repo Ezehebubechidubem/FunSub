@@ -7,8 +7,8 @@
 
   <style>
     :root{
-      --gold:#d4af37;
-      --gold-soft:rgba(212,175,55,.14);
+      --gold:#c89a24;
+      --gold-soft:rgba(200,154,36,.14);
       --text:#111827;
       --muted:#6b7280;
       --border:#e5e7eb;
@@ -26,7 +26,7 @@
     }
 
     body.dark{
-      --gold:#d4af37;
+      --gold:#c89a24;
       --gold-soft:#2a2310;
       --text:#f3f4f6;
       --muted:#b8c0cc;
@@ -78,8 +78,8 @@
       width:48px;
       height:48px;
       border-radius:16px;
-      background:linear-gradient(180deg, rgba(212,175,55,.24), rgba(212,175,55,.08));
-      border:1px solid rgba(212,175,55,.35);
+      background:linear-gradient(180deg, rgba(200,154,36,.24), rgba(200,154,36,.08));
+      border:1px solid rgba(200,154,36,.35);
       display:grid;
       place-items:center;
       box-shadow:var(--shadow);
@@ -223,7 +223,7 @@
 
     .pill.active{
       background:var(--gold-soft);
-      border-color:rgba(212,175,55,.45);
+      border-color:rgba(200,154,36,.45);
       color:var(--gold);
       font-weight:700;
     }
@@ -249,7 +249,7 @@
 
     .tx-card:hover{
       transform:translateY(-1px);
-      border-color:rgba(212,175,55,.35);
+      border-color:rgba(200,154,36,.35);
     }
 
     .tx-left{
@@ -349,7 +349,7 @@
     }
 
     .receipt-shell{
-      width:min(92vw, 400px);
+      width:min(92vw, 392px);
       max-height:none;
       overflow:visible;
       border-radius:28px;
@@ -363,13 +363,13 @@
       border-radius:28px;
       overflow:hidden;
       position:relative;
-      border:1px solid rgba(212,175,55,.55);
+      border:1px solid rgba(200,154,36,.55);
     }
 
     .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
-      padding:14px 14px 26px;
+      padding:13px 12px 24px;
       text-align:center;
       position:relative;
     }
@@ -379,8 +379,8 @@
       position:absolute;
       left:-4%;
       right:-4%;
-      bottom:-16px;
-      height:34px;
+      bottom:-15px;
+      height:32px;
       background:#f7f7f7;
       border-top-left-radius:50% 100%;
       border-top-right-radius:50% 100%;
@@ -402,15 +402,15 @@
     }
 
     .receipt-logo-wrap{
-      width:58px;
-      height:58px;
+      width:54px;
+      height:54px;
       border-radius:50%;
       margin:0 auto 8px;
       background:rgba(255,255,255,.06);
       display:grid;
       place-items:center;
       overflow:hidden;
-      border:1px solid rgba(212,175,55,.35);
+      border:1px solid rgba(200,154,36,.35);
     }
 
     .receipt-logo-wrap img{
@@ -422,7 +422,7 @@
 
     .receipt-brand{
       margin:0;
-      font-size:20px;
+      font-size:19px;
       font-weight:900;
       letter-spacing:-.03em;
       line-height:1;
@@ -432,20 +432,20 @@
 
     .receipt-subtitle{
       margin:3px 0 0;
-      font-size:13px;
+      font-size:12px;
       color:#e5e7eb;
       opacity:.92;
     }
 
     .receipt-body{
-      padding:12px 12px 14px;
+      padding:10px 10px 12px;
       margin-top:4px;
     }
 
     .status-badge{
       width:max-content;
-      margin:0 auto 10px;
-      padding:8px 13px;
+      margin:0 auto 9px;
+      padding:7px 12px;
       border-radius:999px;
       font-weight:800;
       letter-spacing:.04em;
@@ -454,7 +454,7 @@
       gap:10px;
       text-transform:uppercase;
       border:1px solid transparent;
-      font-size:12px;
+      font-size:11px;
     }
 
     .status-badge .dot{
@@ -475,11 +475,11 @@
 
     .amount-card{
       background:linear-gradient(180deg, #fffaf0, #fffdf8);
-      border:1px solid rgba(212,175,55,.28);
+      border:1px solid rgba(200,154,36,.28);
       border-radius:22px;
-      padding:12px 10px;
+      padding:11px 9px;
       text-align:center;
-      margin-bottom:10px;
+      margin-bottom:9px;
     }
 
     .amount-card .label{
@@ -489,7 +489,7 @@
     }
 
     .amount-card .amount{
-      font-size:28px;
+      font-size:26px;
       line-height:1;
       font-weight:900;
       letter-spacing:-.05em;
@@ -500,7 +500,7 @@
       background:#fff;
       border:1px solid #e5e7eb;
       border-radius:20px;
-      padding:8px 10px;
+      padding:8px 9px;
       box-shadow:0 10px 28px rgba(17,24,39,.04);
     }
 
@@ -508,18 +508,18 @@
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:12px;
-      padding:9px 0;
+      gap:10px;
+      padding:8px 0;
       border-bottom:1px dashed #e5e7eb;
-      font-size:13px;
-      line-height:1.25;
+      font-size:12px;
+      line-height:1.2;
     }
 
     .detail-row:last-child{border-bottom:0}
 
     .detail-label{
       color:#4b5563;
-      min-width:92px;
+      min-width:84px;
       flex:0 0 auto;
     }
 
@@ -529,6 +529,32 @@
       text-align:right;
       word-break:break-word;
       flex:1 1 auto;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      min-width:0;
+    }
+
+    .detail-text{
+      min-width:0;
+      flex:1 1 auto;
+    }
+
+    .mini-copy-btn{
+      width:22px;
+      height:22px;
+      border:0;
+      border-radius:7px;
+      background:rgba(200,154,36,.12);
+      color:var(--gold);
+      font-size:13px;
+      line-height:1;
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      flex:0 0 22px;
+      padding:0;
     }
 
     .provider-mini{
@@ -537,21 +563,22 @@
       gap:8px;
       justify-content:flex-end;
       vertical-align:middle;
+      min-width:0;
     }
 
     .provider-mini img{
-      width:34px;
-      height:34px;
+      width:30px;
+      height:30px;
       object-fit:cover;
       border-radius:8px;
       border:1px solid rgba(0,0,0,.05);
       background:#fff;
-      flex:0 0 34px;
+      flex:0 0 30px;
     }
 
     .provider-mini span{
       display:inline-block;
-      max-width:160px;
+      max-width:120px;
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
@@ -560,21 +587,21 @@
     .button-grid{
       display:grid;
       grid-template-columns:repeat(2,1fr);
-      gap:10px;
-      margin-top:10px;
+      gap:9px;
+      margin-top:9px;
     }
 
     .receipt-btn{
-      height:48px;
+      height:44px;
       border:0;
       border-radius:16px;
       cursor:pointer;
       font-weight:800;
-      font-size:14px;
+      font-size:13px;
       display:flex;
       align-items:center;
       justify-content:center;
-      gap:10px;
+      gap:8px;
     }
 
     .receipt-btn.dark{background:#0b0b0d;color:#fff}
@@ -584,8 +611,8 @@
     .receipt-footer{
       text-align:center;
       color:#6b7280;
-      padding:12px 8px 0;
-      font-size:12px;
+      padding:10px 8px 0;
+      font-size:11px;
       line-height:1.35;
     }
 
@@ -596,7 +623,7 @@
     }
 
     .receipt-footer .gold{
-      color:#c89511;
+      color:var(--gold);
       font-weight:700;
     }
 
@@ -648,23 +675,23 @@
       .summary-card{min-height:84px}
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
-      .receipt-shell{width:min(92vw, 386px)}
-      .receipt-header{padding:13px 12px 24px}
-      .receipt-header::after{height:30px;bottom:-14px}
-      .receipt-logo-wrap{width:54px;height:54px}
-      .receipt-brand{font-size:19px}
-      .receipt-subtitle{font-size:12px}
-      .receipt-body{padding:10px 10px 12px}
-      .status-badge{margin-bottom:9px;padding:7px 12px;font-size:11px}
-      .amount-card{padding:11px 9px;margin-bottom:9px}
-      .amount-card .amount{font-size:26px}
-      .detail-card{padding:8px 9px}
-      .detail-row{padding:8px 0;font-size:12px;gap:10px}
-      .detail-label{min-width:84px}
-      .provider-mini span{max-width:110px}
-      .button-grid{gap:9px;margin-top:9px}
-      .receipt-btn{height:44px;font-size:13px}
-      .receipt-footer{padding-top:10px;font-size:11px}
+      .receipt-shell{width:min(92vw, 384px)}
+      .receipt-header{padding:12px 11px 22px}
+      .receipt-header::after{height:28px;bottom:-13px}
+      .receipt-logo-wrap{width:50px;height:50px}
+      .receipt-brand{font-size:18px}
+      .receipt-subtitle{font-size:11px}
+      .receipt-body{padding:9px 9px 11px}
+      .status-badge{margin-bottom:8px;padding:6px 11px;font-size:10px}
+      .amount-card{padding:10px 8px;margin-bottom:8px}
+      .amount-card .amount{font-size:24px}
+      .detail-card{padding:7px 8px}
+      .detail-row{padding:7px 0;font-size:11px;gap:8px}
+      .detail-label{min-width:78px}
+      .provider-mini span{max-width:96px}
+      .button-grid{gap:8px;margin-top:8px}
+      .receipt-btn{height:41px;font-size:12px}
+      .receipt-footer{padding-top:9px;font-size:10px}
     }
   </style>
 </head>
@@ -760,7 +787,7 @@
         <div class="receipt-header">
           <button class="receipt-close" id="closeReceiptBtn" type="button" aria-label="Close receipt">×</button>
           <div class="receipt-logo-wrap">
-            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
+            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
           </div>
           <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
           <div class="receipt-subtitle">Transaction Receipt</div>
@@ -879,6 +906,18 @@
       toast.classList.add('show');
       clearTimeout(window.__toastTimer);
       window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    async function copyTextToClipboard(text, okMessage = 'Copied') {
+      const value = String(text || '').trim();
+      if (!value) return;
+
+      try {
+        await navigator.clipboard.writeText(value);
+        showToast(okMessage);
+      } catch {
+        showToast('Unable to copy');
+      }
     }
 
     function normalizeStatus(value) {
@@ -1171,14 +1210,21 @@
         .replace(/'/g, '&#039;');
     }
 
-    function detailItem(label, value, { logo = '', text = '' } = {}) {
+    function detailItem(label, value, { logo = '', text = '', copyValue = '' } = {}) {
       const logoHtml = logo || text ? `
         <span class="provider-mini">
           ${logo ? `<img src="${logo}" alt="${escapeHtml(text || label)}">` : ''}
           ${text ? `<span>${escapeHtml(text)}</span>` : ''}
         </span>` : '';
 
-      const valueHtml = logoHtml || escapeHtml(value);
+      const copyHtml = copyValue
+        ? `<button class="mini-copy-btn" type="button" data-copy="${escapeHtml(String(copyValue))}" aria-label="Copy ${escapeHtml(label)}">⧉</button>`
+        : '';
+
+      const valueHtml = logoHtml
+        ? logoHtml
+        : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`;
+
       return `
         <div class="detail-row">
           <div class="detail-label">${escapeHtml(label)}</div>
@@ -1258,8 +1304,8 @@
       const after = meta.balance_after ?? meta.balanceAfter;
       const txId = tx.id || meta.transactionId || '—';
 
-      rows.push(detailItem('Transaction ID', txId));
-      rows.push(detailItem('Request ID', requestId));
+      rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
+      rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
       rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', {
         logo: actor.logo,
         text: actor.label
@@ -1320,38 +1366,10 @@
       return rows.join('');
     }
 
-    function openReceipt(tx) {
-      state.selected = tx;
-      const status = normalizeStatus(getStatusLabel(tx));
-      receiptAmountBig.textContent = formatMoney(tx.amount);
-      receiptDetails.innerHTML = buildReceiptDetails(tx);
-
-      statusBadge.className = `status-badge ${status}`;
-      statusBadgeText.textContent = status.toUpperCase();
-
-      receiptModal.style.display = 'flex';
-      receiptModal.setAttribute('aria-hidden', 'false');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeReceipt() {
-      receiptModal.style.display = 'none';
-      receiptModal.setAttribute('aria-hidden', 'true');
-      document.body.style.overflow = '';
-    }
-
-    async function copySelectedId() {
-      const tx = state.selected;
-      if (!tx) return;
-
+    async function copyReceipt(tx) {
       const meta = getMeta(tx);
-      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
-      try {
-        await navigator.clipboard.writeText(String(value));
-        showToast('Transaction ID copied');
-      } catch {
-        showToast('Unable to copy');
-      }
+      const value = tx?.id || meta.transactionId || tx?.reference || meta.request_id || meta.requestId || '';
+      await copyTextToClipboard(value, 'Transaction ID copied');
     }
 
     async function captureReceiptCanvas() {
@@ -1502,7 +1520,16 @@
       if (e.target === receiptModal) closeReceipt();
     });
 
-    copyBtn.addEventListener('click', copySelectedId);
+    receiptDetails.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mini-copy-btn');
+      if (!btn) return;
+      copyTextToClipboard(btn.dataset.copy || '');
+    });
+
+    copyBtn.addEventListener('click', () => {
+      if (state.selected) copyReceipt(state.selected);
+    });
+
     shareBtn.addEventListener('click', shareReceiptImage);
     downloadBtn.addEventListener('click', downloadReceiptImage);
     saveBtn.addEventListener('click', saveReceiptImage);
