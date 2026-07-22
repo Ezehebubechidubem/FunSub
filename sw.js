@@ -1,9 +1,9 @@
 const CACHE_NAME = "funsub-v1";
 const ASSETS = [
-  "/FunSub/dashboard.html",
-  "/FunSub/manifest.webmanifest",
-  "/FunSub/icons/icon-192.png",
-  "/FunSub/icons/icon-512.png"
+  "/login.html",
+  "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {
