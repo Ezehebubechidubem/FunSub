@@ -1366,9 +1366,32 @@
       return rows.join('');
     }
 
-    async function copyReceipt(tx) {
+    function openReceipt(tx) {
+      state.selected = tx;
+      const status = normalizeStatus(getStatusLabel(tx));
+      receiptAmountBig.textContent = formatMoney(tx.amount);
+      receiptDetails.innerHTML = buildReceiptDetails(tx);
+
+      statusBadge.className = `status-badge ${status}`;
+      statusBadgeText.textContent = status.toUpperCase();
+
+      receiptModal.style.display = 'flex';
+      receiptModal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeReceipt() {
+      receiptModal.style.display = 'none';
+      receiptModal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
+    async function copySelectedId() {
+      const tx = state.selected;
+      if (!tx) return;
+
       const meta = getMeta(tx);
-      const value = tx?.id || meta.transactionId || tx?.reference || meta.request_id || meta.requestId || '';
+      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
       await copyTextToClipboard(value, 'Transaction ID copied');
     }
 
@@ -1526,10 +1549,7 @@
       copyTextToClipboard(btn.dataset.copy || '');
     });
 
-    copyBtn.addEventListener('click', () => {
-      if (state.selected) copyReceipt(state.selected);
-    });
-
+    copyBtn.addEventListener('click', copySelectedId);
     shareBtn.addEventListener('click', shareReceiptImage);
     downloadBtn.addEventListener('click', downloadReceiptImage);
     saveBtn.addEventListener('click', saveReceiptImage);
