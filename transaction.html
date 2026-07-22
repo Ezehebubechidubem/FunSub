@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FunSub | Transactions</title>
+  <style>
+    :root{
+      --bg:#07090d;
+      --bg-soft:#0d1016;
+      --card:#121722;
+      --card-2:#161c28;
+      --card-3:#1b2230;
+      --text:#f4f7fb;
+      --muted:#9aa3b2;
+      --line:rgba(255,255,255,.08);
+      --gold:#d4af37;
+      --gold-soft:rgba(212,175,55,.14);
+      --success:#22c55e;
+      --pending:#f59e0b;
+      --failed:#ef4444;
+      --reversed:#3b82f6;
+      --shadow:0 18px 50px rgba(0,0,0,.35);
+      --receipt-bg:#f6f7fb;
+      --receipt-text:#1f2937;
+      --receipt-muted:#6b7280;
+      --receipt-line:#e5e7eb;
+      --receipt-card:#ffffff;
+    }
+
+    body.light{
+      --bg:#f3f5f9;
+      --bg-soft:#ffffff;
+      --card:#ffffff;
+      --card-2:#ffffff;
+      --card-3:#f8fafc;
+      --text:#111827;
+      --muted:#6b7280;
+      --line:rgba(17,24,39,.09);
+      --gold:#d4af37;
+      --gold-soft:rgba(212,175,55,.12);
+      --shadow:0 16px 40px rgba(17,24,39,.12);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:radial-gradient(circle at top, rgba(212,175,55,.08), transparent 35%), var(--bg);
+      color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .page{
+      min-height:100vh;
+      max-width:980px;
+      margin:0 auto;
+      padding:18px 16px 28px;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:18px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .brand-badge{
+      width:48px;
+      height:48px;
+      border-radius:16px;
+      background:linear-gradient(180deg, rgba(212,175,55,.24), rgba(212,175,55,.08));
+      border:1px solid rgba(212,175,55,.35);
+      display:grid;
+      place-items:center;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      flex:0 0 48px;
+    }
+
+    .brand-badge img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+
+    .brand-text h1{
+      margin:0;
+      font-size:24px;
+      letter-spacing:-.03em;
+    }
+
+    .brand-text p{
+      margin:4px 0 0;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .top-actions{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .icon-btn{
+      border:1px solid var(--line);
+      background:var(--card);
+      color:var(--text);
+      width:42px;
+      height:42px;
+      border-radius:14px;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      box-shadow:var(--shadow);
+    }
+
+    .panel{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+      border:1px solid var(--line);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    .summary-grid{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:12px;
+      padding:14px;
+    }
+
+    .summary-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:14px;
+      min-height:92px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:6px;
+    }
+
+    .summary-card .big{font-size:26px;font-weight:800;line-height:1}
+    .summary-card .small{font-size:12px;color:var(--muted)}
+    .summary-card.success .big{color:var(--success)}
+    .summary-card.pending .big{color:var(--pending)}
+    .summary-card.failed .big{color:var(--failed)}
+    .summary-card.reversed .big{color:var(--reversed)}
+
+    .controls{
+      display:grid;
+      grid-template-columns:1.4fr .9fr .9fr;
+      gap:12px;
+      padding:0 14px 14px;
+    }
+
+    .search-wrap,
+    .select-wrap{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:0 14px;
+      height:48px;
+    }
+
+    .search-wrap input,
+    .select-wrap select{
+      width:100%;
+      border:0;
+      outline:none;
+      background:transparent;
+      color:var(--text);
+      font-size:14px;
+    }
+
+    .search-wrap input::placeholder{color:var(--muted)}
+    .select-wrap select{appearance:none;cursor:pointer}
+
+    .list-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:0 14px 14px;
+    }
+
+    .list-head h2{
+      margin:0;
+      font-size:18px;
+    }
+
+    .pill-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      padding:0 14px 14px;
+    }
+
+    .pill{
+      border:1px solid var(--line);
+      background:var(--card);
+      color:var(--text);
+      padding:10px 14px;
+      border-radius:999px;
+      font-size:13px;
+      cursor:pointer;
+    }
+
+    .pill.active{
+      background:var(--gold-soft);
+      border-color:rgba(212,175,55,.45);
+      color:var(--gold);
+      font-weight:700;
+    }
+
+    .transactions{
+      padding:0 14px 14px;
+      display:grid;
+      gap:10px;
+    }
+
+    .tx-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:14px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      transition:transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .tx-card:hover{transform:translateY(-1px);border-color:rgba(212,175,55,.35)}
+
+    .tx-left{display:flex;align-items:center;gap:12px;min-width:0}
+    .tx-logo{
+      width:48px;
+      height:48px;
+      border-radius:15px;
+      background:#fff;
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+      flex:0 0 48px;
+      border:1px solid rgba(0,0,0,.06);
+    }
+    .tx-logo img{width:100%;height:100%;object-fit:cover;display:block}
+    .tx-meta{min-width:0}
+    .tx-title{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0 0 4px}
+    .tx-sub{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+    .tx-amount{font-size:16px;font-weight:800;text-align:right}
+    .tx-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+
+    .status-chip{
+      padding:7px 11px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      border:1px solid transparent;
+      text-transform:capitalize;
+      white-space:nowrap;
+    }
+    .status-success{background:rgba(34,197,94,.12);color:var(--success);border-color:rgba(34,197,94,.25)}
+    .status-pending{background:rgba(245,158,11,.12);color:var(--pending);border-color:rgba(245,158,11,.25)}
+    .status-failed{background:rgba(239,68,68,.12);color:var(--failed);border-color:rgba(239,68,68,.25)}
+    .status-reversed{background:rgba(59,130,246,.12);color:var(--reversed);border-color:rgba(59,130,246,.25)}
+
+    .empty,
+    .error-state,
+    .loading{
+      padding:40px 18px;
+      text-align:center;
+      color:var(--muted);
+      background:var(--card);
+      border:1px dashed var(--line);
+      border-radius:20px;
+      margin:0 14px 14px;
+    }
+
+    .modal-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.72);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9999;
+      padding:16px;
+      backdrop-filter: blur(6px);
+    }
+
+    .receipt-shell{
+      width:min(100%, 760px);
+      max-height:92vh;
+      overflow:auto;
+      border-radius:28px;
+      background:transparent;
+      box-shadow:0 24px 70px rgba(0,0,0,.45);
+    }
+
+    .receipt-card{
+      background:var(--receipt-bg);
+      color:var(--receipt-text);
+      border-radius:28px;
+      overflow:hidden;
+      position:relative;
+    }
+
+    .receipt-header{
+      background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
+      color:#fff;
+      padding:24px 20px 42px;
+      text-align:center;
+      position:relative;
+    }
+
+    .receipt-header::after{
+      content:"";
+      position:absolute;
+      left:-4%;
+      right:-4%;
+      bottom:-20px;
+      height:44px;
+      background:var(--receipt-bg);
+      border-top-left-radius:50% 100%;
+      border-top-right-radius:50% 100%;
+    }
+
+    .receipt-close{
+      position:absolute;
+      top:16px;
+      right:16px;
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      border:0;
+      background:rgba(255,255,255,.12);
+      color:#fff;
+      font-size:20px;
+      cursor:pointer;
+      z-index:2;
+    }
+
+    .receipt-logo-wrap{
+      width:74px;
+      height:74px;
+      border-radius:50%;
+      margin:0 auto 10px;
+      padding:0;
+      background:rgba(255,255,255,.06);
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+      border:1px solid rgba(212,175,55,.35);
+    }
+
+    .receipt-logo-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+
+    .receipt-brand{
+      margin:0;
+      font-size:26px;
+      font-weight:900;
+      letter-spacing:-.03em;
+    }
+
+    .receipt-brand .gold{color:var(--gold)}
+    .receipt-subtitle{
+      margin:4px 0 0;
+      font-size:14px;
+      color:#e5e7eb;
+      opacity:.9;
+    }
+
+    .receipt-body{
+      padding:18px 18px 18px;
+      margin-top:10px;
+    }
+
+    .status-badge{
+      width:max-content;
+      margin:4px auto 18px;
+      padding:12px 18px;
+      border-radius:999px;
+      font-weight:800;
+      letter-spacing:.04em;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-transform:uppercase;
+      border:1px solid transparent;
+    }
+    .status-badge .dot{
+      width:14px;height:14px;border-radius:50%;display:inline-block
+    }
+    .status-badge.success{background:rgba(34,197,94,.12);color:#1f8f4b;border-color:rgba(34,197,94,.22)}
+    .status-badge.success .dot{background:var(--success)}
+    .status-badge.pending{background:rgba(245,158,11,.12);color:#b7791f;border-color:rgba(245,158,11,.22)}
+    .status-badge.pending .dot{background:var(--pending)}
+    .status-badge.failed{background:rgba(239,68,68,.12);color:#bb3d3d;border-color:rgba(239,68,68,.22)}
+    .status-badge.failed .dot{background:var(--failed)}
+    .status-badge.reversed{background:rgba(59,130,246,.12);color:#2d6ddf;border-color:rgba(59,130,246,.22)}
+    .status-badge.reversed .dot{background:var(--reversed)}
+
+    .amount-card{
+      background:linear-gradient(180deg, #fffaf0, #fffdf8);
+      border:1px solid rgba(212,175,55,.28);
+      border-radius:22px;
+      padding:20px 14px;
+      text-align:center;
+      margin-bottom:16px;
+    }
+    .amount-card .label{font-size:15px;color:#6b7280;margin-bottom:6px}
+    .amount-card .amount{font-size:50px;line-height:1;font-weight:900;letter-spacing:-.05em;color:#111827}
+
+    .detail-card{
+      background:#fff;
+      border:1px solid var(--receipt-line);
+      border-radius:20px;
+      padding:12px 14px;
+      box-shadow:0 10px 28px rgba(17,24,39,.04);
+    }
+
+    .detail-row{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+      padding:13px 0;
+      border-bottom:1px dashed var(--receipt-line);
+      font-size:14px;
+    }
+    .detail-row:last-child{border-bottom:0}
+    .detail-label{color:#4b5563;min-width:110px}
+    .detail-value{font-weight:700;color:#111827;text-align:right;word-break:break-word}
+
+    .provider-mini{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      justify-content:flex-end;
+      vertical-align:middle;
+    }
+
+    .provider-mini img{
+      width:36px;
+      height:36px;
+      object-fit:cover;
+      border-radius:8px;
+      border:1px solid rgba(0,0,0,.05);
+      background:#fff;
+      flex:0 0 36px;
+    }
+
+    .provider-mini span{display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .receipt-footer{
+      text-align:center;
+      color:#6b7280;
+      padding:18px 8px 0;
+      font-size:13px;
+    }
+    .receipt-footer strong{display:block;color:#0f172a;margin-top:5px}
+    .receipt-footer .gold{color:#c89511;font-weight:700}
+
+    .button-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:12px;
+      margin-top:16px;
+    }
+
+    .receipt-btn{
+      height:54px;
+      border:0;
+      border-radius:16px;
+      cursor:pointer;
+      font-weight:800;
+      font-size:15px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+    }
+    .receipt-btn.dark{background:#0b0b0d;color:#fff}
+    .receipt-btn.gold{background:var(--gold);color:#111}
+    .receipt-btn.light{background:#f3f4f6;color:#111827;border:1px solid #e5e7eb}
+
+    .receipt-btn svg{width:18px;height:18px;flex:0 0 18px}
+
+    .toast{
+      position:fixed;
+      left:50%;
+      bottom:22px;
+      transform:translateX(-50%) translateY(20px);
+      opacity:0;
+      visibility:hidden;
+      background:rgba(17,24,39,.96);
+      color:#fff;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      padding:12px 16px;
+      z-index:10000;
+      box-shadow:var(--shadow);
+      transition:.25s ease;
+      font-size:14px;
+      max-width:min(92vw, 480px);
+      text-align:center;
+    }
+    .toast.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+
+    @media print{
+      body{background:#fff !important}
+      body *{visibility:hidden !important}
+      .receipt-shell, .receipt-shell *{visibility:visible !important}
+      .modal-overlay{position:static;background:#fff;display:block !important;padding:0}
+      .receipt-shell{max-height:none;width:100%;box-shadow:none}
+      .receipt-close,.button-grid,.topbar,.summary-grid,.controls,.pill-row,.transactions,.toast{display:none !important}
+      .receipt-card{border-radius:0}
+    }
+
+    @media (max-width: 900px){
+      .summary-grid{grid-template-columns:repeat(2,1fr)}
+      .controls{grid-template-columns:1fr}
+      .amount-card .amount{font-size:42px}
+    }
+
+    @media (max-width: 520px){
+      .page{padding:14px 12px 20px}
+      .brand-text h1{font-size:22px}
+      .summary-grid{padding:12px;gap:10px}
+      .summary-card{min-height:84px}
+      .tx-card{padding:12px}
+      .tx-title{font-size:14px}
+      .receipt-shell{max-height:94vh}
+      .receipt-header{padding:20px 14px 42px}
+      .receipt-brand{font-size:24px}
+      .amount-card .amount{font-size:38px}
+      .detail-label{min-width:92px}
+      .provider-mini span{max-width:120px}
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-badge" title="FunSub logo">
+          <img id="appLogo" src="./icons/funsub_logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
+        </div>
+        <div class="brand-text">
+          <h1>Transactions</h1>
+          <p>Tap any item to open the receipt</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="refreshBtn" title="Refresh">⟳</button>
+        <button class="icon-btn" id="themeBtn" title="Toggle theme">☾</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="big" id="sumAll">0</div>
+          <div class="small">All Transactions</div>
+        </div>
+        <div class="summary-card success">
+          <div class="big" id="sumSuccess">0</div>
+          <div class="small">Successful</div>
+        </div>
+        <div class="summary-card pending">
+          <div class="big" id="sumPending">0</div>
+          <div class="small">Pending</div>
+        </div>
+        <div class="summary-card failed">
+          <div class="big" id="sumFailed">0</div>
+          <div class="small">Failed / Reversed</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="search-wrap">
+          <span style="color:var(--muted)">⌕</span>
+          <input id="searchInput" type="search" placeholder="Search by service, reference, amount..." />
+        </div>
+        <div class="select-wrap">
+          <select id="statusFilter">
+            <option value="all">All Status</option>
+            <option value="success">Successful</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+            <option value="reversed">Reversed</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <select id="serviceFilter">
+            <option value="all">All Services</option>
+            <option value="airtime">Airtime</option>
+            <option value="data">Data</option>
+            <option value="cable_tv">Cable TV</option>
+            <option value="electricity">Electricity</option>
+            <option value="betting">Betting</option>
+            <option value="wallet">Wallet</option>
+            <option value="recharge_pin">Recharge PIN</option>
+            <option value="data_pin">Data PIN</option>
+            <option value="exam_pin">Exam PIN</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="list-head">
+        <h2>Your Transaction History</h2>
+        <div style="color:var(--muted);font-size:13px" id="countLabel">0 items</div>
+      </div>
+
+      <div class="pill-row" id="quickPills">
+        <button class="pill active" data-preset="all">All</button>
+        <button class="pill" data-preset="today">Today</button>
+        <button class="pill" data-preset="week">7 Days</button>
+        <button class="pill" data-preset="month">30 Days</button>
+      </div>
+
+      <div id="loadingState" class="loading">Loading transactions...</div>
+      <div id="emptyState" class="empty" style="display:none;">No transactions yet.</div>
+      <div id="errorState" class="error-state" style="display:none;"></div>
+      <div id="transactionsList" class="transactions"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="receiptModal" aria-hidden="true">
+    <div class="receipt-shell">
+      <div class="receipt-card" id="receiptCard">
+        <div class="receipt-header">
+          <button class="receipt-close" id="closeReceiptBtn" aria-label="Close receipt">×</button>
+          <div class="receipt-logo-wrap">
+            <img id="receiptLogo" src="./icons/funsub_logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
+          </div>
+          <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
+          <div class="receipt-subtitle">Transaction Receipt</div>
+        </div>
+
+        <div class="receipt-body">
+          <div id="statusBadge" class="status-badge success"><span class="dot"></span><span id="statusBadgeText">SUCCESSFUL</span></div>
+
+          <div class="amount-card">
+            <div class="label">Amount</div>
+            <div class="amount" id="receiptAmountBig">₦0.00</div>
+          </div>
+
+          <div class="detail-card" id="receiptDetails"></div>
+
+          <div class="receipt-footer">
+            Thank you for using our service!
+            <strong><span class="gold">Powered by FunSub</span></strong>
+          </div>
+
+          <div class="button-grid">
+            <button class="receipt-btn dark" id="copyBtn">
+              <span>⧉</span> Copy ID
+            </button>
+            <button class="receipt-btn gold" id="shareBtn">
+              <span>↗</span> Share Receipt
+            </button>
+            <button class="receipt-btn dark" id="pdfBtn">
+              <span>⌘</span> Download PDF
+            </button>
+            <button class="receipt-btn dark" id="imageBtn">
+              <span>▣</span> Save Image
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied</div>
+<script>
+    const API_ROOT = 'https://funsub.onrender.com';
+    const tokenKey = 'funsub_token';
+    const themeKey = 'funsub_theme';
+
+    const transactionsList = document.getElementById('transactionsList');
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    const errorState = document.getElementById('errorState');
+    const countLabel = document.getElementById('countLabel');
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const serviceFilter = document.getElementById('serviceFilter');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const themeBtn = document.getElementById('themeBtn');
+    const quickPills = document.getElementById('quickPills');
+
+    const receiptModal = document.getElementById('receiptModal');
+    const closeReceiptBtn = document.getElementById('closeReceiptBtn');
+    const receiptAmountBig = document.getElementById('receiptAmountBig');
+    const receiptDetails = document.getElementById('receiptDetails');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusBadgeText = document.getElementById('statusBadgeText');
+    const copyBtn = document.getElementById('copyBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const pdfBtn = document.getElementById('pdfBtn');
+    const imageBtn = document.getElementById('imageBtn');
+    const toast = document.getElementById('toast');
+
+    const providerLogos = {
+      mtn: 'https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg',
+      airtel: 'https://i.postimg.cc/FKZbSxf8/airtel.png',
+      glo: 'https://i.postimg.cc/B64Y96DS/glo.png',
+      '9mobile': 'https://i.postimg.cc/hhWQ6Jz3/9mobile.png',
+      dstv: 'https://i.postimg.cc/2S9tQkK3/dstv.png',
+      gotv: 'https://i.postimg.cc/rwYj7Y8Z/gotv.png',
+      startimes: 'https://i.postimg.cc/0j3mHf9P/startimes.png',
+      showmax: 'https://i.postimg.cc/0Q2pWv5Y/showmax.png',
+      bet9ja: 'https://i.postimg.cc/g2YWYTTF/IMG-20260704-153103.jpg',
+      '1xbet': 'https://i.postimg.cc/MKq4Rjbz/IMG-20260704-153140.jpg',
+      bangbet: 'https://i.postimg.cc/Y2RjKZRS/IMG-20260704-160404.jpg',
+      betking: 'https://i.postimg.cc/V6XG0YJ4/IMG-20260704-153020.jpg',
+      betland: 'https://i.postimg.cc/fytPK6TK/IMG-20260704-160941.jpg',
+      betlion: 'https://i.postimg.cc/NGC92ZHC/IMG-20260704-161648.jpg',
+      betway: 'https://i.postimg.cc/qqM5PP7Q/IMG-20260704-155102.jpg',
+      cloudbet: 'https://i.postimg.cc/xyz/cloudbet.png',
+      livescorebet: 'https://i.postimg.cc/xyz/livescore.png',
+      merrybet: 'https://i.postimg.cc/xyz/merrybet.png',
+      naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
+      nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
+      supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg'
+    };
+
+    const state = {
+      all: [],
+      filtered: [],
+      selected: null,
+      preset: 'all'
+    };
+
+    function getToken() {
+      return localStorage.getItem(tokenKey) || '';
+    }
+
+    function setTheme(theme) {
+      document.body.classList.toggle('light', theme === 'light');
+      localStorage.setItem(themeKey, theme);
+      themeBtn.textContent = theme === 'light' ? '☀' : '☾';
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    function normalizeStatus(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function safeJsonParse(meta) {
+      if (!meta) return {};
+      if (typeof meta === 'object' && !Array.isArray(meta)) return meta;
+      if (typeof meta !== 'string') return {};
+      try {
+        const parsed = JSON.parse(meta);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return { rawMeta: meta };
+      }
+    }
+
+    function formatMoney(value) {
+      const num = Number(value || 0);
+      return '₦' + num.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatDateTime(value) {
+      const dt = value ? new Date(value) : new Date();
+      if (Number.isNaN(dt.getTime())) return { date: '—', time: '—' };
+      const date = dt.toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' });
+      const time = dt.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+      return { date, time };
+    }
+
+    function getCategory(tx) {
+      return normalizeStatus(tx?.category || tx?.type || tx?.meta?.serviceType || tx?.meta?.category);
+    }
+
+    function getMeta(tx) {
+      return safeJsonParse(tx?.meta);
+    }
+
+    function getVisual(tx) {
+      const meta = getMeta(tx);
+      const category = getCategory(tx);
+      let key = normalizeStatus(meta.provider || meta.network || meta.service_id || meta.serviceId || category || '');
+      if (!key) key = 'generic';
+
+      const logo = providerLogos[key] || providerLogos[normalizeStatus(meta.service_id)] || providerLogos[normalizeStatus(meta.network)] || '';
+      const text = meta.providerLabel || meta.provider || meta.network || tx?.description || category || 'Transaction';
+      return { logo, text };
+    }
+
+    function getTitle(tx) {
+      const meta = getMeta(tx);
+      const category = getCategory(tx);
+      const provider = meta.providerLabel || meta.provider || meta.network || '';
+      const requestId = meta.request_id || meta.requestId || tx?.reference || '';
+      const desc = tx?.description || meta.description || '';
+
+      if (category === 'airtime') return `${provider || 'Airtime'} Airtime`;
+      if (category === 'data') return `${provider || 'Data'} Data`;
+      if (category === 'cable_tv' || category === 'cable') return `${provider || 'Cable'} Subscription`;
+      if (category === 'betting') return `${provider || 'Betting'} Funding`;
+      if (category === 'electricity') return `${provider || 'Electricity'} Payment`;
+      if (category === 'wallet') return 'Wallet Funding';
+      if (category === 'recharge_pin') return `${provider || 'Network'} Recharge PIN`;
+      if (category === 'data_pin') return `${provider || 'Network'} Data PIN`;
+      if (category === 'exam_pin') return `${provider || 'Exam'} Exam PIN`;
+      return desc || requestId || 'Transaction';
+    }
+
+    function getServiceLabel(tx) {
+      const meta = getMeta(tx);
+      return meta.serviceName || meta.serviceType || tx?.category || tx?.type || 'Transaction';
+    }
+
+    function getStatusLabel(tx) {
+      const s = normalizeStatus(tx?.status || tx?.meta?.status || '');
+      if (s === 'success' || s === 'successful' || s === 'completed' || s === 'completed-api' || s === 'complete') return 'successful';
+      if (s === 'pending' || s === 'processing' || s === 'queued' || s === 'unknown') return 'pending';
+      if (s === 'reversed' || s === 'refund' || s === 'refunded' || s === 'reversed-api') return 'reversed';
+      return 'failed';
+    }
+
+    function statusClass(tx) {
+      return `status-${getStatusLabel(tx)}`;
+    }
+
+    function statusText(tx) {
+      const s = getStatusLabel(tx);
+      if (s === 'successful') return 'Successful';
+      if (s === 'pending') return 'Pending';
+      if (s === 'reversed') return 'Reversed';
+      return 'Failed';
+    }
+
+    function isWithinPreset(tx, preset) {
+      if (preset === 'all') return true;
+      const dt = new Date(tx.created_at || tx.updated_at || Date.now());
+      if (Number.isNaN(dt.getTime())) return true;
+      const now = new Date();
+      const diff = now.getTime() - dt.getTime();
+      const oneDay = 24 * 60 * 60 * 1000;
+      if (preset === 'today') return dt.toDateString() === now.toDateString();
+      if (preset === 'week') return diff <= 7 * oneDay;
+      if (preset === 'month') return diff <= 30 * oneDay;
+      return true;
+    }
+
+    function matchesFilters(tx) {
+      const q = searchInput.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      const service = serviceFilter.value;
+      const preset = state.preset;
+
+      if (!isWithinPreset(tx, preset)) return false;
+      if (status !== 'all' && getStatusLabel(tx) !== status) return false;
+      if (service !== 'all' && getCategory(tx) !== service) return false;
+
+      if (!q) return true;
+      const meta = getMeta(tx);
+      const haystack = [
+        tx?.id,
+        tx?.reference,
+        tx?.description,
+        tx?.amount,
+        tx?.status,
+        tx?.category,
+        meta.request_id,
+        meta.requestId,
+        meta.customer_id,
+        meta.customerId,
+        meta.phone,
+        meta.smartcard_number,
+        meta.meter_number,
+        meta.account_number,
+        meta.service_id,
+        meta.serviceId,
+        meta.provider,
+        meta.network,
+        meta.plan_name,
+        meta.packageName,
+        meta.package_name,
+        meta.customer_name,
+        meta.customerName
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    }
+function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function detailItem(label, value, { logo = '', text = '' } = {}) {
+      const logoHtml = logo || text ? `
+        <span class="provider-mini">
+          ${logo ? `<img src="${logo}" alt="${escapeHtml(text || label)}">` : ''}
+          ${text ? `<span>${escapeHtml(text)}</span>` : ''}
+        </span>` : '';
+
+      const valueHtml = logoHtml || value;
+      return `
+        <div class="detail-row">
+          <div class="detail-label">${escapeHtml(label)}</div>
+          <div class="detail-value">${valueHtml}</div>
+        </div>
+      `;
+    }
+
+    function renderTransactions() {
+      const filtered = state.all.filter(matchesFilters);
+      state.filtered = filtered;
+      transactionsList.innerHTML = '';
+      countLabel.textContent = `${filtered.length} item${filtered.length === 1 ? '' : 's'}`;
+      document.getElementById('sumAll').textContent = state.all.length;
+      document.getElementById('sumSuccess').textContent = state.all.filter(tx => getStatusLabel(tx) === 'successful').length;
+      document.getElementById('sumPending').textContent = state.all.filter(tx => getStatusLabel(tx) === 'pending').length;
+      document.getElementById('sumFailed').textContent = state.all.filter(tx => ['failed', 'reversed'].includes(getStatusLabel(tx))).length;
+
+      loadingState.style.display = 'none';
+      errorState.style.display = 'none';
+      emptyState.style.display = filtered.length ? 'none' : 'block';
+
+      if (!filtered.length) {
+        transactionsList.innerHTML = '';
+        return;
+      }
+
+      for (const tx of filtered) {
+        const meta = getMeta(tx);
+        const visual = getVisual(tx);
+        const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
+        const amount = formatMoney(tx.amount);
+        const title = getTitle(tx);
+        const serviceLabel = getServiceLabel(tx);
+
+        const card = document.createElement('div');
+        card.className = 'tx-card';
+        card.innerHTML = `
+          <div class="tx-left">
+            <div class="tx-logo">
+              ${visual.logo ? `<img src="${visual.logo}" alt="${escapeHtml(visual.text)}">` : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((visual.text || 'TX').slice(0,2).toUpperCase())}</span>`}
+            </div>
+            <div class="tx-meta">
+              <div class="tx-title">${escapeHtml(title)}</div>
+              <div class="tx-sub">
+                <span>${escapeHtml(serviceLabel)}</span>
+                <span>•</span>
+                <span>${escapeHtml(tx.reference || meta.request_id || tx.id || '—')}</span>
+                <span>•</span>
+                <span>${escapeHtml(date)} ${escapeHtml(time)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="tx-right">
+            <div class="status-chip ${statusClass(tx)}">${statusText(tx)}</div>
+            <div class="tx-amount">${amount}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => openReceipt(tx));
+        transactionsList.appendChild(card);
+      }
+    }
+
+    function buildReceiptDetails(tx) {
+      const meta = getMeta(tx);
+      const category = getCategory(tx);
+      const visual = getVisual(tx);
+      const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
+      const status = statusText(tx);
+      const rows = [];
+
+      const requestId = meta.request_id || meta.requestId || tx.reference || tx.id || '—';
+      const ref = tx.reference || meta.reference || requestId;
+      const fee = meta.fee_amount ?? meta.fee ?? 0;
+      const before = meta.balance_before ?? meta.balanceBefore;
+      const after = meta.balance_after ?? meta.balanceAfter;
+      const txId = tx.id || meta.transactionId || '—';
+
+      rows.push(detailItem('Transaction ID', escapeHtml(txId)));
+      rows.push(detailItem('Request ID', escapeHtml(requestId)));
+      rows.push(detailItem(category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin' ? 'Network' : 'Provider', '', {
+        logo: visual.logo,
+        text: visual.text
+      }));
+
+      if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
+        const phone = meta.phone || meta.customer_id || meta.customerId || '—';
+        rows.push(detailItem('Phone Number', escapeHtml(phone)));
+      }
+
+      if (category === 'cable_tv' || category === 'cable') {
+        rows.push(detailItem('Customer Name', escapeHtml(meta.customer_name || meta.customerName || '—')));
+        rows.push(detailItem('Smartcard / IUC', escapeHtml(meta.customer_id || meta.smartcard_number || meta.account_number || '—')));
+        rows.push(detailItem('Package', escapeHtml(meta.packageDisplay || meta.packageName || meta.plan_name || '—')));
+        rows.push(detailItem('Subscription', escapeHtml((meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' '))));
+      }
+
+      if (category === 'betting') {
+        rows.push(detailItem('Customer ID', escapeHtml(meta.customer_id || meta.customerId || '—')));
+      }
+
+      if (category === 'electricity') {
+        rows.push(detailItem('Customer Name', escapeHtml(meta.customer_name || meta.customerName || '—')));
+        rows.push(detailItem('Meter Number', escapeHtml(meta.meter_number || meta.meterNumber || meta.customer_id || '—')));
+        if (meta.token) rows.push(detailItem('Token', escapeHtml(meta.token)));
+      }
+
+      if (category === 'wallet') {
+        rows.push(detailItem('Payment Method', escapeHtml(meta.provider || meta.gateway || 'Flutterwave')));
+      }
+
+      if (before !== undefined && after !== undefined) {
+        rows.push(detailItem('Balance Before', escapeHtml(formatMoney(before))));
+        rows.push(detailItem('Balance After', escapeHtml(formatMoney(after))));
+      }
+
+      rows.push(detailItem('Amount', escapeHtml(formatMoney(tx.amount))));
+      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', escapeHtml(formatMoney(fee))));
+      rows.push(detailItem('Status', escapeHtml(status)));
+      rows.push(detailItem('Date', escapeHtml(date)));
+      rows.push(detailItem('Time', escapeHtml(time)));
+      rows.push(detailItem('Reference', escapeHtml(ref)));
+
+      if (tx.description) rows.push(detailItem('Description', escapeHtml(tx.description)));
+
+      return rows.join('');
+    }
+
+    function openReceipt(tx) {
+      state.selected = tx;
+      const status = normalizeStatus(getStatusLabel(tx));
+      const amount = formatMoney(tx.amount);
+      receiptAmountBig.textContent = amount;
+      receiptDetails.innerHTML = buildReceiptDetails(tx);
+
+      statusBadge.className = `status-badge ${status}`;
+      statusBadgeText.textContent = status.toUpperCase();
+
+      receiptModal.style.display = 'flex';
+      receiptModal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeReceipt() {
+      receiptModal.style.display = 'none';
+      receiptModal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
+    async function copySelectedId() {
+      const tx = state.selected;
+      if (!tx) return;
+      const meta = getMeta(tx);
+      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || '';
+      try {
+        await navigator.clipboard.writeText(String(value));
+        showToast('Transaction ID copied');
+      } catch {
+        showToast('Unable to copy');
+      }
+    }
+
+    async function shareReceipt() {
+      const tx = state.selected;
+      if (!tx) return;
+      const meta = getMeta(tx);
+      const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
+      const text = [
+        'FunSub Transaction Receipt',
+        `Status: ${statusText(tx)}`,
+        `Service: ${getTitle(tx)}`,
+        `Amount: ${formatMoney(tx.amount)}`,
+        `Reference: ${tx.reference || meta.request_id || tx.id || ''}`,
+        `Date: ${date}`,
+        `Time: ${time}`
+      ].join('\n');
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'FunSub Receipt', text });
+          return;
+        } catch {}
+      }
+      await navigator.clipboard.writeText(text);
+      showToast('Receipt text copied');
+    }
+function printReceipt() {
+      window.print();
+    }
+
+    function downloadReceiptImage() {
+      const tx = state.selected;
+      if (!tx) return;
+
+      const canvas = document.createElement('canvas');
+      const width = 1440;
+      const height = 2200;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#0b0b0d';
+      ctx.fillRect(0, 0, width, 360);
+
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(width / 2, 200, 130, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      const logoSrc = './icons/funsub_logo.png';
+
+      const drawRest = () => {
+        ctx.fillStyle = '#d4af37';
+        ctx.font = 'bold 64px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('FunSub', width / 2, 300);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '28px Arial';
+        ctx.fillText('Transaction Receipt', width / 2, 340);
+
+        const status = statusText(tx);
+        const statusColors = {
+          successful: '#16a34a',
+          pending: '#d97706',
+          failed: '#dc2626',
+          reversed: '#2563eb'
+        };
+        const badgeColor = statusColors[normalizeStatus(status).toLowerCase()] || '#16a34a';
+        roundRect(ctx, 420, 390, 600, 70, 35, '#f2fff6', badgeColor, 3);
+        ctx.fillStyle = badgeColor;
+        ctx.font = 'bold 30px Arial';
+        ctx.fillText(status.toUpperCase(), width / 2, 437);
+
+        roundRect(ctx, 170, 500, 1100, 220, 24, '#fff8e6', '#f0d98a', 2);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '28px Arial';
+        ctx.fillText('Amount', width / 2, 565);
+        ctx.fillStyle = '#111827';
+        ctx.font = 'bold 78px Arial';
+        ctx.fillText(formatMoney(tx.amount), width / 2, 650);
+
+        roundRect(ctx, 140, 770, 1160, 1120, 26, '#ffffff', '#e5e7eb', 2);
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '28px Arial';
+
+        const meta = getMeta(tx);
+        const category = getCategory(tx);
+        const visual = getVisual(tx);
+        const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
+        const requestId = meta.request_id || meta.requestId || tx.reference || tx.id || '—';
+        const ref = tx.reference || meta.reference || requestId;
+        const fee = meta.fee_amount ?? meta.fee ?? 0;
+        const before = meta.balance_before ?? meta.balanceBefore;
+        const after = meta.balance_after ?? meta.balanceAfter;
+
+        const lines = [
+          ['Transaction ID', tx.id || '—'],
+          ['Request ID', requestId],
+          [category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin' ? 'Network' : 'Provider', visual.text],
+        ];
+        if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
+          lines.push(['Phone Number', meta.phone || meta.customer_id || meta.customerId || '—']);
+        }
+        if (category === 'cable_tv' || category === 'cable') {
+          lines.push(['Customer Name', meta.customer_name || meta.customerName || '—']);
+          lines.push(['Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—']);
+          lines.push(['Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—']);
+          lines.push(['Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')]);
+        }
+        if (category === 'betting') lines.push(['Customer ID', meta.customer_id || meta.customerId || '—']);
+        if (category === 'electricity') {
+          lines.push(['Customer Name', meta.customer_name || meta.customerName || '—']);
+          lines.push(['Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—']);
+          if (meta.token) lines.push(['Token', meta.token]);
+        }
+        if (category === 'wallet') lines.push(['Payment Method', meta.provider || meta.gateway || 'Flutterwave']);
+        if (before !== undefined && after !== undefined) {
+          lines.push(['Balance Before', formatMoney(before)]);
+          lines.push(['Balance After', formatMoney(after)]);
+        }
+        lines.push(['Amount', formatMoney(tx.amount)]);
+        if (fee !== undefined && Number(fee) > 0) lines.push(['Fee', formatMoney(fee)]);
+        lines.push(['Status', statusText(tx)]);
+        lines.push(['Date', date]);
+        lines.push(['Time', time]);
+        lines.push(['Reference', ref]);
+
+        let y = 840;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.setLineDash([8, 8]);
+
+        for (const [label, value] of lines) {
+          ctx.beginPath();
+          ctx.moveTo(170, y + 22);
+          ctx.lineTo(1270, y + 22);
+          ctx.stroke();
+
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#4b5563';
+          ctx.font = '24px Arial';
+          ctx.fillText(label, 190, y);
+          ctx.fillStyle = '#111827';
+          ctx.font = 'bold 26px Arial';
+          drawRightText(ctx, value, 1250, y, 460, 28);
+          y += 72;
+          ctx.setLineDash([8, 8]);
+        }
+
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Thank you for using our service!', width / 2, 1960);
+        ctx.fillStyle = '#d4af37';
+        ctx.font = 'bold 26px Arial';
+        ctx.fillText('Powered by FunSub', width / 2, 2005);
+
+        const downloadLink = document.createElement('a');
+        downloadLink.download = `funsub-receipt-${(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
+        downloadLink.href = canvas.toDataURL('image/png');
+        downloadLink.click();
+      };
+
+      logoImg.onload = () => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(width / 2, 150, 64, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(logoImg, width / 2 - 64, 86, 128, 128);
+        ctx.restore();
+        drawRest();
+      };
+      logoImg.onerror = () => drawRest();
+      logoImg.src = logoSrc;
+    }
+
+    function roundRect(ctx, x, y, w, h, r, fill, stroke = null, lineWidth = 1) {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+      }
+    }
+
+    function drawRightText(ctx, text, rightX, y, maxWidth, lineHeight) {
+      const str = String(text);
+      const words = str.split(/\s+/);
+      let line = '';
+      const lines = [];
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+          lines.push(line.trim());
+          line = words[n] + ' ';
+        } else {
+          line = testLine;
+        }
+      }
+      lines.push(line.trim());
+      ctx.textAlign = 'right';
+      lines.forEach((ln, idx) => ctx.fillText(ln, rightX, y + idx * lineHeight));
+      ctx.textAlign = 'center';
+    }
+
+    async function loadDashboardData() {
+      const token = getToken();
+      if (!token) {
+        loadingState.style.display = 'none';
+        errorState.style.display = 'block';
+        errorState.textContent = 'Please log in to view your transactions.';
+        return;
+      }
+
+      loadingState.style.display = 'block';
+      errorState.style.display = 'none';
+      emptyState.style.display = 'none';
+      transactionsList.innerHTML = '';
+
+      try {
+        const res = await fetch(`${API_ROOT}/api/wallet/transactions?limit=100`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { rawResponse: text };
+        }
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Unable to load transactions');
+        }
+
+        state.all = Array.isArray(data.transactions) ? data.transactions : Array.isArray(data?.data?.transactions) ? data.data.transactions : [];
+        renderTransactions();
+      } catch (err) {
+        console.error('Transactions load error:', err);
+        loadingState.style.display = 'none';
+        errorState.style.display = 'block';
+        errorState.textContent = err.message || 'Unable to load transactions';
+        state.all = [];
+        state.filtered = [];
+      }
+    }
+
+    quickPills.addEventListener('click', (e) => {
+      const btn = e.target.closest('.pill');
+      if (!btn) return;
+      quickPills.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      state.preset = btn.dataset.preset || 'all';
+      renderTransactions();
+    });
+
+    searchInput.addEventListener('input', renderTransactions);
+    statusFilter.addEventListener('change', renderTransactions);
+    serviceFilter.addEventListener('change', renderTransactions);
+    refreshBtn.addEventListener('click', loadDashboardData);
+    themeBtn.addEventListener('click', () => setTheme(document.body.classList.contains('light') ? 'dark' : 'light'));
+    closeReceiptBtn.addEventListener('click', closeReceipt);
+    receiptModal.addEventListener('click', (e) => {
+      if (e.target === receiptModal) closeReceipt();
+    });
+    copyBtn.addEventListener('click', copySelectedId);
+    shareBtn.addEventListener('click', shareReceipt);
+    pdfBtn.addEventListener('click', printReceipt);
+    imageBtn.addEventListener('click', downloadReceiptImage);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && receiptModal.style.display === 'flex') closeReceipt();
+    });
+
+    setTheme(localStorage.getItem(themeKey) || 'dark');
+    loadDashboardData();
+  </script>
+</body>
+</html>
