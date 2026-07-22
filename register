@@ -515,7 +515,7 @@
       <button class="btn" type="submit">Continue</button>
 
       <div class="bottom">
-        I have an existing account<a href="login.html">Login</a>
+        I have an existing account<a href="login">Login</a>
       </div>
     </form>
   </main>
@@ -651,7 +651,7 @@
 
         setTimeout(() => {
           hideToast();
-          window.location.href = 'login.html';
+          window.location.href = 'login';
         }, 1800);
       } catch (err) {
         hideLoader();
