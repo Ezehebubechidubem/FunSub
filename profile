@@ -411,7 +411,7 @@
 
     <div class="section-title">ACCOUNT</div>
     <div class="card">
-     <div class="item" onclick="window.location.href='me.html'" style="cursor:pointer;">
+     <div class="item" onclick="window.location.href='me'" style="cursor:pointer;">
   <div class="left">
     <div class="icon">👤</div>
     <div class="text">Personal Information</div>
@@ -521,7 +521,7 @@
   </div>
 
   <nav class="bottom-nav">
-    <a class="nav-item" href="dashboard.html">
+    <a class="nav-item" href="dashboard">
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
           <path d="M3 11l9-8 9 8"></path>
@@ -531,7 +531,7 @@
       Home
     </a>
 
-    <a class="nav-item" href="pricing.html">
+    <a class="nav-item" href="pricing">
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
           <path d="M6 3h12v18H6z"></path>
@@ -542,7 +542,7 @@
       Pricing
     </a>
 
-    <a class="nav-item" href="history.html">
+    <a class="nav-item" href="history">
       <div class="nav-icon">
         <svg viewBox="0 0 24 24">
           <path d="M4 5h16v14H4z"></path>
@@ -783,19 +783,19 @@
 
           localStorage.removeItem(tokenKey);
           localStorage.removeItem(userKey);
-          window.location.href = 'index.html';
+          window.location.href = 'index';
         });
       }
 
       if (agentItem) {
         agentItem.addEventListener('click', function () {
-          window.location.href = 'agent.html';
+          window.location.href = 'agent';
         });
       }
 
       if (resetPinItem) {
         resetPinItem.addEventListener('click', function () {
-          window.location.href = 'frontpassword.html';
+          window.location.href = 'forgotpassword';
         });
       }
 
@@ -807,19 +807,19 @@
 
       if (transactionPinItem) {
         transactionPinItem.addEventListener('click', function () {
-          window.location.href = 'transactionpin.html';
+          window.location.href = 'transactionpin';
         });
       }
 
       if (fundWalletItem) {
         fundWalletItem.addEventListener('click', function () {
-          window.location.href = 'fund.html';
+          window.location.href = 'fund';
         });
       }
 
       if (referralItem) {
         referralItem.addEventListener('click', function () {
-          window.location.href = 'referral.html';
+          window.location.href = 'referral';
         });
       }
 
@@ -846,19 +846,19 @@
 
       if (policyItem) {
         policyItem.addEventListener('click', function () {
-          window.location.href = 'privacy.html';
+          window.location.href = 'privacy';
         });
       }
 
       if (supportItem) {
         supportItem.addEventListener('click', function () {
-          window.location.href = 'support.html';
+          window.location.href = 'support';
         });
       }
 
       if (profileTopbar) {
         profileTopbar.addEventListener('click', function () {
-          window.location.href = 'profile.html';
+          window.location.href = 'profile';
         });
       }
     });
