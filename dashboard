@@ -880,7 +880,7 @@
   <div class="section-title">Services</div>
   <div class="action-grid">
 
-    <a class="action-item" href="airtime.html">
+    <a class="action-item" href="airtime">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <path d="M10 14a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-6 6Z"></path>
@@ -890,7 +890,7 @@
       <div class="action-label">Airtime</div>
     </a>
 
-    <a class="action-item" href="data.html">
+    <a class="action-item" href="data">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="8"></circle>
@@ -901,7 +901,7 @@
       <div class="action-label">Data</div>
     </a>
 
-    <a class="action-item" href="recharge-pin.html">
+    <a class="action-item" href="rechargepin">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <rect x="5" y="5" width="14" height="14" rx="2"></rect>
@@ -913,7 +913,7 @@
       <div class="action-label">Recharge Pins</div>
     </a>
 
-    <a class="action-item" href="electricity.html">
+    <a class="action-item" href="electricity">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <path d="M13 2 4 14h6l-1 8 11-14h-6l1-6Z"></path>
@@ -922,7 +922,7 @@
       <div class="action-label">Electricity</div>
     </a>
 
-    <a class="action-item" href="cable.html">
+    <a class="action-item" href="cable">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <rect x="4" y="6" width="16" height="10" rx="2"></rect>
@@ -933,7 +933,7 @@
       <div class="action-label">Cable TV</div>
     </a>
 
-    <a class="action-item" href="betting.html">
+    <a class="action-item" href="betting">
       <div class="action-icon">
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9"></circle>
