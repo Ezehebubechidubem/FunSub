@@ -409,7 +409,7 @@
       <button class="btn" type="submit">Sign In</button>
 
       <div class="bottom">
-        New user? <a href="register.html">Sign Up</a>
+        New user? <a href="register">Sign Up</a>
       </div>
     </form>
   </main>
@@ -546,7 +546,7 @@
 
         setTimeout(() => {
           hideToast();
-          window.location.href = 'dashboard.html';
+          window.location.href = 'dashboard';
         }, 1600);
       } catch (err) {
         hideLoader();
