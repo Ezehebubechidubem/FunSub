@@ -557,7 +557,7 @@
               <div class="avatar">J</div>
               <div class="hello">
                 <div class="small">Hi John</div>
-                <div class="big">What do you want to do?</div>
+                <div class="big">Enjoy Our Cheap Services</div>
               </div>
             </div>
 
@@ -675,18 +675,14 @@
         </div>
 
         <div class="cta-wrap">
-          <a class="cta-btn" href="register.html">Register</a>
-          <a class="cta-btn" href="login.html">Login</a>
+          <a class="cta-btn" href="register">Register</a>
+          <a class="cta-btn" href="login">Login</a>
         </div>
       </div>
     </section>
 
     <div class="footer-space"></div>
   </main>
-<script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/FunSub/sw.js");
-  }
-</script>
-</body>
-                  </html>
+
+</body> 
+</html>
