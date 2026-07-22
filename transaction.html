@@ -576,7 +576,7 @@
     <div class="topbar">
       <div class="brand">
         <div class="brand-badge" title="FunSub logo">
-          <img id="appLogo" src="./icons/PhoneSub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
+          <img id="appLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
         </div>
         <div class="brand-text">
           <h1>Transactions</h1>
@@ -662,7 +662,7 @@
         <div class="receipt-header">
           <button class="receipt-close" id="closeReceiptBtn" aria-label="Close receipt">×</button>
           <div class="receipt-logo-wrap">
-            <img id="receiptLogo" src="./icons/PhoneSub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
+            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='#d4af37'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='22px';" />
           </div>
           <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
           <div class="receipt-subtitle">Transaction Receipt</div>
@@ -705,8 +705,11 @@
   <div class="toast" id="toast">Copied</div>
 
   <script src="theme.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js");
+    }
+
     const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
     const themeKey = 'funsub_theme';
@@ -756,7 +759,7 @@
       naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
       nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
       supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg',
-      flutterwave: 'https://i.postimg.cc/XYZ/placeholder.png'
+      flutterwave: ''
     };
 
     const state = {
@@ -777,7 +780,10 @@ function getToken() {
     }
 
     function normalizeStatus(value) {
-      return String(value || '').trim().toLowerCase();
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s/]+/g, '-');
     }
 
     function safeJsonParse(meta) {
@@ -836,13 +842,13 @@ function getToken() {
       return map[key] || v;
     }
 
+    function getMeta(tx) {
+      return safeJsonParse(tx?.meta);
+    }
+
     function getCategory(tx) {
       const meta = getMeta(tx);
       return normalizeStatus(tx?.category || tx?.type || meta?.serviceType || meta?.category);
-    }
-
-    function getMeta(tx) {
-      return safeJsonParse(tx?.meta);
     }
 
     function getActorInfo(tx) {
@@ -852,17 +858,17 @@ function getToken() {
 
       let raw = '';
       if (networkMode) {
-        raw = meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || '';
+        raw = meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || tx?.provider || '';
       } else if (category === 'wallet') {
         raw = meta.provider || meta.gateway || 'Flutterwave';
       } else {
-        raw = meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || '';
+        raw = meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || tx?.network || '';
       }
 
       if (normalizeStatus(raw) === 'iacafe') {
         raw = networkMode
-          ? (meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || '')
-          : (meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || '');
+          ? (meta.network || meta.network_name || meta.networkName || meta.service_id || meta.serviceId || tx?.network || '')
+          : (meta.providerLabel || meta.provider || meta.service_id || meta.serviceId || tx?.provider || '');
       }
 
       const label = prettyName(raw || (networkMode ? 'Network' : 'Provider'));
@@ -877,27 +883,47 @@ function getToken() {
     }
 
     function getTitle(tx) {
-      const meta = getMeta(tx);
       const category = getCategory(tx);
-      const actor = getActorInfo(tx);
-
-      if (category === 'airtime') return `${actor.label} Airtime`;
-      if (category === 'data') return `${actor.label} Data`;
-      if (category === 'cable_tv' || category === 'cable') return `${actor.label} Subscription`;
-      if (category === 'betting') return `${actor.label} Funding`;
-      if (category === 'electricity') return `${actor.label} Payment`;
+      if (category === 'airtime') return 'Airtime Subscription';
+      if (category === 'data') return 'Data Subscription';
+      if (category === 'cable_tv' || category === 'cable') return 'Cable TV Subscription';
+      if (category === 'betting') return 'Bet Funding';
+      if (category === 'electricity') return 'Electricity Payment';
       if (category === 'wallet') return 'Wallet Funding';
-      if (category === 'recharge_pin') return `${actor.label} Recharge PIN`;
-      if (category === 'data_pin') return `${actor.label} Data PIN`;
-      if (category === 'exam_pin') return `${actor.label} Exam PIN`;
-      return tx?.description || meta.description || meta.request_id || 'Transaction';
+      if (category === 'recharge_pin') return 'Recharge PIN';
+      if (category === 'data_pin') return 'Data PIN';
+      if (category === 'exam_pin') return 'Exam PIN';
+      return tx?.description || getMeta(tx)?.description || getMeta(tx)?.request_id || 'Transaction';
     }
 
     function getStatusLabel(tx) {
       const s = normalizeStatus(tx?.status || tx?.meta?.status || '');
-      if (s === 'success' || s === 'successful' || s === 'completed' || s === 'completed-api' || s === 'complete') return 'successful';
-      if (s === 'pending' || s === 'processing' || s === 'queued' || s === 'unknown') return 'pending';
-      if (s === 'reversed' || s === 'refund' || s === 'refunded' || s === 'reversed-api') return 'reversed';
+      if (
+        s === 'success' ||
+        s === 'successful' ||
+        s === 'completed' ||
+        s === 'completed-api' ||
+        s === 'completed-apI'.toLowerCase() ||
+        s === 'complete' ||
+        s === 'paid' ||
+        s === 'ok'
+      ) return 'successful';
+
+      if (
+        s === 'pending' ||
+        s === 'processing' ||
+        s === 'queued' ||
+        s === 'unknown' ||
+        s === 'submitted'
+      ) return 'pending';
+
+      if (
+        s === 'reversed' ||
+        s === 'refund' ||
+        s === 'refunded' ||
+        s === 'reversed-api'
+      ) return 'reversed';
+
       return 'failed';
     }
 
@@ -937,6 +963,7 @@ function getToken() {
       if (service !== 'all' && getCategory(tx) !== service) return false;
 
       if (!q) return true;
+
       const meta = getMeta(tx);
       const haystack = [
         tx?.id,
@@ -968,6 +995,7 @@ function getToken() {
         meta.customer_name,
         meta.customerName
       ].filter(Boolean).join(' ').toLowerCase();
+
       return haystack.includes(q);
     }
 
@@ -995,8 +1023,7 @@ function getToken() {
         </div>
       `;
     }
-
-    function renderTransactions() {
+function renderTransactions() {
       const filtered = state.all.filter(matchesFilters);
       state.filtered = filtered;
       transactionsList.innerHTML = '';
@@ -1022,8 +1049,8 @@ function getToken() {
         const amount = formatMoney(tx.amount);
         const title = getTitle(tx);
         const serviceLabel = getServiceLabel(tx);
-        const card = document.createElement('div');
 
+        const card = document.createElement('div');
         card.className = 'tx-card';
         card.innerHTML = `
           <div class="tx-left">
@@ -1051,7 +1078,8 @@ function getToken() {
         transactionsList.appendChild(card);
       }
     }
-function buildReceiptDetails(tx) {
+
+    function buildReceiptDetails(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
       const actor = getActorInfo(tx);
@@ -1086,7 +1114,7 @@ function buildReceiptDetails(tx) {
       }
 
       if (category === 'betting') {
-        rows.push(detailItem('Customer ID', escapeHtml(meta.customer_id || meta.customerId || '—')));
+        rows.push(detailItem('Betting ID', escapeHtml(meta.customer_id || meta.customerId || '—')));
       }
 
       if (category === 'electricity') {
@@ -1119,8 +1147,7 @@ function buildReceiptDetails(tx) {
     function openReceipt(tx) {
       state.selected = tx;
       const status = normalizeStatus(getStatusLabel(tx));
-      const amount = formatMoney(tx.amount);
-      receiptAmountBig.textContent = amount;
+      receiptAmountBig.textContent = formatMoney(tx.amount);
       receiptDetails.innerHTML = buildReceiptDetails(tx);
 
       statusBadge.className = `status-badge ${status}`;
