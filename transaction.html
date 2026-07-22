@@ -362,6 +362,7 @@
       position:relative;
       border:1px solid rgba(212,175,55,.65);
     }
+
     .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
@@ -383,8 +384,7 @@
       border-bottom:3px solid var(--gold);
       box-sizing:border-box;
     }
-
-    .receipt-logo-wrap{
+.receipt-logo-wrap{
       width:54px;
       height:54px;
       border-radius:50%;
@@ -839,6 +839,10 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
     const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
 
@@ -1051,7 +1055,6 @@
     function getServiceLabel(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
-
       if (meta.serviceName) return prettyName(meta.serviceName);
 
       const map = {
@@ -1251,46 +1254,33 @@
 
       rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
       rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
-      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', {
-        logo: actor.logo,
-        text: actor.label
-      }));
 
-      if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
-        const phone =
-          getNested(meta, 'providerResponse.data.phone') ||
-          getNested(meta, 'flutterwaveData.customer.phone_number') ||
-          meta.phone ||
-          meta.phone_number ||
-          meta.customer_number ||
-          meta.customer_id ||
-          meta.customerId ||
-          '—';
-        rows.push(detailItem('Phone Number', phone));
-      }
-
-      if (category === 'cable_tv' || category === 'cable') {
+      if (category === 'airtime') {
+        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
+        rows.push(detailItem('Phone Number', getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'));
+      } else if (category === 'data') {
+        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
+        rows.push(detailItem('Phone Number', getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'));
+        if (meta.packageName || meta.plan_name) rows.push(detailItem('Data Plan', meta.packageName || meta.plan_name));
+      } else if (category === 'cable_tv' || category === 'cable') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—'));
         rows.push(detailItem('Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—'));
-        rows.push(detailItem('Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
-      }
-
-      if (category === 'betting') {
-        rows.push(detailItem('Provider', meta.providerLabel || meta.service_id || '—'));
+        rows.push(detailItem('Subscription Type', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
+      } else if (category === 'betting') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Betting ID', meta.customer_id || meta.customerId || '—'));
-      }
-
-      if (category === 'electricity') {
+      } else if (category === 'electricity') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—'));
         if (meta.token) rows.push(detailItem('Token', meta.token));
-      }
-
-      if (category === 'wallet') {
+      } else if (category === 'wallet') {
         rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
-        const phone = getNested(meta, 'flutterwaveData.customer.phone_number') || '—';
-        rows.push(detailItem('Phone Number', phone));
+        rows.push(detailItem('Phone Number', getNested(meta, 'flutterwaveData.customer.phone_number') || '—'));
+      } else {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
       }
 
       if (before !== undefined && after !== undefined) {
@@ -1300,10 +1290,14 @@
 
       rows.push(detailItem('Amount', formatMoney(tx.amount)));
       if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
-      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status }));
+      rows.push(detailItem('Status', '', {
+        text: status,
+        copyValue: statusKey
+      }));
       rows.push(detailItem('Date', date));
       rows.push(detailItem('Time', time));
       rows.push(detailItem('Reference', ref));
+
       if (tx.description) rows.push(detailItem('Description', tx.description));
 
       return rows.join('');
@@ -1313,6 +1307,11 @@
       state.selected = tx;
       receiptAmountBig.textContent = formatMoney(tx.amount);
       receiptDetails.innerHTML = buildReceiptDetails(tx);
+
+      const statusKey = getStatusLabel(tx);
+      statusBadge.className = `status-badge ${statusKey === 'successful' ? 'success' : statusKey === 'pending' ? 'pending' : statusKey === 'reversed' ? 'reversed' : 'failed'}`;
+      statusBadgeText.textContent = statusText(tx).toUpperCase();
+
       receiptModal.style.display = 'flex';
       receiptModal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
@@ -1327,6 +1326,7 @@
     async function copySelectedId() {
       const tx = state.selected;
       if (!tx) return;
+
       const meta = getMeta(tx);
       const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
       await copyTextToClipboard(value, 'Transaction ID copied');
