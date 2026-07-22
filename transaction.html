@@ -17,7 +17,6 @@
       --surface:#ffffff;
       --input-bg:#ffffff;
       --modal-bg:#ffffff;
-      --key-bg:#f9fafb;
       --shadow:0 18px 45px rgba(0,0,0,.08);
       --success:#0f7a3b;
       --danger:#b42318;
@@ -36,7 +35,6 @@
       --surface:#1a1d24;
       --input-bg:#232833;
       --modal-bg:#1a1d24;
-      --key-bg:#232833;
       --shadow:0 18px 45px rgba(0,0,0,.28);
       --success:#34d399;
       --danger:#f87171;
@@ -50,7 +48,7 @@
       margin:0;
       background:var(--bg);
       color:var(--text);
-      font-family: Arial, Helvetica, sans-serif;
+      font-family:Arial, Helvetica, sans-serif;
     }
 
     .page{
@@ -336,7 +334,8 @@
       border-radius:20px;
       margin:0 14px 14px;
     }
-.modal-overlay{
+
+    .modal-overlay{
       position:fixed;
       inset:0;
       background:rgba(0,0,0,.78);
@@ -344,14 +343,14 @@
       align-items:center;
       justify-content:center;
       z-index:9999;
-      padding:10px;
-      backdrop-filter: blur(7px);
+      padding:14px;
+      backdrop-filter:blur(7px);
     }
 
     .receipt-shell{
       width:min(92vw, 392px);
-      max-height:none;
-      overflow:visible;
+      max-height:86vh;
+      overflow:auto;
       border-radius:28px;
       background:transparent;
       box-shadow:0 24px 70px rgba(0,0,0,.45);
@@ -365,8 +364,7 @@
       position:relative;
       border:1px solid rgba(200,154,36,.55);
     }
-
-    .receipt-header{
+.receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
       padding:13px 12px 24px;
@@ -441,37 +439,6 @@
       padding:10px 10px 12px;
       margin-top:4px;
     }
-
-    .status-badge{
-      width:max-content;
-      margin:0 auto 9px;
-      padding:7px 12px;
-      border-radius:999px;
-      font-weight:800;
-      letter-spacing:.04em;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      text-transform:uppercase;
-      border:1px solid transparent;
-      font-size:11px;
-    }
-
-    .status-badge .dot{
-      width:12px;
-      height:12px;
-      border-radius:50%;
-      display:inline-block;
-    }
-
-    .status-badge.success{background:rgba(34,197,94,.12);color:#1f8f4b;border-color:rgba(34,197,94,.22)}
-    .status-badge.success .dot{background:var(--success)}
-    .status-badge.pending{background:rgba(245,158,11,.12);color:#b7791f;border-color:rgba(245,158,11,.22)}
-    .status-badge.pending .dot{background:var(--pending)}
-    .status-badge.failed{background:rgba(239,68,68,.12);color:#bb3d3d;border-color:rgba(239,68,68,.22)}
-    .status-badge.failed .dot{background:var(--danger)}
-    .status-badge.reversed{background:rgba(59,130,246,.12);color:#2d6ddf;border-color:rgba(59,130,246,.22)}
-    .status-badge.reversed .dot{background:var(--info)}
 
     .amount-card{
       background:linear-gradient(180deg, #fffaf0, #fffdf8);
@@ -584,6 +551,25 @@
       white-space:nowrap;
     }
 
+    .status-inline{
+      font-weight:800;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .status-inline::before{
+      content:"";
+      width:9px;
+      height:9px;
+      border-radius:50%;
+      display:inline-block;
+      background:currentColor;
+    }
+    .status-inline.success{color:var(--success)}
+    .status-inline.pending{color:var(--pending)}
+    .status-inline.reversed{color:var(--info)}
+    .status-inline.failed{color:var(--danger)}
+
     .button-grid{
       display:grid;
       grid-template-columns:repeat(2,1fr);
@@ -682,7 +668,6 @@
       .receipt-brand{font-size:18px}
       .receipt-subtitle{font-size:11px}
       .receipt-body{padding:9px 9px 11px}
-      .status-badge{margin-bottom:8px;padding:6px 11px;font-size:10px}
       .amount-card{padding:10px 8px;margin-bottom:8px}
       .amount-card .amount{font-size:24px}
       .detail-card{padding:7px 8px}
@@ -696,11 +681,12 @@
   </style>
 </head>
 <body>
-<div class="page">
+  <div class="page">
     <div class="topbar">
       <div class="brand">
         <div class="brand-badge" title="FunSub logo">
-          <img id="appLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
+          <img id="appLogo" src="./icons/funsub-logo.png" alt="FunSub Logo"
+               onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
         </div>
         <div class="brand-text">
           <h1>Transactions</h1>
@@ -787,18 +773,14 @@
         <div class="receipt-header">
           <button class="receipt-close" id="closeReceiptBtn" type="button" aria-label="Close receipt">×</button>
           <div class="receipt-logo-wrap">
-            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo" onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
+            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo"
+                 onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
           </div>
           <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
           <div class="receipt-subtitle">Transaction Receipt</div>
         </div>
 
         <div class="receipt-body">
-          <div id="statusBadge" class="status-badge success">
-            <span class="dot"></span>
-            <span id="statusBadgeText">SUCCESSFUL</span>
-          </div>
-
           <div class="amount-card">
             <div class="label">Amount</div>
             <div class="amount" id="receiptAmountBig">₦0.00</div>
@@ -834,12 +816,11 @@
 
   <script src="theme.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script>
+  <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js");
     }
-
-    const API_ROOT = 'https://funsub.onrender.com';
+const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
 
     const transactionsList = document.getElementById('transactionsList');
@@ -857,8 +838,6 @@
     const closeReceiptBtn = document.getElementById('closeReceiptBtn');
     const receiptAmountBig = document.getElementById('receiptAmountBig');
     const receiptDetails = document.getElementById('receiptDetails');
-    const statusBadge = document.getElementById('statusBadge');
-    const statusBadgeText = document.getElementById('statusBadgeText');
     const copyBtn = document.getElementById('copyBtn');
     const shareBtn = document.getElementById('shareBtn');
     const downloadBtn = document.getElementById('downloadBtn');
@@ -911,7 +890,6 @@
     async function copyTextToClipboard(text, okMessage = 'Copied') {
       const value = String(text || '').trim();
       if (!value) return;
-
       try {
         await navigator.clipboard.writeText(value);
         showToast(okMessage);
@@ -921,10 +899,7 @@
     }
 
     function normalizeStatus(value) {
-      return String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[\s/]+/g, '-');
+      return String(value || '').trim().toLowerCase().replace(/[\s/]+/g, '-');
     }
 
     function safeJsonParse(meta) {
@@ -965,28 +940,12 @@
       if (!v) return '';
       const key = v.toLowerCase();
       const map = {
-        mtn: 'MTN',
-        airtel: 'Airtel',
-        glo: 'GLO',
-        '9mobile': '9mobile',
-        dstv: 'DStv',
-        gotv: 'GOtv',
-        startimes: 'Startimes',
-        showmax: 'Showmax',
-        bet9ja: 'Bet9ja',
-        '1xbet': '1xBet',
-        bangbet: 'BangBet',
-        betking: 'BetKing',
-        betland: 'BetLand',
-        betlion: 'BetLion',
-        betway: 'BetWay',
-        cloudbet: 'CloudBet',
-        livescorebet: 'LiveScoreBet',
-        merrybet: 'MerryBet',
-        naijabet: 'NaijaBet',
-        nairabet: 'NairaBet',
-        supabet: 'SupaBet',
-        flutterwave: 'Flutterwave'
+        mtn: 'MTN', airtel: 'Airtel', glo: 'GLO', '9mobile': '9mobile',
+        dstv: 'DStv', gotv: 'GOtv', startimes: 'Startimes', showmax: 'Showmax',
+        bet9ja: 'Bet9ja', '1xbet': '1xBet', bangbet: 'BangBet', betking: 'BetKing',
+        betland: 'BetLand', betlion: 'BetLion', betway: 'BetWay', cloudbet: 'CloudBet',
+        livescorebet: 'LiveScoreBet', merrybet: 'MerryBet', naijabet: 'NaijaBet',
+        nairabet: 'NairaBet', supabet: 'SupaBet', flutterwave: 'Flutterwave'
       };
       return map[key] || v;
     }
@@ -1056,7 +1015,6 @@
     function getServiceLabel(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
-
       if (meta.serviceName) return prettyName(meta.serviceName);
 
       const map = {
@@ -1091,34 +1049,9 @@
 
     function getStatusLabel(tx) {
       const s = normalizeStatus(tx?.status || tx?.meta?.status || '');
-
-      if (
-        s === 'success' ||
-        s === 'successful' ||
-        s === 'completed' ||
-        s === 'completed-api' ||
-        s === 'completed-api'.replace(/[\s/]+/g, '-') ||
-        s === 'complete' ||
-        s === 'paid' ||
-        s === 'ok'
-      ) return 'successful';
-
-      if (
-        s === 'pending' ||
-        s === 'processing' ||
-        s === 'queued' ||
-        s === 'unknown' ||
-        s === 'submitted'
-      ) return 'pending';
-
-      if (
-        s === 'reversed' ||
-        s === 'refund' ||
-        s === 'refunded' ||
-        s === 'reversed-api' ||
-        s.includes('timeout')
-      ) return 'reversed';
-
+      if (['success','successful','completed','completed-api','complete','paid','ok'].includes(s)) return 'successful';
+      if (['pending','processing','queued','unknown','submitted'].includes(s)) return 'pending';
+      if (['reversed','refund','refunded','reversed-api'].includes(s) || s.includes('timeout')) return 'reversed';
       return 'failed';
     }
 
@@ -1156,40 +1089,17 @@
       if (!isWithinPreset(tx, preset)) return false;
       if (status !== 'all' && getStatusLabel(tx) !== status) return false;
       if (service !== 'all' && getCategory(tx) !== service) return false;
-
       if (!q) return true;
 
       const meta = getMeta(tx);
       const haystack = [
-        tx?.id,
-        tx?.reference,
-        tx?.description,
-        tx?.amount,
-        tx?.status,
-        tx?.category,
-        meta.request_id,
-        meta.requestId,
-        meta.customer_id,
-        meta.customerId,
-        meta.phone,
-        meta.phone_number,
-        meta.customer_number,
-        meta.smartcard_number,
-        meta.meter_number,
-        meta.account_number,
-        meta.service_id,
-        meta.serviceId,
-        meta.provider,
-        meta.providerLabel,
-        meta.gateway,
-        meta.network,
-        meta.network_name,
-        meta.networkName,
-        meta.plan_name,
-        meta.packageName,
-        meta.package_name,
-        meta.customer_name,
-        meta.customerName,
+        tx?.id, tx?.reference, tx?.description, tx?.amount, tx?.status, tx?.category,
+        meta.request_id, meta.requestId, meta.customer_id, meta.customerId,
+        meta.phone, meta.phone_number, meta.customer_number, meta.smartcard_number,
+        meta.meter_number, meta.account_number, meta.service_id, meta.serviceId,
+        meta.provider, meta.providerLabel, meta.gateway, meta.network, meta.network_name,
+        meta.networkName, meta.plan_name, meta.packageName, meta.package_name,
+        meta.customer_name, meta.customerName,
         getNested(meta, 'providerResponse.data.phone'),
         getNested(meta, 'providerResponse.data.network'),
         getNested(meta, 'providerResponse.data.service_name'),
@@ -1247,10 +1157,7 @@
       errorState.style.display = 'none';
       emptyState.style.display = filtered.length ? 'none' : 'block';
 
-      if (!filtered.length) {
-        transactionsList.innerHTML = '';
-        return;
-      }
+      if (!filtered.length) return;
 
       for (const tx of filtered) {
         const meta = getMeta(tx);
@@ -1295,6 +1202,7 @@
       const actor = getActorInfo(tx);
       const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
       const status = statusText(tx);
+      const statusKey = getStatusLabel(tx);
       const rows = [];
 
       const requestId = meta.request_id || meta.requestId || tx.reference || tx.id || '—';
@@ -1306,10 +1214,7 @@
 
       rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
       rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
-      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', {
-        logo: actor.logo,
-        text: actor.label
-      }));
+      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', { logo: actor.logo, text: actor.label }));
 
       if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
         const phone =
@@ -1321,7 +1226,6 @@
           meta.customer_id ||
           meta.customerId ||
           '—';
-
         rows.push(detailItem('Phone Number', phone));
       }
 
@@ -1356,7 +1260,7 @@
 
       rows.push(detailItem('Amount', formatMoney(tx.amount)));
       if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
-      rows.push(detailItem('Status', status));
+      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status }));
       rows.push(detailItem('Date', date));
       rows.push(detailItem('Time', time));
       rows.push(detailItem('Reference', ref));
@@ -1368,13 +1272,8 @@
 
     function openReceipt(tx) {
       state.selected = tx;
-      const status = normalizeStatus(getStatusLabel(tx));
       receiptAmountBig.textContent = formatMoney(tx.amount);
       receiptDetails.innerHTML = buildReceiptDetails(tx);
-
-      statusBadge.className = `status-badge ${status}`;
-      statusBadgeText.textContent = status.toUpperCase();
-
       receiptModal.style.display = 'flex';
       receiptModal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
@@ -1389,7 +1288,6 @@
     async function copySelectedId() {
       const tx = state.selected;
       if (!tx) return;
-
       const meta = getMeta(tx);
       const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
       await copyTextToClipboard(value, 'Transaction ID copied');
@@ -1397,18 +1295,8 @@
 
     async function captureReceiptCanvas() {
       const node = document.getElementById('receiptCard');
-      if (!node || typeof html2canvas !== 'function') {
-        throw new Error('Image capture is not available');
-      }
-
-      const canvas = await html2canvas(node, {
-        scale: 2,
-        backgroundColor: null,
-        useCORS: true,
-        allowTaint: true
-      });
-
-      return canvas;
+      if (!node || typeof html2canvas !== 'function') throw new Error('Image capture is not available');
+      return await html2canvas(node, { scale: 2, backgroundColor: null, useCORS: true, allowTaint: true });
     }
 
     function canvasToBlob(canvas) {
@@ -1503,9 +1391,7 @@
           data = { rawResponse: text };
         }
 
-        if (!res.ok) {
-          throw new Error(data.message || 'Unable to load transactions');
-        }
+        if (!res.ok) throw new Error(data.message || 'Unable to load transactions');
 
         state.all = Array.isArray(data.transactions)
           ? data.transactions
