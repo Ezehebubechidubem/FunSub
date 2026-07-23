@@ -60,45 +60,45 @@
 
     .topbar{
       display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
+      align-items:center;
+      justify-content:center;
       gap:12px;
       margin-bottom:60px;
+      padding-top:6px;
     }
 
     .brand{
       display:flex;
-      align-items:flex-start;
-      gap:12px;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
       min-width:0;
       width:100%;
+      text-align:center;
     }
 
     .brand-text{
       width:100%;
       margin-bottom:0;
+      text-align:center;
     }
 
     .brand-text h1{
       margin:0;
       font-size:24px;
       letter-spacing:-.03em;
-      text-align:left;
+      text-align:center;
     }
 
     .brand-text p{
       margin:4px 0 0;
       font-size:13px;
       color:var(--muted);
-      text-align:left;
+      text-align:center;
     }
 
-    .top-actions{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex:0 0 auto;
-    }
+    .top-actions{display:none}
 
     .icon-btn{
       border:1px solid var(--border);
@@ -190,6 +190,8 @@
     .list-head h2{
       margin:0;
       font-size:18px;
+      text-align:center;
+      width:100%;
     }
 
     .pill-row{
@@ -250,22 +252,23 @@
     }
 
     .tx-logo{
-      width:48px;
-      height:48px;
-      border-radius:15px;
+      width:44px;
+      height:44px;
+      border-radius:14px;
       background:#fff;
       display:grid;
       place-items:center;
       overflow:hidden;
-      flex:0 0 48px;
+      flex:0 0 44px;
       border:1px solid rgba(0,0,0,.06);
     }
 
     .tx-logo img{
       width:100%;
       height:100%;
-      object-fit:cover;
+      object-fit:contain;
       display:block;
+      padding:4px;
     }
 
     .tx-meta{min-width:0; flex:1 1 auto;}
@@ -369,7 +372,7 @@
     }
 
     .receipt-shell{
-      width:min(92vw, 392px);
+      width:min(86vw, 392px);
       max-height:min(86vh, 860px);
       overflow:visible;
       border-radius:28px;
@@ -690,12 +693,15 @@
     @media (max-width: 520px){
       .page{padding:14px 12px 20px}
       .brand-text h1{font-size:22px}
+      .brand-text p{font-size:12px}
+      .topbar{margin-bottom:42px}
       .summary-grid{padding:12px;gap:10px}
       .summary-card{min-height:84px}
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
       .tx-right{min-width:84px}
-      .receipt-shell{width:min(92vw, 384px)}
+      .tx-logo{width:40px;height:40px;flex-basis:40px}
+      .receipt-shell{width:min(88vw, 332px)}
       .receipt-header{padding:12px 11px 22px}
       .receipt-header::after{height:28px;bottom:-13px}
       .receipt-logo-wrap{width:50px;height:50px}
@@ -715,786 +721,3 @@
     }
   </style>
 </head>
-<body>
-  <div class="page">
-    <div class="topbar">
-      <div class="brand">
-        <div class="brand-text">
-          <h1>Transactions History</h1>
-          <p class="upper">Track All Transactions Record</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="summary-grid">
-        <div class="summary-card">
-          <div class="big" id="sumAll">0</div>
-          <div class="small">All Transactions</div>
-        </div>
-        <div class="summary-card success">
-          <div class="big" id="sumSuccess">0</div>
-          <div class="small">Successful</div>
-        </div>
-        <div class="summary-card pending">
-          <div class="big" id="sumPending">0</div>
-          <div class="small">Pending</div>
-        </div>
-        <div class="summary-card failed">
-          <div class="big" id="sumFailed">0</div>
-          <div class="small">Failed / Reversed</div>
-        </div>
-      </div>
-
-      <div class="controls">
-        <div class="search-wrap">
-          <span style="color:var(--muted)">⌕</span>
-          <input id="searchInput" type="search" placeholder="Search by service, reference, amount..." />
-        </div>
-        <div class="select-wrap">
-          <select id="statusFilter">
-            <option value="all">All Status</option>
-            <option value="success">Successful</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-            <option value="reversed">Reversed</option>
-          </select>
-        </div>
-        <div class="select-wrap">
-          <select id="serviceFilter">
-            <option value="all">All Services</option>
-            <option value="airtime">Airtime</option>
-            <option value="data">Data</option>
-            <option value="cable_tv">Cable TV</option>
-            <option value="electricity">Electricity</option>
-            <option value="betting">Betting</option>
-            <option value="wallet">Wallet</option>
-            <option value="recharge_pin">Recharge PIN</option>
-            <option value="data_pin">Data PIN</option>
-            <option value="exam_pin">Exam PIN</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="list-head">
-        <h2>Your Transaction History</h2>
-        <div style="color:var(--muted);font-size:13px" id="countLabel">0 items</div>
-      </div>
-
-      <div class="pill-row" id="quickPills">
-        <button class="pill active" data-preset="all" type="button">All</button>
-        <button class="pill" data-preset="today" type="button">Today</button>
-        <button class="pill" data-preset="week" type="button">7 Days</button>
-        <button class="pill" data-preset="month" type="button">30 Days</button>
-      </div>
-
-      <div id="loadingState" class="loading">Loading transactions...</div>
-      <div id="emptyState" class="empty" style="display:none;">No transactions yet.</div>
-      <div id="errorState" class="error-state" style="display:none;"></div>
-      <div id="transactionsList" class="transactions"></div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="receiptModal" aria-hidden="true">
-    <button class="modal-close-btn" id="closeReceiptBtn" type="button" aria-label="Close receipt">×</button>
-
-    <div class="receipt-shell">
-      <div class="receipt-card" id="receiptCard">
-        <div class="receipt-header">
-          <div class="receipt-logo-wrap">
-            <img id="receiptLogo" src="./icons/funsub-logo.png" alt="FunSub Logo"
-                 onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
-          </div>
-          <h3 class="receipt-brand"><span class="gold">Fun</span>Sub</h3>
-          <div class="receipt-subtitle">Transaction Receipt</div>
-        </div>
-
-        <div class="receipt-body">
-          <div class="amount-card">
-            <div class="label">Amount</div>
-            <div class="amount" id="receiptAmountBig">₦0</div>
-          </div>
-
-          <div class="detail-card" id="receiptDetails"></div>
-
-          <div class="button-grid">
-            <button class="receipt-btn dark" id="copyBtn" type="button">
-              <span>⧉</span> Copy ID
-            </button>
-            <button class="receipt-btn gold" id="shareBtn" type="button">
-              <span>↗</span> Share Image
-            </button>
-            <button class="receipt-btn dark" id="downloadBtn" type="button">
-              <span>⌘</span> Download PDF
-            </button>
-            <button class="receipt-btn dark" id="saveBtn" type="button">
-              <span>▣</span> Save Image
-            </button>
-          </div>
-
-          <div class="receipt-footer">
-            <div class="receipt-footer-brand">
-              <img src="./icons/funsub-logo.png" alt="FunSub footer logo"
-                   onerror="this.style.display='none';" />
-            </div>
-            Thank you for using our service!
-            <strong><span class="gold">Powered by FunSub</span></strong>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="toast" id="toast">Copied</div>
-
-  <script src="theme.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
-
-    const API_ROOT = 'https://funsub.onrender.com';
-    const tokenKey = 'funsub_token';
-
-    const transactionsList = document.getElementById('transactionsList');
-    const loadingState = document.getElementById('loadingState');
-    const emptyState = document.getElementById('emptyState');
-    const errorState = document.getElementById('errorState');
-    const countLabel = document.getElementById('countLabel');
-    const searchInput = document.getElementById('searchInput');
-    const statusFilter = document.getElementById('statusFilter');
-    const serviceFilter = document.getElementById('serviceFilter');
-    const quickPills = document.getElementById('quickPills');
-
-    const receiptModal = document.getElementById('receiptModal');
-    const closeReceiptBtn = document.getElementById('closeReceiptBtn');
-    const receiptAmountBig = document.getElementById('receiptAmountBig');
-    const receiptDetails = document.getElementById('receiptDetails');
-    const copyBtn = document.getElementById('copyBtn');
-    const shareBtn = document.getElementById('shareBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const saveBtn = document.getElementById('saveBtn');
-    const toast = document.getElementById('toast');
-
-    const providerLogos = {
-      mtn: 'https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg',
-      airtel: 'https://i.postimg.cc/FKZbSxf8/airtel.png',
-      glo: 'https://i.postimg.cc/B64Y96DS/glo.png',
-      '9mobile': 'https://i.postimg.cc/hhWQ6Jz3/9mobile.png',
-      dstv: 'https://i.postimg.cc/3rDPvc8h/dstv-logo-transparent.png',
-      gotv: 'https://i.postimg.cc/mrRqfLCB/gotv-logo-transparent.png',
-      startimes: 'https://i.postimg.cc/4xrcmywq/startimes-logo-transparent.png',
-      showmax: 'https://i.postimg.cc/gjTJQt7r/showmax-logo-transparent.png',
-      bet9ja: 'https://i.postimg.cc/g2YWYTTF/IMG-20260704-153103.jpg',
-      '1xbet': 'https://i.postimg.cc/MKq4Rjbz/IMG-20260704-153140.jpg',
-      bangbet: 'https://i.postimg.cc/Y2RjKZRS/IMG-20260704-160404.jpg',
-      betking: 'https://i.postimg.cc/V6XG0YJ4/IMG-20260704-153020.jpg',
-      betland: 'https://i.postimg.cc/fytPK6TK/IMG-20260704-160941.jpg',
-      betlion: 'https://i.postimg.cc/NGC92ZHC/IMG-20260704-161648.jpg',
-      betway: 'https://i.postimg.cc/qqM5PP7Q/IMG-20260704-155102.jpg',
-      cloudbet: 'https://i.postimg.cc/xyz/cloudbet.png',
-      livescorebet: 'https://i.postimg.cc/xyz/livescore.png',
-      merrybet: 'https://i.postimg.cc/xyz/merrybet.png',
-      naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
-      nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
-      supabet: 'https://i.postimg.cc/13ycyfCk/IMG-20260723-094024.jpg',
-      flutterwave: ''
-    };
-
-    const state = {
-      all: [],
-      filtered: [],
-      selected: null,
-      preset: 'all'
-    };
-
-    function getToken() {
-      return localStorage.getItem(tokenKey) || '';
-    }
-
-    function showToast(message) {
-      toast.textContent = message;
-      toast.classList.add('show');
-      clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
-    }
-
-    async function copyTextToClipboard(text, okMessage = 'Copied') {
-      const value = String(text || '').trim();
-      if (!value) return;
-      try {
-        await navigator.clipboard.writeText(value);
-        showToast(okMessage);
-      } catch {
-        showToast('Unable to copy');
-      }
-    }
-
-    function normalizeStatus(value) {
-      return String(value || '').trim().toLowerCase().replace(/[\s/]+/g, '-');
-    }
-
-    function safeJsonParse(meta) {
-      if (!meta) return {};
-      if (typeof meta === 'object' && !Array.isArray(meta)) return meta;
-      if (typeof meta !== 'string') return {};
-      try {
-        const parsed = JSON.parse(meta);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-      } catch {
-        return { rawMeta: meta };
-      }
-    }
-
-    function getNested(obj, path, fallback = '') {
-      try {
-        return path.split('.').reduce((acc, key) => acc?.[key], obj) ?? fallback;
-      } catch {
-        return fallback;
-      }
-    }
-
-    function formatMoney(value) {
-      const num = Math.round(Number(value || 0));
-      return '₦' + num.toLocaleString('en-NG');
-    }
-
-    function formatDateTime(value) {
-      const dt = value ? new Date(value) : new Date();
-      if (Number.isNaN(dt.getTime())) return { date: '—', time: '—' };
-      const date = dt.toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' });
-      const time = dt.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
-      return { date, time };
-    }
-
-    function prettyName(value) {
-      const v = String(value || '').trim();
-      if (!v) return '';
-      const key = v.toLowerCase();
-      const map = {
-        mtn: 'MTN', airtel: 'Airtel', glo: 'GLO', '9mobile': '9mobile',
-        dstv: 'DStv', gotv: 'GOtv', startimes: 'Startimes', showmax: 'Showmax',
-        bet9ja: 'Bet9ja', '1xbet': '1xBet', bangbet: 'BangBet', betking: 'BetKing',
-        betland: 'BetLand', betlion: 'BetLion', betway: 'BetWay', cloudbet: 'CloudBet',
-        livescorebet: 'LiveScoreBet', merrybet: 'MerryBet', naijabet: 'NaijaBet',
-        nairabet: 'NairaBet', supabet: 'SupaBet', flutterwave: 'Flutterwave'
-      };
-      return map[key] || v;
-    }
-
-    function getMeta(tx) {
-      return safeJsonParse(tx?.meta);
-    }
-
-    function getCategory(tx) {
-      const meta = getMeta(tx);
-      return normalizeStatus(tx?.category || tx?.type || meta?.serviceType || meta?.category);
-    }
-
-    function getActorInfo(tx) {
-      const meta = getMeta(tx);
-      const category = getCategory(tx);
-      const networkMode = ['airtime', 'data', 'recharge_pin', 'data_pin'].includes(category);
-
-      let raw = '';
-
-      if (category === 'airtime') {
-        raw =
-          getNested(meta, 'providerResponse.data.network') ||
-          getNested(meta, 'providerResponse.data.service_name') ||
-          meta.network ||
-          meta.networkName ||
-          getNested(meta, 'selectedPlan.meta.network') ||
-          meta.service_id ||
-          meta.providerLabel ||
-          '';
-      } else if (category === 'data') {
-        raw =
-          getNested(meta, 'providerResponse.data.network') ||
-          meta.network ||
-          meta.networkName ||
-          getNested(meta, 'selectedPlan.meta.network') ||
-          meta.service_id ||
-          meta.providerLabel ||
-          '';
-      } else if (category === 'wallet') {
-        raw = meta.gateway || meta.provider || 'Flutterwave';
-      } else {
-        raw = meta.providerLabel || meta.service_id || meta.provider || tx?.provider || '';
-      }
-
-      if (normalizeStatus(raw) === 'iacafe') {
-        raw = networkMode
-          ? (
-              getNested(meta, 'providerResponse.data.network') ||
-              getNested(meta, 'providerResponse.data.service_name') ||
-              meta.network ||
-              meta.networkName ||
-              getNested(meta, 'selectedPlan.meta.network') ||
-              meta.service_id ||
-              meta.providerLabel ||
-              ''
-            )
-          : (meta.providerLabel || meta.service_id || tx?.provider || '');
-      }
-
-      const label = prettyName(raw || (networkMode ? 'Network' : 'Provider'));
-      const key = normalizeStatus(raw || label);
-      const logo = providerLogos[key] || providerLogos[normalizeStatus(label)] || '';
-      return { label, logo, isNetwork: networkMode };
-    }
-
-    function getServiceLabel(tx) {
-      const meta = getMeta(tx);
-      const category = getCategory(tx);
-      if (meta.serviceName) return prettyName(meta.serviceName);
-
-      const map = {
-        airtime: 'Airtime',
-        data: 'Data',
-        cable_tv: 'Cable TV',
-        cable: 'Cable TV',
-        betting: 'Betting',
-        electricity: 'Electricity',
-        wallet: 'Wallet',
-        recharge_pin: 'Recharge PIN',
-        data_pin: 'Data PIN',
-        exam_pin: 'Exam PIN'
-      };
-
-      return map[category] || prettyName(tx?.description || 'Transaction');
-    }
-
-    function getTitle(tx) {
-      const category = getCategory(tx);
-      if (category === 'airtime') return 'Airtime Subscription';
-      if (category === 'data') return 'Data Subscription';
-      if (category === 'cable_tv' || category === 'cable') return 'Cable TV Subscription';
-      if (category === 'betting') return 'Bet Funding';
-      if (category === 'electricity') return 'Electricity Payment';
-      if (category === 'wallet') return 'Wallet Funding';
-      if (category === 'recharge_pin') return 'Recharge PIN';
-      if (category === 'data_pin') return 'Data PIN';
-      if (category === 'exam_pin') return 'Exam PIN';
-      return tx?.description || getMeta(tx)?.description || getMeta(tx)?.request_id || getMeta(tx)?.requestId || 'Transaction';
-    }
-
-    function getStatusLabel(tx) {
-      const s = normalizeStatus(tx?.status || tx?.meta?.status || '');
-      if (['success','successful','completed','completed-api','complete','paid','ok'].includes(s)) return 'successful';
-      if (['pending','processing','queued','unknown','submitted'].includes(s)) return 'pending';
-      if (['reversed','refund','refunded','reversed-api'].includes(s) || s.includes('timeout')) return 'reversed';
-      return 'failed';
-    }
-
-    function statusClass(tx) {
-      return `status-${getStatusLabel(tx)}`;
-    }
-
-    function statusText(tx) {
-      const s = getStatusLabel(tx);
-      if (s === 'successful') return 'Successful';
-      if (s === 'pending') return 'Pending';
-      if (s === 'reversed') return 'Reversed';
-      return 'Failed';
-    }
-
-    function isWithinPreset(tx, preset) {
-      if (preset === 'all') return true;
-      const dt = new Date(tx.created_at || tx.updated_at || Date.now());
-      if (Number.isNaN(dt.getTime())) return true;
-      const now = new Date();
-      const diff = now.getTime() - dt.getTime();
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (preset === 'today') return dt.toDateString() === now.toDateString();
-      if (preset === 'week') return diff <= 7 * oneDay;
-      if (preset === 'month') return diff <= 30 * oneDay;
-      return true;
-    }
-
-    function matchesFilters(tx) {
-      const q = searchInput.value.trim().toLowerCase();
-      const status = statusFilter.value;
-      const service = serviceFilter.value;
-      const preset = state.preset;
-
-      if (!isWithinPreset(tx, preset)) return false;
-      if (status !== 'all' && getStatusLabel(tx) !== status) return false;
-      if (service !== 'all' && getCategory(tx) !== service) return false;
-      if (!q) return true;
-
-      const meta = getMeta(tx);
-      const haystack = [
-        tx?.id, tx?.reference, tx?.description, tx?.amount, tx?.status, tx?.category,
-        meta.request_id, meta.requestId, meta.customer_id, meta.customerId,
-        meta.phone, meta.phone_number, meta.customer_number, meta.smartcard_number,
-        meta.meter_number, meta.account_number, meta.service_id, meta.serviceId,
-        meta.provider, meta.providerLabel, meta.gateway, meta.network, meta.network_name,
-        meta.networkName, meta.plan_name, meta.packageName, meta.package_name,
-        meta.customer_name, meta.customerName,
-        getNested(meta, 'providerResponse.data.phone'),
-        getNested(meta, 'providerResponse.data.network'),
-        getNested(meta, 'providerResponse.data.service_name'),
-        getNested(meta, 'flutterwaveData.customer.phone_number'),
-        getNested(meta, 'flutterwaveData.customer.name'),
-        getNested(meta, 'virtualAccount.account_number')
-      ].filter(Boolean).join(' ').toLowerCase();
-
-      return haystack.includes(q);
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-    function detailItem(label, value, { logo = '', text = '', copyValue = '', statusKey = '' } = {}) {
-      const logoHtml = logo || text ? `
-        <span class="provider-mini">
-          ${logo ? `<img src="${logo}" alt="${escapeHtml(text || label)}">` : ''}
-          ${text ? `<span>${escapeHtml(text)}</span>` : ''}
-        </span>` : '';
-
-      const copyHtml = copyValue
-        ? `<button class="mini-copy-btn" type="button" data-copy="${escapeHtml(String(copyValue))}" aria-label="Copy ${escapeHtml(label)}">⧉</button>`
-        : '';
-
-      const statusHtml = statusKey
-        ? `<span class="status-inline ${escapeHtml(statusKey)}">${escapeHtml(text || value)}</span>${copyHtml}`
-        : '';
-
-      const valueHtml = logoHtml
-        ? logoHtml
-        : (statusKey
-            ? statusHtml
-            : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`);
-
-      return `
-        <div class="detail-row">
-          <div class="detail-label">${escapeHtml(label)}</div>
-          <div class="detail-value">${valueHtml}</div>
-        </div>
-      `;
-    }
-
-    function renderTransactions() {
-      const filtered = state.all.filter(matchesFilters);
-      state.filtered = filtered;
-      transactionsList.innerHTML = '';
-      countLabel.textContent = `${filtered.length} item${filtered.length === 1 ? '' : 's'}`;
-      document.getElementById('sumAll').textContent = state.all.length;
-      document.getElementById('sumSuccess').textContent = state.all.filter(tx => getStatusLabel(tx) === 'successful').length;
-      document.getElementById('sumPending').textContent = state.all.filter(tx => getStatusLabel(tx) === 'pending').length;
-      document.getElementById('sumFailed').textContent = state.all.filter(tx => ['failed', 'reversed'].includes(getStatusLabel(tx))).length;
-
-      loadingState.style.display = 'none';
-      errorState.style.display = 'none';
-      emptyState.style.display = filtered.length ? 'none' : 'block';
-
-      if (!filtered.length) return;
-
-      for (const tx of filtered) {
-        const meta = getMeta(tx);
-        const actor = getActorInfo(tx);
-        const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
-        const amount = formatMoney(tx.amount);
-        const title = getTitle(tx);
-        const serviceLabel = getServiceLabel(tx);
-
-        const card = document.createElement('div');
-        card.className = 'tx-card';
-        card.innerHTML = `
-          <div class="tx-left">
-            <div class="tx-logo">
-              ${actor.logo
-                ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">`
-                : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
-            </div>
-            <div class="tx-meta">
-              <div class="tx-title">${escapeHtml(title)}</div>
-              <div class="tx-sub">
-                <span>${escapeHtml(serviceLabel)}</span>
-                <span>•</span>
-                <span>${escapeHtml(tx.reference || meta.request_id || meta.requestId || tx.id || '—')}</span>
-                <span>•</span>
-                <span>${escapeHtml(date)} ${escapeHtml(time)}</span>
-              </div>
-            </div>
-          </div>
-          <div class="tx-right">
-            <div class="status-chip ${statusClass(tx)}">${statusText(tx)}</div>
-            <div class="tx-amount">${amount}</div>
-          </div>
-        `;
-
-        card.addEventListener('click', () => openReceipt(tx));
-        transactionsList.appendChild(card);
-      }
-    }
-
-    function buildReceiptDetails(tx) {
-      const meta = getMeta(tx);
-      const category = getCategory(tx);
-      const actor = getActorInfo(tx);
-      const { date, time } = formatDateTime(tx.created_at || tx.updated_at);
-      const status = statusText(tx);
-      const statusKey = getStatusLabel(tx);
-      const rows = [];
-
-      const requestId = meta.request_id || meta.requestId || tx.reference || tx.id || '—';
-      const ref = tx.reference || meta.reference || requestId;
-      const fee = meta.fee_amount ?? meta.fee ?? 0;
-      const before = meta.balance_before ?? meta.balanceBefore;
-      const after = meta.balance_after ?? meta.balanceAfter;
-      const txId = tx.id || meta.transactionId || '—';
-
-      rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
-      rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
-
-      if (category === 'airtime') {
-        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
-      } else if (category === 'data') {
-        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
-        if (meta.packageName || meta.plan_name) rows.push(detailItem('Data Plan', meta.packageName || meta.plan_name));
-      } else if (category === 'cable_tv' || category === 'cable') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
-        rows.push(detailItem('Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—'));
-        rows.push(detailItem('Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—'));
-        rows.push(detailItem('Subscription Type', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
-      } else if (category === 'betting') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem('Betting ID', meta.customer_id || meta.customerId || '—'));
-      } else if (category === 'electricity') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
-        rows.push(detailItem('Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—'));
-        if (meta.token) rows.push(detailItem('Token', meta.token));
-      } else if (category === 'wallet') {
-        rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
-        rows.push(detailItem('Phone Number', getNested(meta, 'flutterwaveData.customer.phone_number') || '—'));
-      } else {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
-      }
-
-      if (before !== undefined && after !== undefined) {
-        rows.push(detailItem('Balance Before', formatMoney(before)));
-        rows.push(detailItem('Balance After', formatMoney(after)));
-      }
-
-      rows.push(detailItem('Amount', formatMoney(tx.amount)));
-      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
-      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status, statusKey }));
-      rows.push(detailItem('Date', date));
-      rows.push(detailItem('Time', time));
-      rows.push(detailItem('Reference', ref));
-
-      if (tx.description) rows.push(detailItem('Description', tx.description));
-
-      return rows.join('');
-    }
-
-    function openReceipt(tx) {
-      state.selected = tx;
-      receiptAmountBig.textContent = formatMoney(tx.amount);
-      receiptDetails.innerHTML = buildReceiptDetails(tx);
-      receiptModal.style.display = 'flex';
-      receiptModal.setAttribute('aria-hidden', 'false');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeReceipt() {
-      receiptModal.style.display = 'none';
-      receiptModal.setAttribute('aria-hidden', 'true');
-      document.body.style.overflow = '';
-    }
-
-    async function copySelectedId() {
-      const tx = state.selected;
-      if (!tx) return;
-      const meta = getMeta(tx);
-      const value = tx.id || meta.transactionId || tx.reference || meta.request_id || meta.requestId || '';
-      await copyTextToClipboard(value, 'Transaction ID copied');
-    }
-
-    async function captureReceiptCanvas() {
-      const node = document.getElementById('receiptCard');
-      if (!node || typeof html2canvas !== 'function') throw new Error('Image capture is not available');
-      return await html2canvas(node, { scale: 2, backgroundColor: null, useCORS: true, allowTaint: true });
-    }
-
-    function canvasToBlob(canvas) {
-      return new Promise((resolve) => {
-        canvas.toBlob((blob) => resolve(blob), 'image/png', 1);
-      });
-    }
-
-    async function shareReceiptImage() {
-      const tx = state.selected;
-      if (!tx) return;
-
-      try {
-        const canvas = await captureReceiptCanvas();
-        const blob = await canvasToBlob(canvas);
-        if (!blob) throw new Error('Unable to create image');
-
-        const fileName = `funsub-receipt-${String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
-        const file = new File([blob], fileName, { type: 'image/png' });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: 'FunSub Receipt',
-            text: 'FunSub Transaction Receipt',
-            files: [file]
-          });
-          return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1200);
-      } catch (err) {
-        console.error(err);
-        showToast('Unable to share image');
-      }
-    }
-
-    async function downloadReceiptImage() {
-      const tx = state.selected;
-      if (!tx) return;
-
-      try {
-        const canvas = await captureReceiptCanvas();
-        const blob = await canvasToBlob(canvas);
-        if (!blob) throw new Error('Unable to create image');
-
-        const { jsPDF } = window.jspdf || {};
-        const baseName = String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_');
-
-        if (jsPDF) {
-          const pdf = new jsPDF({
-            orientation: canvas.width > canvas.height ? 'l' : 'p',
-            unit: 'px',
-            format: [canvas.width, canvas.height]
-          });
-
-          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-          pdf.save(`funsub-receipt-${baseName}.pdf`);
-          return;
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `funsub-receipt-${baseName}.png`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1200);
-      } catch (err) {
-        console.error(err);
-        showToast('Unable to download image');
-      }
-    }
-
-    function saveReceiptImage() {
-      downloadReceiptImage();
-    }
-
-    async function loadDashboardData() {
-      const token = getToken();
-      if (!token) {
-        loadingState.style.display = 'none';
-        errorState.style.display = 'block';
-        errorState.textContent = 'Please log in to view your transactions.';
-        return;
-      }
-
-      loadingState.style.display = 'block';
-      errorState.style.display = 'none';
-      emptyState.style.display = 'none';
-      transactionsList.innerHTML = '';
-
-      try {
-        const res = await fetch(`${API_ROOT}/api/wallet/transactions?limit=100`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { rawResponse: text };
-        }
-
-        if (!res.ok) throw new Error(data.message || 'Unable to load transactions');
-
-        state.all = Array.isArray(data.transactions)
-          ? data.transactions
-          : Array.isArray(data?.data?.transactions)
-            ? data.data.transactions
-            : [];
-
-        renderTransactions();
-      } catch (err) {
-        console.error('Transactions load error:', err);
-        loadingState.style.display = 'none';
-        errorState.style.display = 'block';
-        errorState.textContent = err.message || 'Unable to load transactions';
-        state.all = [];
-        state.filtered = [];
-      }
-    }
-
-    quickPills.addEventListener('click', (e) => {
-      const btn = e.target.closest('.pill');
-      if (!btn) return;
-      quickPills.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      state.preset = btn.dataset.preset || 'all';
-      renderTransactions();
-    });
-
-    searchInput.addEventListener('input', renderTransactions);
-    statusFilter.addEventListener('change', renderTransactions);
-    serviceFilter.addEventListener('change', renderTransactions);
-
-    closeReceiptBtn.addEventListener('click', closeReceipt);
-    receiptModal.addEventListener('click', (e) => {
-      if (e.target === receiptModal) closeReceipt();
-    });
-
-    receiptDetails.addEventListener('click', (e) => {
-      const btn = e.target.closest('.mini-copy-btn');
-      if (!btn) return;
-      copyTextToClipboard(btn.dataset.copy || '');
-    });
-
-    copyBtn.addEventListener('click', copySelectedId);
-    shareBtn.addEventListener('click', shareReceiptImage);
-    downloadBtn.addEventListener('click', downloadReceiptImage);
-    saveBtn.addEventListener('click', saveReceiptImage);
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && receiptModal.style.display === 'flex') closeReceipt();
-    });
-
-    loadDashboardData();
-  </script>
-</body>
-</html>
