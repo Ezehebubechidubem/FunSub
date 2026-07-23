@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wallet App UI</title>
 <link rel="manifest" href="/FunSub/manifest.webmanifest">
 <meta name="theme-color" content="#d4b35f">
@@ -698,7 +698,6 @@
     font-size:12px;
     white-space:nowrap;
   }
-
   .history-item{
     background:var(--card);
     border:1px solid var(--line);
@@ -817,259 +816,456 @@
     }
 
     .action-label, .service-label{
-  <title>FunSub | Transactions</title>
-
-  <style>
-    :root{
-      --gold:#c89a24;
-      --gold-soft:rgba(200,154,36,.14);
-      --text:#111827;
-      --muted:#6b7280;
-      --border:#e5e7eb;
-      --bg:#ffffff;
-      --card:#ffffff;
-      --surface:#ffffff;
-      --input-bg:#ffffff;
-      --modal-bg:#ffffff;
-      --shadow:0 18px 45px rgba(0,0,0,.08);
-      --success:#0f7a3b;
-      --danger:#b42318;
-      --info:#1d4ed8;
-      --pending:#8a6d00;
+      font-size:12px;
     }
 
-    body.dark{
-      --gold:#c89a24;
-      --gold-soft:#2a2310;
-      --text:#f3f4f6;
-      --muted:#b8c0cc;
-      --border:#2b2f38;
-      --bg:#0f1115;
-      --card:#1a1d24;
-      --surface:#1a1d24;
-      --input-bg:#232833;
-      --modal-bg:#1a1d24;
-      --shadow:0 18px 45px rgba(0,0,0,.28);
-      --success:#34d399;
-      --danger:#f87171;
-      --info:#60a5fa;
-      --pending:#fbbf24;
+    .balance-value{
+      font-size:30px;
     }
 
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      background:var(--bg);
-      color:var(--text);
-      font-family:Arial, Helvetica, sans-serif;
+    .fund-btn{
+      min-width:102px;
+      padding:14px 14px;
     }
 
-    .page{
-      min-height:100vh;
-      max-width:980px;
-      margin:0 auto;
-      padding:18px 16px 28px;
+    .txn-title, .txn-sub,
+    .history-item-title, .history-item-sub{
+      max-width:170px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="user-wrap">
+        <div class="avatar">
+          <a href="profile.html" aria-label="Profile">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5Z"></path>
+              <path d="M4 22c1.6-4 5-6 8-6s6.4 2 8 6"></path>
+            </svg>
+          </a>
+        </div>
+        <div class="greeting">
+          <div class="small" id="greetingSmall">Hi {user}!</div>
+          <div class="big" id="greetingBig">Enjoy Our Cheap Services</div>
+        </div>
+      </div>
+
+      <div class="bell clickable" id="bellBtn" title="Notifications">
+        <svg viewBox="0 0 24 24">
+          <path d="M15 17H5c1.1-1.2 2-2.6 2-5V9a5 5 0 0 1 10 0v3c0 2.4.9 3.8 2 5h-4"></path>
+          <path d="M10 17a2 2 0 0 0 4 0"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div class="balance-card">
+      <div class="balance-text">
+        <div class="balance-label">
+          <span>Available Balance</span>
+          <span style="font-size:18px;">👁️</span>
+        </div>
+        <div class="balance-value" id="balanceValue">₦0.00</div>
+      </div>
+
+      <button class="fund-btn clickable" id="fundBtn" type="button">
+        Fund Wallet
+      </button>
+    </div>
+
+   <div class="section quick-actions">
+  <div class="section-title">Services</div>
+  <div class="action-grid">
+
+    <a class="action-item" href="airtime.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M10 14a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4l-6 6Z"></path>
+          <path d="M8 16 4 20"></path>
+        </svg>
+      </div>
+      <div class="action-label">Airtime</div>
+    </a>
+
+    <a class="action-item" href="data.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="8"></circle>
+          <path d="M4 12h16"></path>
+          <path d="M12 4c2.5 2.3 4 5.1 4 8s-1.5 5.7-4 8c-2.5-2.3-4-5.1-4-8s1.5-5.7 4-8Z"></path>
+        </svg>
+      </div>
+      <div class="action-label">Data</div>
+    </a>
+
+    <a class="action-item" href="rechargepin.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+          <path d="M8 8h8"></path>
+          <path d="M8 12h8"></path>
+          <path d="M8 16h4"></path>
+        </svg>
+      </div>
+      <div class="action-label">Recharge Pins</div>
+    </a>
+
+    <a class="action-item" href="electricity.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M13 2 4 14h6l-1 8 11-14h-6l1-6Z"></path>
+        </svg>
+      </div>
+      <div class="action-label">Electricity</div>
+    </a>
+
+    <a class="action-item" href="cable.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <rect x="4" y="6" width="16" height="10" rx="2"></rect>
+          <path d="M9 20h6"></path>
+          <path d="M12 16v4"></path>
+        </svg>
+      </div>
+      <div class="action-label">Cable TV</div>
+    </a>
+
+    <a class="action-item" href="betting.html">
+      <div class="action-icon">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 7l3 2v3l-3 2-3-2V9Z"></path>
+          <path d="M9 9.2 6.6 8"></path>
+          <path d="M15 9.2 17.4 8"></path>
+          <path d="M9 15 7 17.2"></path>
+          <path d="M15 15 17 17.2"></path>
+        </svg>
+      </div>
+      <div class="action-label">Betting</div>
+    </a>
+
+  </div>
+</div>
+
+    <div class="promo">
+      <div class="promo-left">
+        <div class="badge"><span>✓</span></div>
+      </div>
+      <div class="promo-content">
+        <div class="promo-title">VERIFY YOUR DETAILS</div>
+        <div class="promo-text">
+          Verify your details to get permanent account for your wallet funding
+        </div>
+      </div>
+    </div>
+
+    <div class="dots" aria-hidden="true">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+    <div class="recent">
+      <div class="recent-head">
+        <h3>Recent Transactions</h3>
+        <button class="see-all" id="seeAllBtn" type="button">See More &gt;</button>
+      </div>
+
+      <div id="transactionsList">
+        <div class="txn">
+          <div class="txn-left">
+            <div class="txn-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 12h16"></path>
+                <path d="M10 6l-6 6 6 6"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="txn-title">Loading transactions...</div>
+              <div class="txn-sub">Please wait</div>
+            </div>
+          </div>
+          <div class="txn-amount">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <a class="nav-item active" href="dashboard.html">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 11l9-8 9 8"></path>
+          <path d="M5 10v10h14V10"></path>
+        </svg>
+      </div>
+      Home
+    </a>
+
+    <a class="nav-item" href="pricing.html">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 3h12v18H6z"></path>
+          <path d="M9 7h6"></path>
+          <path d="M9 11h6"></path>
+        </svg>
+      </div>
+      Pricing
+    </a>
+
+    <button class="nav-item" id="historyNavBtn" type="button" style="background:none;border:none;padding:0;">
+      <div class="nav-icon" style="color:inherit;">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 5h16v14H4z"></path>
+          <path d="M8 9h8"></path>
+          <path d="M8 13h8"></path>
+        </svg>
+      </div>
+      History
+    </button>
+
+    <a class="nav-item" href="profile.html">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M20 21a8 8 0 1 0-16 0"></path>
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path>
+        </svg>
+      </div>
+      Profile
+    </a>
+  </nav>
+
+  <div class="history-modal" id="historyModal" aria-hidden="true">
+    <div class="history-card">
+      <div class="history-head">
+        <h3>Transaction History</h3>
+        <button class="close-history" id="closeHistoryBtn" type="button" aria-label="Close history">×</button>
+      </div>
+      <div class="history-body" id="historyBody">
+        <div class="empty-state">Loading history...</div>
+      </div>
+    </div>
+  </div>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/FunSub/sw.js");
+  }
+</script>
+<script src="theme.js" defer></script>
+  <script>
+    const API_ROOT = "https://funsub.onrender.com";
+
+    const balanceValueEl = document.getElementById("balanceValue");
+    const greetingSmallEl = document.getElementById("greetingSmall");
+    const greetingBigEl = document.getElementById("greetingBig");
+    const transactionsListEl = document.getElementById("transactionsList");
+    const bellBtn = document.getElementById("bellBtn");
+    const fundBtn = document.getElementById("fundBtn");
+    const seeAllBtn = document.getElementById("seeAllBtn");
+    const historyModal = document.getElementById("historyModal");
+    const historyBody = document.getElementById("historyBody");
+    const closeHistoryBtn = document.getElementById("closeHistoryBtn");
+   const historyNavBtn = document.getElementById("historyNavBtn");
+ 
+    const getToken = () => localStorage.getItem("funsub_token") || "";
+
+    function formatMoney(value) {
+  const num = Number(value || 0);
+  if (Number.isNaN(num)) return "₦0";
+
+  return `₦${num.toLocaleString("en-NG", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })}`;
+}
+
+function formatWholeMoney(value) {
+  const num = Number(value || 0);
+  if (Number.isNaN(num)) return "₦0";
+
+  return `₦${num.toLocaleString("en-NG", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  })}`;
+}
+    function safeText(v, fallback = "") {
+      const s = String(v ?? "").trim();
+      return s || fallback;
     }
 
-    .topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      margin-bottom:18px;
+    function shortName(fullName) {
+      const name = safeText(fullName, "");
+      if (!name) return "user";
+      return name.split(/\s+/)[0] || name;
     }
 
-    .brand{
-      display:flex;
-      align-items:center;
-      gap:12px;
-      min-width:0;
+    function formatDateTime(value) {
+      try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "";
+        return d.toLocaleString("en-NG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+      } catch {
+        return "";
+      }
     }
 
-    .brand-badge{
-      width:48px;
-      height:48px;
-      border-radius:16px;
-      background:linear-gradient(180deg, rgba(212,175,55,.24), rgba(212,175,55,.08));
-      border:1px solid rgba(212,175,55,.35);
-      display:grid;
-      place-items:center;
-      box-shadow:var(--shadow);
-      overflow:hidden;
-      flex:0 0 48px;
+    function formatDay(value) {
+      try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "";
+        return d.toLocaleDateString("en-NG", {
+          day: "numeric",
+          month: "long",
+          year: "numeric"
+        });
+      } catch {
+        return "";
+      }
     }
 
-    .brand-badge img{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
+    function isCreditTransaction(tx) {
+      const category = String(tx?.category || "").toLowerCase();
+      const type = String(tx?.type || "").toLowerCase();
+      return category === "wallet" || type.includes("fund");
     }
 
-    .brand-text h1{
-      margin:0;
-      font-size:24px;
-      letter-spacing:-.03em;
-      display:flex;
-      justify-content:center;
+    function getTxnTitle(tx) {
+      return safeText(tx?.description || tx?.type || tx?.category || "Transaction", "Transaction");
     }
 
-    .brand-text{
-      margin-bottom:50px;
+    function getTxnSubtitle(tx) {
+      const parts = [];
+      const date = formatDateTime(tx?.created_at);
+      if (date) parts.push(date);
+      const category = safeText(tx?.category || "");
+      if (category) parts.push(category);
+      const status = safeText(tx?.status || "");
+      if (status) parts.push(status);
+      return parts.join(" · ");
     }
 
-    .brand-text p{
-      margin:4px 0 0;
-      font-size:13px;
-      color:var(--muted);
-      display:flex;
-      justify-content:center;
+    function getTxnAmountText(tx) {
+      const amount = formatWholeMoney(tx?.amount || 0);
+      return isCreditTransaction(tx) ? `+${amount}` : `-${amount}`;
     }
 
-    .top-actions{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex:0 0 auto;
+    function getStatusClass(status) {
+  const s = String(status || "").toLowerCase();
+
+  if (s === "success" || s === "successful" || s === "delivered") return "status-success";
+  if (s === "pending" || s === "initiated" || s === "processing") return "status-pending";
+  if (s === "reversed" || s === "reverse") return "status-reversed";
+  if (s === "failed" || s === "error" || s === "declined") return "status-failed";
+
+  return "";
+}
+
+    function renderTransactions(transactions = []) {
+      if (!Array.isArray(transactions) || transactions.length === 0) {
+        transactionsListEl.innerHTML = `
+          <div class="txn">
+            <div class="txn-left">
+              <div class="txn-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 12h16"></path>
+                  <path d="M10 6l-6 6 6 6"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="txn-title">No recent transactions</div>
+                <div class="txn-sub">Your latest activity will appear here</div>
+              </div>
+            </div>
+            <div class="txn-amount">—</div>
+          </div>
+        `;
+        return;
+      }
+
+      transactionsListEl.innerHTML = transactions.slice(0, 5).map((tx) => `
+        <div class="txn">
+          <div class="txn-left">
+            <div class="txn-icon">
+              <svg viewBox="0 0 24 24">
+                ${isCreditTransaction(tx)
+                  ? '<path d="M20 12H4"></path><path d="M14 6l6 6-6 6"></path>'
+                  : '<path d="M4 12h16"></path><path d="M10 6l-6 6 6 6"></path>'}
+              </svg>
+            </div>
+            <div>
+              <div class="txn-title">${escapeHtml(getTxnTitle(tx))}</div>
+              <div class="txn-sub">${escapeHtml(getTxnSubtitle(tx))}</div>
+            </div>
+          </div>
+          <div class="txn-amount">${escapeHtml(getTxnAmountText(tx))}</div>
+        </div>
+      `).join("");
     }
 
-    .icon-btn{
-      border:1px solid var(--border);
-      background:var(--card);
-      color:var(--text);
-      width:42px;
-      height:42px;
-      border-radius:14px;
-      display:grid;
-      place-items:center;
-      cursor:pointer;
-      box-shadow:var(--shadow);
+    function groupTransactionsByDay(transactions = []) {
+      const groups = new Map();
+
+      [...transactions]
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .forEach((tx) => {
+          const key = formatDay(tx?.created_at) || "Unknown Date";
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(tx);
+        });
+
+      return Array.from(groups.entries()).map(([day, items]) => ({ day, items }));
     }
 
-    .panel{
-      background:var(--surface);
-      border:1px solid var(--border);
-      border-radius:24px;
-      box-shadow:var(--shadow);
-      overflow:hidden;
+    function renderHistory(transactions = []) {
+      if (!Array.isArray(transactions) || transactions.length === 0) {
+        historyBody.innerHTML = `<div class="empty-state">No transaction history yet.</div>`;
+        return;
+      }
+
+      const groups = groupTransactionsByDay(transactions);
+
+      historyBody.innerHTML = groups.map(group => `
+        <div class="history-day">
+          <div class="history-day-title">
+            <span>${escapeHtml(group.day)}</span>
+            <span>${group.items.length} item${group.items.length > 1 ? "s" : ""}</span>
+          </div>
+
+          ${group.items.map(tx => `
+            <div class="history-item">
+              <div class="history-item-left">
+                <div class="history-item-icon">
+                  <svg viewBox="0 0 24 24">
+                    ${isCreditTransaction(tx)
+                      ? '<path d="M20 12H4"></path><path d="M14 6l6 6-6 6"></path>'
+                      : '<path d="M4 12h16"></path><path d="M10 6l-6 6 6 6"></path>'}
+                  </svg>
+                </div>
+                <div style="min-width:0;">
+                  <div class="history-item-title">${escapeHtml(getTxnTitle(tx))}</div>
+                  <div class="history-item-sub">${escapeHtml(getTxnSubtitle(tx))}</div>
+                </div>
+              </div>
+
+              <div class="history-item-right">
+                <div class="history-item-amount">${escapeHtml(getTxnAmountText(tx))}</div>
+                <span class="history-item-status ${getStatusClass(tx?.status)}">${escapeHtml(String(tx?.status || "unknown"))}</span>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
     }
-
-    .summary-grid{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:12px;
-      padding:14px;
-    }
-
-    .summary-card{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:18px;
-      padding:14px;
-      min-height:92px;
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      gap:6px;
-    }
-
-    .summary-card .big{font-size:26px;font-weight:800;line-height:1}
-    .summary-card .small{font-size:12px;color:var(--muted)}
-    .summary-card.success .big{color:var(--success)}
-    .summary-card.pending .big{color:var(--pending)}
-    .summary-card.failed .big{color:var(--danger)}
-    .summary-card.reversed .big{color:var(--info)}
-
-    .controls{
-      display:grid;
-      grid-template-columns:1.4fr .9fr .9fr;
-      gap:12px;
-      padding:0 14px 14px;
-    }
-
-    .search-wrap,
-    .select-wrap{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:16px;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      padding:0 14px;
-      height:48px;
-    }
-
-    .search-wrap input,
-    .select-wrap select{
-      width:100%;
-      border:0;
-      outline:none;
-      background:transparent;
-      color:var(--text);
-      font-size:14px;
-    }
-
-    .search-wrap input::placeholder{color:var(--muted)}
-    .select-wrap select{appearance:none;cursor:pointer}
-
-    .list-head{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:10px;
-      padding:0 14px 14px;
-    }
-
-    .list-head h2{
-      margin:0;
-      font-size:18px;
-    }
-
-    .pill-row{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-      padding:0 14px 14px;
-    }
-
-    .pill{
-      border:1px solid var(--border);
-      background:var(--card);
-      color:var(--text);
-      padding:10px 14px;
-      border-radius:999px;
-      font-size:13px;
-      cursor:pointer;
-    }
-
-    .pill.active{
-      background:var(--gold-soft);
-      border-color:rgba(200,154,36,.45);
-      color:var(--gold);
-      font-weight:700;
-    }
-
-    .transactions{
-      padding:0 14px 14px;
-      display:grid;
-      gap:10px;
-    }
-
-    .tx-card{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:20px;
-      padding:14px;
-      cursor:pointer;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
-      transition:transform .15s ease, border-color .15s ease, background .15s ease;
-      min-width:0;
-    }
-
-    .tx-card:hover{
-      transform:translateY(-1px);
-      border-color:rgb
