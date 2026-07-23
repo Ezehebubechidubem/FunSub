@@ -60,57 +60,37 @@
 
     .topbar{
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:space-between;
       gap:12px;
-      margin-bottom:18px;
+      margin-bottom:60px;
     }
 
     .brand{
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       gap:12px;
       min-width:0;
-    }
-
-    .brand-badge{
-      width:48px;
-      height:48px;
-      border-radius:16px;
-      background:linear-gradient(180deg, rgba(212,175,55,.24), rgba(212,175,55,.08));
-      border:1px solid rgba(212,175,55,.35);
-      display:grid;
-      place-items:center;
-      box-shadow:var(--shadow);
-      overflow:hidden;
-      flex:0 0 48px;
-    }
-
-    .brand-badge img{
       width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
+    }
+
+    .brand-text{
+      width:100%;
+      margin-bottom:0;
     }
 
     .brand-text h1{
       margin:0;
       font-size:24px;
       letter-spacing:-.03em;
-      display:flex;
-      justify-content:center;
-    }
-
-    .brand-text{
-      margin-bottom:50px;
+      text-align:left;
     }
 
     .brand-text p{
       margin:4px 0 0;
       font-size:13px;
       color:var(--muted);
-      display:flex;
-      justify-content:center;
+      text-align:left;
     }
 
     .top-actions{
@@ -566,13 +546,14 @@
     }
 
     .provider-mini img{
-      width:30px;
-      height:30px;
-      object-fit:cover;
-      border-radius:8px;
+      width:24px;
+      height:24px;
+      object-fit:contain;
+      border-radius:7px;
       border:1px solid rgba(0,0,0,.05);
       background:#fff;
-      flex:0 0 30px;
+      flex:0 0 24px;
+      padding:1px;
     }
 
     .provider-mini span{
@@ -634,6 +615,23 @@
       padding:10px 8px 0;
       font-size:11px;
       line-height:1.35;
+    }
+
+    .receipt-footer-brand{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      margin-top:6px;
+      margin-bottom:2px;
+    }
+
+    .receipt-footer-brand img{
+      width:22px;
+      height:22px;
+      object-fit:cover;
+      border-radius:6px;
+      display:block;
     }
 
     .receipt-footer strong{
@@ -721,17 +719,10 @@
   <div class="page">
     <div class="topbar">
       <div class="brand">
-        <div class="brand-badge" title="FunSub logo">
-          <img id="appLogo" src="./icons/funsub-logo.png" alt="FunSub Logo"
-               onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
-        </div>
         <div class="brand-text">
           <h1>Transactions History</h1>
           <p class="upper">Track All Transactions Record</p>
         </div>
-      </div>
-      <div class="top-actions">
-        <button class="icon-btn" id="refreshBtn" title="Refresh">⟳</button>
       </div>
     </div>
 
@@ -821,7 +812,7 @@
         <div class="receipt-body">
           <div class="amount-card">
             <div class="label">Amount</div>
-            <div class="amount" id="receiptAmountBig">₦0.00</div>
+            <div class="amount" id="receiptAmountBig">₦0</div>
           </div>
 
           <div class="detail-card" id="receiptDetails"></div>
@@ -842,6 +833,10 @@
           </div>
 
           <div class="receipt-footer">
+            <div class="receipt-footer-brand">
+              <img src="./icons/funsub-logo.png" alt="FunSub footer logo"
+                   onerror="this.style.display='none';" />
+            </div>
             Thank you for using our service!
             <strong><span class="gold">Powered by FunSub</span></strong>
           </div>
@@ -871,7 +866,6 @@
     const searchInput = document.getElementById('searchInput');
     const statusFilter = document.getElementById('statusFilter');
     const serviceFilter = document.getElementById('serviceFilter');
-    const refreshBtn = document.getElementById('refreshBtn');
     const quickPills = document.getElementById('quickPills');
 
     const receiptModal = document.getElementById('receiptModal');
@@ -963,8 +957,8 @@
     }
 
     function formatMoney(value) {
-      const num = Number(value || 0);
-      return '₦' + num.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const num = Math.round(Number(value || 0));
+      return '₦' + num.toLocaleString('en-NG');
     }
 
     function formatDateTime(value) {
@@ -1479,7 +1473,6 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
     searchInput.addEventListener('input', renderTransactions);
     statusFilter.addEventListener('change', renderTransactions);
     serviceFilter.addEventListener('change', renderTransactions);
-    if (refreshBtn) refreshBtn.addEventListener('click', loadDashboardData);
 
     closeReceiptBtn.addEventListener('click', closeReceipt);
     receiptModal.addEventListener('click', (e) => {
