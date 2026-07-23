@@ -97,6 +97,8 @@
       margin:0;
       font-size:24px;
       letter-spacing:-.03em;
+      display:flex;
+      justify-content:center;
     }
 
     .brand-text p{
@@ -708,22 +710,12 @@
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="topbar">
-      <div class="brand">
-        <div class="brand-badge" title="FunSub logo">
-          <img id="appLogo" src="./icons/funsub-logo.png" alt="FunSub Logo"
-               onerror="this.style.display='none'; this.parentElement.textContent='FS'; this.parentElement.style.color='var(--gold)'; this.parentElement.style.fontWeight='900'; this.parentElement.style.fontSize='20px';" />
-        </div>
         <div class="brand-text">
-          <h1>Transactions</h1>
-          <p>Tap any item to open the receipt</p>
+          <h1>Transactions History</h1>
+          <p>Track All Transactions Record</p>
         </div>
       </div>
-      <div class="top-actions">
-        <button class="icon-btn" id="refreshBtn" title="Refresh">⟳</button>
-      </div>
-    </div>
+   
 
     <div class="panel">
       <div class="summary-grid">
@@ -894,7 +886,7 @@ const API_ROOT = 'https://funsub.onrender.com';
       merrybet: 'https://i.postimg.cc/xyz/merrybet.png',
       naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
       nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
-      supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg',
+      supabet: 'https://i.postimg.cc/13ycyfCk/IMG-20260723-094024.jpg',
       flutterwave: ''
     };
 
