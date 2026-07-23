@@ -15,8 +15,6 @@
       --bg:#ffffff;
       --card:#ffffff;
       --surface:#ffffff;
-      --input-bg:#ffffff;
-      --modal-bg:#ffffff;
       --shadow:0 18px 45px rgba(0,0,0,.08);
       --success:#0f7a3b;
       --danger:#b42318;
@@ -33,8 +31,6 @@
       --bg:#0f1115;
       --card:#1a1d24;
       --surface:#1a1d24;
-      --input-bg:#232833;
-      --modal-bg:#1a1d24;
       --shadow:0 18px 45px rgba(0,0,0,.28);
       --success:#34d399;
       --danger:#f87171;
@@ -80,8 +76,8 @@
 
     .brand-text{
       width:100%;
-      margin-bottom:0;
       text-align:center;
+      margin:0;
     }
 
     .brand-text h1{
@@ -98,20 +94,9 @@
       text-align:center;
     }
 
-    .top-actions{display:none}
+    .upper{letter-spacing:.02em}
 
-    .icon-btn{
-      border:1px solid var(--border);
-      background:var(--card);
-      color:var(--text);
-      width:42px;
-      height:42px;
-      border-radius:14px;
-      display:grid;
-      place-items:center;
-      cursor:pointer;
-      box-shadow:var(--shadow);
-    }
+    .top-actions{display:none}
 
     .panel{
       background:var(--surface);
@@ -252,14 +237,14 @@
     }
 
     .tx-logo{
-      width:44px;
-      height:44px;
+      width:40px;
+      height:40px;
       border-radius:14px;
       background:#fff;
       display:grid;
       place-items:center;
       overflow:hidden;
-      flex:0 0 44px;
+      flex:0 0 40px;
       border:1px solid rgba(0,0,0,.06);
     }
 
@@ -350,7 +335,7 @@
       align-items:center;
       justify-content:center;
       z-index:9999;
-      padding:20px;
+      padding:20px 12px;
       backdrop-filter:blur(7px);
     }
 
@@ -372,8 +357,8 @@
     }
 
     .receipt-shell{
-      width:min(86vw, 392px);
-      max-height:min(86vh, 860px);
+      width:min(88vw, 392px);
+      max-height:min(84vh, 860px);
       overflow:visible;
       border-radius:28px;
       background:transparent;
@@ -393,7 +378,7 @@
     .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
-      padding:12px 12px 24px;
+      padding:10px 12px 20px;
       text-align:center;
       position:relative;
     }
@@ -403,20 +388,20 @@
       position:absolute;
       left:-4%;
       right:-4%;
-      bottom:-15px;
-      height:32px;
-      background:#f7f7f7;
+      bottom:-11px;
+      height:26px;
+      background:linear-gradient(180deg, rgba(255,255,255,0) 0 48%, #f7f7f7 48% 100%);
+      border-bottom:3px solid var(--gold);
       border-top-left-radius:50% 100%;
       border-top-right-radius:50% 100%;
-      border-bottom:3px solid var(--gold);
       box-sizing:border-box;
     }
 
     .receipt-logo-wrap{
-      width:54px;
-      height:54px;
+      width:40px;
+      height:40px;
       border-radius:50%;
-      margin:0 auto 8px;
+      margin:0 auto 6px;
       background:rgba(255,255,255,.06);
       display:grid;
       place-items:center;
@@ -433,7 +418,7 @@
 
     .receipt-brand{
       margin:0;
-      font-size:19px;
+      font-size:17px;
       font-weight:900;
       letter-spacing:-.03em;
       line-height:1;
@@ -450,14 +435,14 @@
 
     .receipt-body{
       padding:10px 10px 12px;
-      margin-top:4px;
+      margin-top:3px;
     }
 
     .amount-card{
       background:linear-gradient(180deg, #fffaf0, #fffdf8);
       border:1px solid rgba(200,154,36,.28);
       border-radius:22px;
-      padding:11px 9px;
+      padding:10px 9px;
       text-align:center;
       margin-bottom:9px;
     }
@@ -465,11 +450,11 @@
     .amount-card .label{
       font-size:13px;
       color:#6b7280;
-      margin-bottom:4px;
+      margin-bottom:3px;
     }
 
     .amount-card .amount{
-      font-size:26px;
+      font-size:25px;
       line-height:1;
       font-weight:900;
       letter-spacing:-.05em;
@@ -571,18 +556,8 @@
       font-weight:800;
       display:inline-flex;
       align-items:center;
-      gap:6px;
+      gap:0;
     }
-
-    .status-inline::before{
-      content:"";
-      width:9px;
-      height:9px;
-      border-radius:50%;
-      display:inline-block;
-      background:currentColor;
-    }
-
     .status-inline.success{color:var(--success)}
     .status-inline.pending{color:var(--pending)}
     .status-inline.reversed{color:var(--info)}
@@ -700,16 +675,16 @@
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
       .tx-right{min-width:84px}
-      .tx-logo{width:40px;height:40px;flex-basis:40px}
+      .tx-logo{width:38px;height:38px;flex-basis:38px}
       .receipt-shell{width:min(88vw, 332px)}
-      .receipt-header{padding:12px 11px 22px}
-      .receipt-header::after{height:28px;bottom:-13px}
-      .receipt-logo-wrap{width:50px;height:50px}
-      .receipt-brand{font-size:18px}
+      .receipt-header{padding:10px 11px 18px}
+      .receipt-header::after{height:24px;bottom:-10px}
+      .receipt-logo-wrap{width:36px;height:36px}
+      .receipt-brand{font-size:16px}
       .receipt-subtitle{font-size:11px}
-      .receipt-body{padding:9px 9px 11px}
-      .amount-card{padding:10px 8px;margin-bottom:8px}
-      .amount-card .amount{font-size:24px}
+      .receipt-body{padding:8px 8px 10px}
+      .amount-card{padding:9px 8px;margin-bottom:8px}
+      .amount-card .amount{font-size:23px}
       .detail-card{padding:7px 8px}
       .detail-row{padding:7px 0;font-size:11px;gap:8px}
       .detail-label{min-width:78px}
@@ -963,13 +938,8 @@
     }
 
     function formatMoney(value) {
-      const num = Math.round(Number(value || 0));
+      const num = Math.ceil(Number(value || 0));
       return '₦' + num.toLocaleString('en-NG');
-    }
-
-    function formatReceiptMoney(value) {
-      const num = Number(value || 0);
-      return '₦' + num.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function formatDateTime(value) {
@@ -1010,26 +980,10 @@
       const networkMode = ['airtime', 'data', 'recharge_pin', 'data_pin'].includes(category);
 
       let raw = '';
-
       if (category === 'airtime') {
-        raw =
-          getNested(meta, 'providerResponse.data.network') ||
-          getNested(meta, 'providerResponse.data.service_name') ||
-          meta.network ||
-          meta.networkName ||
-          getNested(meta, 'selectedPlan.meta.network') ||
-          meta.service_id ||
-          meta.providerLabel ||
-          '';
+        raw = getNested(meta, 'providerResponse.data.network') || getNested(meta, 'providerResponse.data.service_name') || meta.network || meta.networkName || getNested(meta, 'selectedPlan.meta.network') || meta.service_id || meta.providerLabel || '';
       } else if (category === 'data') {
-        raw =
-          getNested(meta, 'providerResponse.data.network') ||
-          meta.network ||
-          meta.networkName ||
-          getNested(meta, 'selectedPlan.meta.network') ||
-          meta.service_id ||
-          meta.providerLabel ||
-          '';
+        raw = getNested(meta, 'providerResponse.data.network') || meta.network || meta.networkName || getNested(meta, 'selectedPlan.meta.network') || meta.service_id || meta.providerLabel || '';
       } else if (category === 'wallet') {
         raw = meta.gateway || meta.provider || 'Flutterwave';
       } else {
@@ -1038,16 +992,7 @@
 
       if (normalizeStatus(raw) === 'iacafe') {
         raw = networkMode
-          ? (
-              getNested(meta, 'providerResponse.data.network') ||
-              getNested(meta, 'providerResponse.data.service_name') ||
-              meta.network ||
-              meta.networkName ||
-              getNested(meta, 'selectedPlan.meta.network') ||
-              meta.service_id ||
-              meta.providerLabel ||
-              ''
-            )
+          ? (getNested(meta, 'providerResponse.data.network') || getNested(meta, 'providerResponse.data.service_name') || meta.network || meta.networkName || getNested(meta, 'selectedPlan.meta.network') || meta.service_id || meta.providerLabel || '')
           : (meta.providerLabel || meta.service_id || tx?.provider || '');
       }
 
@@ -1164,6 +1109,7 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+
     function detailItem(label, value, { logo = '', text = '', copyValue = '', statusKey = '' } = {}) {
       const logoHtml = logo || text ? `
         <span class="provider-mini">
@@ -1176,14 +1122,12 @@
         : '';
 
       const statusHtml = statusKey
-        ? `<span class="status-inline ${escapeHtml(statusKey)}">${escapeHtml(text || value)}</span>${copyHtml}`
+        ? `<span class="status-inline ${escapeHtml(statusKey)}">${escapeHtml(text || value)}</span>`
         : '';
 
       const valueHtml = logoHtml
         ? logoHtml
-        : (statusKey
-            ? statusHtml
-            : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`);
+        : (statusKey ? statusHtml : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`);
 
       return `
         <div class="detail-row">
@@ -1206,7 +1150,6 @@
       loadingState.style.display = 'none';
       errorState.style.display = 'none';
       emptyState.style.display = filtered.length ? 'none' : 'block';
-
       if (!filtered.length) return;
 
       for (const tx of filtered) {
@@ -1247,7 +1190,6 @@
         transactionsList.appendChild(card);
       }
     }
-
     function buildReceiptDetails(tx) {
       const meta = getMeta(tx);
       const category = getCategory(tx);
@@ -1263,23 +1205,17 @@
       const before = meta.balance_before ?? meta.balanceBefore;
       const after = meta.balance_after ?? meta.balanceAfter;
       const txId = tx.id || meta.transactionId || '—';
+      const phone = getNested(meta, 'providerResponse.data.phone') || getNested(meta, 'flutterwaveData.customer.phone_number') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—';
 
       rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
       rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
 
       if (category === 'airtime') {
         rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
+        rows.push(detailItem('Phone Number', phone));
       } else if (category === 'data') {
         rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
-        if (meta.packageName || meta.plan_name) rows.push(detailItem('Data Plan', meta.packageName || meta.plan_name));
+        rows.push(detailItem('Phone Number', phone));
       } else if (category === 'cable_tv' || category === 'cable') {
         rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
@@ -1296,22 +1232,21 @@
         if (meta.token) rows.push(detailItem('Token', meta.token));
       } else if (category === 'wallet') {
         rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
-        rows.push(detailItem('Phone Number', getNested(meta, 'flutterwaveData.customer.phone_number') || '—'));
+        rows.push(detailItem('Phone Number', phone));
       } else {
         rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
       }
 
       if (before !== undefined && after !== undefined) {
-        rows.push(detailItem('Balance Before', formatReceiptMoney(before)));
-        rows.push(detailItem('Balance After', formatReceiptMoney(after)));
+        rows.push(detailItem('Balance Before', formatMoney(before)));
+        rows.push(detailItem('Balance After', formatMoney(after)));
       }
 
-      rows.push(detailItem('Amount', formatReceiptMoney(tx.amount)));
-      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatReceiptMoney(fee)));
-      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status, statusKey }));
+      rows.push(detailItem('Amount', formatMoney(tx.amount)));
+      if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
+      rows.push(detailItem('Status', status, { statusKey }));
       rows.push(detailItem('Date', date));
       rows.push(detailItem('Time', time));
-      rows.push(detailItem('Reference', ref));
 
       if (tx.description) rows.push(detailItem('Description', tx.description));
 
@@ -1320,7 +1255,7 @@
 
     function openReceipt(tx) {
       state.selected = tx;
-      receiptAmountBig.textContent = formatReceiptMoney(tx.amount);
+      receiptAmountBig.textContent = formatMoney(tx.amount);
       receiptDetails.innerHTML = buildReceiptDetails(tx);
       receiptModal.style.display = 'flex';
       receiptModal.setAttribute('aria-hidden', 'false');
@@ -1404,7 +1339,6 @@
             unit: 'px',
             format: [canvas.width, canvas.height]
           });
-
           pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
           pdf.save(`funsub-receipt-${baseName}.pdf`);
           return;
