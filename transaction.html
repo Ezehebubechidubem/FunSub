@@ -843,14 +843,13 @@
   <div class="toast" id="toast">Copied</div>
 
   <script src="theme.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
 
-    const API_ROOT = 'https://funsub.onrender.com';
+          <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js");
+    }
+const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
 
     const transactionsList = document.getElementById('transactionsList');
@@ -875,27 +874,27 @@
     const toast = document.getElementById('toast');
 
     const providerLogos = {
-      mtn: './icons/mtn.png',
-      airtel: './icons/airtel.png',
-      glo: './icons/glo.png',
-      '9mobile': './icons/9mobile.png',
-      dstv: './icons/dstv.png',
-      gotv: './icons/gotv.png',
-      startimes: './icons/startimes.png',
-      showmax: './icons/showmax.png',
-      bet9ja: './icons/bet9ja.png',
-      '1xbet': './icons/1xbet.png',
-      bangbet: './icons/bangbet.png',
-      betking: './icons/betking.png',
-      betland: './icons/betland.png',
-      betlion: './icons/betlion.png',
-      betway: './icons/betway.png',
-      cloudbet: './icons/cloudbet.png',
-      livescorebet: './icons/livescorebet.png',
-      merrybet: './icons/merrybet.png',
-      naijabet: './icons/naijabet.png',
-      nairabet: './icons/nairabet.png',
-      supabet: './icons/supabet.png',
+      mtn: 'https://i.postimg.cc/pLyM40v4/idt-V6xz5Md-logos.jpg',
+      airtel: 'https://i.postimg.cc/FKZbSxf8/airtel.png',
+      glo: 'https://i.postimg.cc/B64Y96DS/glo.png',
+      '9mobile': 'https://i.postimg.cc/hhWQ6Jz3/9mobile.png',
+      dstv: 'https://i.postimg.cc/2S9tQkK3/dstv.png',
+      gotv: 'https://i.postimg.cc/rwYj7Y8Z/gotv.png',
+      startimes: 'https://i.postimg.cc/0j3mHf9P/startimes.png',
+      showmax: 'https://i.postimg.cc/0Q2pWv5Y/showmax.png',
+      bet9ja: 'https://i.postimg.cc/g2YWYTTF/IMG-20260704-153103.jpg',
+      '1xbet': 'https://i.postimg.cc/MKq4Rjbz/IMG-20260704-153140.jpg',
+      bangbet: 'https://i.postimg.cc/Y2RjKZRS/IMG-20260704-160404.jpg',
+      betking: 'https://i.postimg.cc/V6XG0YJ4/IMG-20260704-153020.jpg',
+      betland: 'https://i.postimg.cc/fytPK6TK/IMG-20260704-160941.jpg',
+      betlion: 'https://i.postimg.cc/NGC92ZHC/IMG-20260704-161648.jpg',
+      betway: 'https://i.postimg.cc/qqM5PP7Q/IMG-20260704-155102.jpg',
+      cloudbet: 'https://i.postimg.cc/xyz/cloudbet.png',
+      livescorebet: 'https://i.postimg.cc/xyz/livescore.png',
+      merrybet: 'https://i.postimg.cc/xyz/merrybet.png',
+      naijabet: 'https://i.postimg.cc/xyz/naijabet.png',
+      nairabet: 'https://i.postimg.cc/xyz/nairabet.png',
+      supabet: 'https://i.postimg.cc/J7GSMBch/IMG-20260704-155654.jpg',
       flutterwave: ''
     };
 
@@ -998,8 +997,8 @@
 
       if (category === 'airtime') {
         raw =
-          getNested(meta, 'providerResponse.data.network') ||
           getNested(meta, 'providerResponse.data.service_name') ||
+          getNested(meta, 'providerResponse.data.network') ||
           meta.network ||
           meta.networkName ||
           getNested(meta, 'selectedPlan.meta.network') ||
@@ -1024,8 +1023,8 @@
       if (normalizeStatus(raw) === 'iacafe') {
         raw = networkMode
           ? (
-              getNested(meta, 'providerResponse.data.network') ||
               getNested(meta, 'providerResponse.data.service_name') ||
+              getNested(meta, 'providerResponse.data.network') ||
               meta.network ||
               meta.networkName ||
               getNested(meta, 'selectedPlan.meta.network') ||
@@ -1149,7 +1148,8 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
-function detailItem(label, value, { logo = '', text = '', copyValue = '', statusKey = '' } = {}) {
+
+    function detailItem(label, value, { logo = '', text = '', copyValue = '' } = {}) {
       const logoHtml = logo || text ? `
         <span class="provider-mini">
           ${logo ? `<img src="${logo}" alt="${escapeHtml(text || label)}">` : ''}
@@ -1160,15 +1160,9 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
         ? `<button class="mini-copy-btn" type="button" data-copy="${escapeHtml(String(copyValue))}" aria-label="Copy ${escapeHtml(label)}">⧉</button>`
         : '';
 
-      const statusHtml = statusKey
-        ? `<span class="status-inline ${escapeHtml(statusKey)}">${escapeHtml(text || value)}</span>${copyHtml}`
-        : '';
-
       const valueHtml = logoHtml
         ? logoHtml
-        : (statusKey
-            ? statusHtml
-            : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`);
+        : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`;
 
       return `
         <div class="detail-row">
@@ -1207,9 +1201,7 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
         card.innerHTML = `
           <div class="tx-left">
             <div class="tx-logo">
-              ${actor.logo
-                ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">`
-                : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
+              ${actor.logo ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">` : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
             </div>
             <div class="tx-meta">
               <div class="tx-title">${escapeHtml(title)}</div>
@@ -1251,39 +1243,43 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
 
       rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
       rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
+      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', { logo: actor.logo, text: actor.label }));
 
-      if (category === 'airtime') {
-        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
-      } else if (category === 'data') {
-        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
-        rows.push(detailItem(
-          'Phone Number',
-          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
-        ));
-        if (meta.packageName || meta.plan_name) rows.push(detailItem('Data Plan', meta.packageName || meta.plan_name));
-      } else if (category === 'cable_tv' || category === 'cable') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
+      if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
+        const phone =
+          getNested(meta, 'providerResponse.data.phone') ||
+          getNested(meta, 'flutterwaveData.customer.phone_number') ||
+          meta.phone ||
+          meta.phone_number ||
+          meta.customer_number ||
+          meta.customer_id ||
+          meta.customerId ||
+          '—';
+        rows.push(detailItem('Phone Number', phone));
+      }
+
+      if (category === 'cable_tv' || category === 'cable') {
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—'));
         rows.push(detailItem('Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—'));
-        rows.push(detailItem('Subscription Type', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
-      } else if (category === 'betting') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
+        rows.push(detailItem('Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
+      }
+
+      if (category === 'betting') {
+        rows.push(detailItem('Provider', meta.providerLabel || meta.service_id || '—'));
         rows.push(detailItem('Betting ID', meta.customer_id || meta.customerId || '—'));
-      } else if (category === 'electricity') {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
+      }
+
+      if (category === 'electricity') {
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—'));
         if (meta.token) rows.push(detailItem('Token', meta.token));
-      } else if (category === 'wallet') {
+      }
+
+      if (category === 'wallet') {
         rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
-        rows.push(detailItem('Phone Number', getNested(meta, 'flutterwaveData.customer.phone_number') || '—'));
-      } else {
-        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
+        const phone = getNested(meta, 'flutterwaveData.customer.phone_number') || '—';
+        rows.push(detailItem('Phone Number', phone));
       }
 
       if (before !== undefined && after !== undefined) {
@@ -1293,7 +1289,7 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
 
       rows.push(detailItem('Amount', formatMoney(tx.amount)));
       if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
-      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status, statusKey }));
+      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status }));
       rows.push(detailItem('Date', date));
       rows.push(detailItem('Time', time));
       rows.push(detailItem('Reference', ref));
@@ -1380,25 +1376,11 @@ function detailItem(label, value, { logo = '', text = '', copyValue = '', status
         const blob = await canvasToBlob(canvas);
         if (!blob) throw new Error('Unable to create image');
 
-        const { jsPDF } = window.jspdf || {};
-        const baseName = String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_');
-
-        if (jsPDF) {
-          const pdf = new jsPDF({
-            orientation: canvas.width > canvas.height ? 'l' : 'p',
-            unit: 'px',
-            format: [canvas.width, canvas.height]
-          });
-
-          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-          pdf.save(`funsub-receipt-${baseName}.pdf`);
-          return;
-        }
-
+        const fileName = `funsub-receipt-${String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `funsub-receipt-${baseName}.png`;
+        a.download = fileName;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1200);
       } catch (err) {
