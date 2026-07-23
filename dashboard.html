@@ -1269,3 +1269,201 @@ function formatWholeMoney(value) {
         </div>
       `).join("");
     }
+function updateGreeting(user) {
+      const displayName = shortName(user?.full_name || user?.fullName || user?.name || user?.username || "");
+      greetingSmallEl.textContent = `Hi ${displayName}!`;
+      greetingBigEl.textContent = "Enjoy Our Cheap Services";
+    }
+
+    function updateBalance(wallet) {
+      const balance = wallet?.balance ?? 0;
+      balanceValueEl.textContent = formatMoney(balance);
+    }
+
+    function updateNotifications(notifications = [], unreadCount = 0) {
+      window.__notifications = Array.isArray(notifications) ? notifications : [];
+      bellBtn.title = unreadCount > 0
+        ? `Notifications (${unreadCount} unread)`
+        : "Notifications";
+    }
+
+    async function fetchJson(url) {
+      const token = getToken();
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { rawResponse: text };
+      }
+      return { res, data };
+    }
+
+    async function loadDashboardData() {
+      const token = getToken();
+
+      if (!token) {
+        greetingSmallEl.textContent = "Hi User!";
+        updateBalance({ balance: 0.00 });
+        renderTransactions([]);
+        renderHistory([]);
+        updateNotifications([], 0);
+        return;
+      }
+
+      try {
+        const [meResult, walletResult, txnResult, notificationsResult, unreadResult] = await Promise.all([
+          fetchJson(`${API_ROOT}/api/auth/me`),
+          fetchJson(`${API_ROOT}/api/wallet/balance`),
+          fetchJson(`${API_ROOT}/api/wallet/transactions?limit=100`),
+          fetchJson(`${API_ROOT}/api/notifications`),
+          fetchJson(`${API_ROOT}/api/notifications/unread-count`)
+        ]);
+
+        if (meResult.res.ok) {
+          updateGreeting(meResult.data?.user || {});
+          if (meResult.data?.wallet && !walletResult.res.ok) {
+            updateBalance(meResult.data.wallet);
+          }
+        }
+
+        if (walletResult.res.ok) {
+          updateBalance(walletResult.data?.wallet || {});
+        }
+
+        const transactions = txnResult.res.ok ? (txnResult.data?.transactions || []) : [];
+        renderTransactions(transactions);
+        renderHistory(transactions);
+        window.__allTransactions = transactions;
+
+        const notifications = notificationsResult.res.ok ? (notificationsResult.data?.notifications || []) : [];
+        const unreadCount = unreadResult.res.ok
+          ? Number(unreadResult.data?.count || 0)
+          : notifications.filter(n => !n.is_read).length;
+
+        updateNotifications(notifications, unreadCount);
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function openHistoryModal() {
+      const txs = Array.isArray(window.__allTransactions) ? window.__allTransactions : [];
+      renderHistory(txs);
+      historyModal.style.display = "block";
+      historyModal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+    }
+
+    function closeHistoryModal() {
+      historyModal.style.display = "none";
+      historyModal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+    }
+
+    function wireClicks() {
+      fundBtn.addEventListener("click", () => {
+        window.location.href = "fund.html";
+      });
+
+      bellBtn.addEventListener("click", () => {
+        console.log("Notifications tapped", window.__notifications || []);
+      });
+
+      seeAllBtn.addEventListener("click", openHistoryModal);
+      historyNavBtn.addEventListener("click", openHistoryModal);
+      closeHistoryBtn.addEventListener("click", closeHistoryModal);
+
+      historyModal.addEventListener("click", (e) => {
+        if (e.target === historyModal) closeHistoryModal();
+      });
+
+      document.querySelectorAll("[data-action], [data-service]").forEach((el) => {
+        el.addEventListener("click", () => {
+          const label = el.getAttribute("data-action") || el.getAttribute("data-service");
+
+          if (label === "Airtime") {
+            window.location.href = "airtime.html";
+            return;
+          }
+
+          if (label === "Data") {
+            window.location.href = "data.html";
+            return;
+          }
+
+          if (label === "Cable TV") {
+            window.location.href = "cable.html";
+            return;
+          }
+
+          if (label === "Betting") {
+            window.location.href = "betting.html";
+            return;
+          }
+
+          if (label === "Recharge Pin") {
+            window.location.href = "recharge-pin.html";
+            return;
+          }
+
+          if (label === "Data Pin") {
+            window.location.href = "data-pin.html";
+            return;
+          }
+
+          if (label === "Exam PIN") {
+            window.location.href = "exam-pin.html";
+            return;
+          }
+
+          if (label === "Electricity") {
+            window.location.href = "electricity.html";
+            return;
+          }
+
+          console.log(label + " tapped");
+        });
+      });
+
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        if (item.tagName.toLowerCase() === "button") return;
+        item.addEventListener("click", () => {
+          document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
+          item.classList.add("active");
+        });
+      });
+    }
+
+    function refreshDashboardSilently() {
+      loadDashboardData();
+    }
+
+    window.addEventListener("focus", refreshDashboardSilently);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshDashboardSilently();
+    });
+
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) refreshDashboardSilently();
+    });
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      wireClicks();
+      await loadDashboardData();
+    });
+  </script>
+</body>
+</html>
