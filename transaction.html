@@ -61,63 +61,43 @@
     .topbar{
       display:flex;
       align-items:center;
-      justify-content:space-between;
+      justify-content:center;
       gap:12px;
-      margin-bottom:18px;
+      margin-bottom:60px;
     }
 
     .brand{
       display:flex;
+      flex-direction:column;
       align-items:center;
-      gap:12px;
+      justify-content:center;
+      gap:8px;
       min-width:0;
-    }
-
-    .brand-badge{
-      width:48px;
-      height:48px;
-      border-radius:16px;
-      background:linear-gradient(180deg, rgba(212,175,55,.24), rgba(212,175,55,.08));
-      border:1px solid rgba(212,175,55,.35);
-      display:grid;
-      place-items:center;
-      box-shadow:var(--shadow);
-      overflow:hidden;
-      flex:0 0 48px;
-    }
-
-    .brand-badge img{
       width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
+      text-align:center;
     }
 
+    .brand-text{
+      width:100%;
+      margin-bottom:0;
+      text-align:center;
+    }
 
     .brand-text h1{
       margin:0;
       font-size:24px;
       letter-spacing:-.03em;
-      display:flex;
-      justify-content:center;
+      text-align:center;
     }
-     .brand-text{
-      margin-bottom:50px
-    }
+
     .brand-text p{
       margin:4px 0 0;
       font-size:13px;
       color:var(--muted);
-      display:flex;
-      justify-content:center;
+      text-align:center;
     }
 
-    .top-actions{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex:0 0 auto;
-    }
+    .top-actions{display:none}
 
     .icon-btn{
       border:1px solid var(--border);
@@ -209,6 +189,8 @@
     .list-head h2{
       margin:0;
       font-size:18px;
+      text-align:center;
+      width:100%;
     }
 
     .pill-row{
@@ -269,22 +251,23 @@
     }
 
     .tx-logo{
-      width:48px;
-      height:48px;
-      border-radius:15px;
+      width:44px;
+      height:44px;
+      border-radius:14px;
       background:#fff;
       display:grid;
       place-items:center;
       overflow:hidden;
-      flex:0 0 48px;
+      flex:0 0 44px;
       border:1px solid rgba(0,0,0,.06);
     }
 
     .tx-logo img{
       width:100%;
       height:100%;
-      object-fit:cover;
+      object-fit:contain;
       display:block;
+      padding:4px;
     }
 
     .tx-meta{min-width:0; flex:1 1 auto;}
@@ -358,8 +341,7 @@
       border-radius:20px;
       margin:0 14px 14px;
     }
-
-    .modal-overlay{
+.modal-overlay{
       position:fixed;
       inset:0;
       background:rgba(0,0,0,.78);
@@ -406,7 +388,8 @@
       position:relative;
       border:1px solid rgba(200,154,36,.55);
     }
-.receipt-header{
+
+    .receipt-header{
       background:linear-gradient(180deg, #0b0b0d 0%, #121214 100%);
       color:#fff;
       padding:12px 12px 24px;
@@ -565,13 +548,14 @@
     }
 
     .provider-mini img{
-      width:30px;
-      height:30px;
-      object-fit:cover;
-      border-radius:8px;
+      width:24px;
+      height:24px;
+      object-fit:contain;
+      border-radius:7px;
       border:1px solid rgba(0,0,0,.05);
       background:#fff;
-      flex:0 0 30px;
+      flex:0 0 24px;
+      padding:1px;
     }
 
     .provider-mini span{
@@ -588,6 +572,7 @@
       align-items:center;
       gap:6px;
     }
+
     .status-inline::before{
       content:"";
       width:9px;
@@ -596,6 +581,7 @@
       display:inline-block;
       background:currentColor;
     }
+
     .status-inline.success{color:var(--success)}
     .status-inline.pending{color:var(--pending)}
     .status-inline.reversed{color:var(--info)}
@@ -631,6 +617,23 @@
       padding:10px 8px 0;
       font-size:11px;
       line-height:1.35;
+    }
+
+    .receipt-footer-brand{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      margin-top:6px;
+      margin-bottom:2px;
+    }
+
+    .receipt-footer-brand img{
+      width:22px;
+      height:22px;
+      object-fit:cover;
+      border-radius:6px;
+      display:block;
     }
 
     .receipt-footer strong{
@@ -689,12 +692,15 @@
     @media (max-width: 520px){
       .page{padding:14px 12px 20px}
       .brand-text h1{font-size:22px}
+      .brand-text p{font-size:12px}
+      .topbar{margin-bottom:42px}
       .summary-grid{padding:12px;gap:10px}
       .summary-card{min-height:84px}
       .tx-card{padding:12px}
       .tx-title{font-size:14px}
       .tx-right{min-width:84px}
-      .receipt-shell{width:min(92vw, 384px)}
+      .tx-logo{width:40px;height:40px;flex-basis:40px}
+      .receipt-shell{width:min(86vw, 332px)}
       .receipt-header{padding:12px 11px 22px}
       .receipt-header::after{height:28px;bottom:-13px}
       .receipt-logo-wrap{width:50px;height:50px}
@@ -715,12 +721,15 @@
   </style>
 </head>
 <body>
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
         <div class="brand-text">
           <h1>Transactions History</h1>
           <p class="upper">Track All Transactions Record</p>
         </div>
-      
-   
+      </div>
+    </div>
 
     <div class="panel">
       <div class="summary-grid">
@@ -808,7 +817,7 @@
         <div class="receipt-body">
           <div class="amount-card">
             <div class="label">Amount</div>
-            <div class="amount" id="receiptAmountBig">₦0.00</div>
+            <div class="amount" id="receiptAmountBig">₦0</div>
           </div>
 
           <div class="detail-card" id="receiptDetails"></div>
@@ -829,6 +838,10 @@
           </div>
 
           <div class="receipt-footer">
+            <div class="receipt-footer-brand">
+              <img src="./icons/funsub-logo.png" alt="FunSub footer logo"
+                   onerror="this.style.display='none';" />
+            </div>
             Thank you for using our service!
             <strong><span class="gold">Powered by FunSub</span></strong>
           </div>
@@ -840,13 +853,14 @@
   <div class="toast" id="toast">Copied</div>
 
   <script src="theme.js" defer></script>
-
-          <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js");
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-const API_ROOT = 'https://funsub.onrender.com';
+
+    const API_ROOT = 'https://funsub.onrender.com';
     const tokenKey = 'funsub_token';
 
     const transactionsList = document.getElementById('transactionsList');
@@ -948,8 +962,8 @@ const API_ROOT = 'https://funsub.onrender.com';
     }
 
     function formatMoney(value) {
-      const num = Number(value || 0);
-      return '₦' + num.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const num = Math.round(Number(value || 0));
+      return '₦' + num.toLocaleString('en-NG');
     }
 
     function formatDateTime(value) {
@@ -993,8 +1007,8 @@ const API_ROOT = 'https://funsub.onrender.com';
 
       if (category === 'airtime') {
         raw =
-          getNested(meta, 'providerResponse.data.service_name') ||
           getNested(meta, 'providerResponse.data.network') ||
+          getNested(meta, 'providerResponse.data.service_name') ||
           meta.network ||
           meta.networkName ||
           getNested(meta, 'selectedPlan.meta.network') ||
@@ -1019,8 +1033,8 @@ const API_ROOT = 'https://funsub.onrender.com';
       if (normalizeStatus(raw) === 'iacafe') {
         raw = networkMode
           ? (
-              getNested(meta, 'providerResponse.data.service_name') ||
               getNested(meta, 'providerResponse.data.network') ||
+              getNested(meta, 'providerResponse.data.service_name') ||
               meta.network ||
               meta.networkName ||
               getNested(meta, 'selectedPlan.meta.network') ||
@@ -1144,8 +1158,7 @@ const API_ROOT = 'https://funsub.onrender.com';
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
-
-    function detailItem(label, value, { logo = '', text = '', copyValue = '' } = {}) {
+function detailItem(label, value, { logo = '', text = '', copyValue = '', statusKey = '' } = {}) {
       const logoHtml = logo || text ? `
         <span class="provider-mini">
           ${logo ? `<img src="${logo}" alt="${escapeHtml(text || label)}">` : ''}
@@ -1156,9 +1169,15 @@ const API_ROOT = 'https://funsub.onrender.com';
         ? `<button class="mini-copy-btn" type="button" data-copy="${escapeHtml(String(copyValue))}" aria-label="Copy ${escapeHtml(label)}">⧉</button>`
         : '';
 
+      const statusHtml = statusKey
+        ? `<span class="status-inline ${escapeHtml(statusKey)}">${escapeHtml(text || value)}</span>${copyHtml}`
+        : '';
+
       const valueHtml = logoHtml
         ? logoHtml
-        : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`;
+        : (statusKey
+            ? statusHtml
+            : `<span class="detail-text">${escapeHtml(value)}</span>${copyHtml}`);
 
       return `
         <div class="detail-row">
@@ -1197,7 +1216,9 @@ const API_ROOT = 'https://funsub.onrender.com';
         card.innerHTML = `
           <div class="tx-left">
             <div class="tx-logo">
-              ${actor.logo ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">` : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
+              ${actor.logo
+                ? `<img src="${actor.logo}" alt="${escapeHtml(actor.label)}">`
+                : `<span style="font-weight:900;color:var(--gold)">${escapeHtml((actor.label || 'TX').slice(0,2).toUpperCase())}</span>`}
             </div>
             <div class="tx-meta">
               <div class="tx-title">${escapeHtml(title)}</div>
@@ -1239,43 +1260,39 @@ const API_ROOT = 'https://funsub.onrender.com';
 
       rows.push(detailItem('Transaction ID', txId, { copyValue: txId }));
       rows.push(detailItem('Request ID', requestId, { copyValue: requestId }));
-      rows.push(detailItem(actor.isNetwork ? 'Network' : 'Provider', '', { logo: actor.logo, text: actor.label }));
 
-      if (category === 'airtime' || category === 'data' || category === 'recharge_pin' || category === 'data_pin') {
-        const phone =
-          getNested(meta, 'providerResponse.data.phone') ||
-          getNested(meta, 'flutterwaveData.customer.phone_number') ||
-          meta.phone ||
-          meta.phone_number ||
-          meta.customer_number ||
-          meta.customer_id ||
-          meta.customerId ||
-          '—';
-        rows.push(detailItem('Phone Number', phone));
-      }
-
-      if (category === 'cable_tv' || category === 'cable') {
+      if (category === 'airtime') {
+        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
+        rows.push(detailItem(
+          'Phone Number',
+          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
+        ));
+      } else if (category === 'data') {
+        rows.push(detailItem('Network', '', { logo: actor.logo, text: actor.label }));
+        rows.push(detailItem(
+          'Phone Number',
+          getNested(meta, 'providerResponse.data.phone') || meta.phone || meta.phone_number || meta.customer_number || meta.customer_id || meta.customerId || '—'
+        ));
+        if (meta.packageName || meta.plan_name) rows.push(detailItem('Data Plan', meta.packageName || meta.plan_name));
+      } else if (category === 'cable_tv' || category === 'cable') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Smartcard / IUC', meta.customer_id || meta.smartcard_number || meta.account_number || '—'));
         rows.push(detailItem('Package', meta.packageDisplay || meta.packageName || meta.plan_name || '—'));
-        rows.push(detailItem('Subscription', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
-      }
-
-      if (category === 'betting') {
-        rows.push(detailItem('Provider', meta.providerLabel || meta.service_id || '—'));
+        rows.push(detailItem('Subscription Type', (meta.subscription_type_label || meta.subscription_type || 'renew').replace(/_/g, ' ')));
+      } else if (category === 'betting') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Betting ID', meta.customer_id || meta.customerId || '—'));
-      }
-
-      if (category === 'electricity') {
+      } else if (category === 'electricity') {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
         rows.push(detailItem('Customer Name', meta.customer_name || meta.customerName || '—'));
         rows.push(detailItem('Meter Number', meta.meter_number || meta.meterNumber || meta.customer_id || '—'));
         if (meta.token) rows.push(detailItem('Token', meta.token));
-      }
-
-      if (category === 'wallet') {
+      } else if (category === 'wallet') {
         rows.push(detailItem('Payment Method', prettyName(meta.gateway || meta.provider || 'Flutterwave')));
-        const phone = getNested(meta, 'flutterwaveData.customer.phone_number') || '—';
-        rows.push(detailItem('Phone Number', phone));
+        rows.push(detailItem('Phone Number', getNested(meta, 'flutterwaveData.customer.phone_number') || '—'));
+      } else {
+        rows.push(detailItem('Provider', '', { logo: actor.logo, text: actor.label }));
       }
 
       if (before !== undefined && after !== undefined) {
@@ -1285,7 +1302,7 @@ const API_ROOT = 'https://funsub.onrender.com';
 
       rows.push(detailItem('Amount', formatMoney(tx.amount)));
       if (fee !== undefined && Number(fee) > 0) rows.push(detailItem('Fee', formatMoney(fee)));
-      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status }));
+      rows.push(detailItem('Status', status, { copyValue: statusKey, text: status, statusKey }));
       rows.push(detailItem('Date', date));
       rows.push(detailItem('Time', time));
       rows.push(detailItem('Reference', ref));
@@ -1372,11 +1389,25 @@ const API_ROOT = 'https://funsub.onrender.com';
         const blob = await canvasToBlob(canvas);
         if (!blob) throw new Error('Unable to create image');
 
-        const fileName = `funsub-receipt-${String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_')}.png`;
+        const { jsPDF } = window.jspdf || {};
+        const baseName = String(tx.reference || tx.id || 'tx').replace(/[^a-z0-9_-]/gi, '_');
+
+        if (jsPDF) {
+          const pdf = new jsPDF({
+            orientation: canvas.width > canvas.height ? 'l' : 'p',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+          });
+
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+          pdf.save(`funsub-receipt-${baseName}.pdf`);
+          return;
+        }
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = fileName;
+        a.download = `funsub-receipt-${baseName}.png`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1200);
       } catch (err) {
@@ -1447,7 +1478,6 @@ const API_ROOT = 'https://funsub.onrender.com';
     searchInput.addEventListener('input', renderTransactions);
     statusFilter.addEventListener('change', renderTransactions);
     serviceFilter.addEventListener('change', renderTransactions);
-    refreshBtn.addEventListener('click', loadDashboardData);
 
     closeReceiptBtn.addEventListener('click', closeReceipt);
     receiptModal.addEventListener('click', (e) => {
